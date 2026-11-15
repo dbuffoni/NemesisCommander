@@ -18,6 +18,7 @@ taken while implementing it.
 | 0008 | [The agent speaks gRPC over the SSH session's standard streams](0008-agent-protocol.md) | Accepted |
 | 0009 | [SSH connections go through the system's OpenSSH client](0009-openssh-client-as-transport.md) | Accepted |
 | 0010 | [WebDAV over reqwest, logins from .netrc](0010-webdav.md) | Accepted |
+| 0011 | [S3 with a small signed-request client, settings from ~/.aws](0011-s3.md) | Accepted |
 
 Template:
 

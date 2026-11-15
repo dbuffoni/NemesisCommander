@@ -16,6 +16,7 @@ sc-transfer.workspace = true
 sc-agent.workspace = true
 sc-sftp.workspace = true
 sc-webdav.workspace = true
+sc-s3.workspace = true
 
 [features]
 default = ["desktop"]
