@@ -120,22 +120,33 @@ impl ConflictResolver for DialogResolver {
     }
 }
 
-/// The whole terminal application.
+/// The whole interactive application, without its drawing.
+///
+/// The public fields are what a front end draws; it changes only `scroll`
+/// and `page`, which describe its own window.
 pub struct App {
-    pub(crate) context: AppContext,
-    pub(crate) workspace: Workspace,
-    pub(crate) manager: TransferManager,
-    pub(crate) overlay: Option<Overlay>,
-    pub(crate) conflicts: VecDeque<PendingConflict>,
-    pub(crate) status: Option<Status>,
-    pub(crate) jobs: Vec<JobInfo>,
-    pub(crate) live_bytes: HashMap<JobId, u64>,
+    /// Settings, key map and providers.
+    pub context: AppContext,
+    /// The two panels with their tabs.
+    pub workspace: Workspace,
+    /// The persistent transfer queue.
+    pub manager: TransferManager,
+    /// The open dialog or window, if any.
+    pub overlay: Option<Overlay>,
+    /// Copy conflicts waiting for an answer, oldest first.
+    pub conflicts: VecDeque<PendingConflict>,
+    /// The message of the status line.
+    pub status: Option<Status>,
+    /// The jobs of the transfer queue, as last reported.
+    pub jobs: Vec<JobInfo>,
+    /// Bytes done of running jobs, updated more often than `jobs`.
+    pub live_bytes: HashMap<JobId, u64>,
     /// The quick view (Ctrl+Q) and the file it shows.
-    pub(crate) quick_view: Option<Option<Viewer>>,
+    pub quick_view: Option<Option<Viewer>>,
     /// First visible row of each side's list, kept by the renderer.
-    pub(crate) scroll: [usize; 2],
+    pub scroll: [usize; 2],
     /// Rows per page, measured by the renderer.
-    pub(crate) page: usize,
+    pub page: usize,
     events: mpsc::UnboundedSender<AppEvent>,
     tasks: usize,
     search_cancel: Option<CancellationToken>,
@@ -144,7 +155,7 @@ pub struct App {
 }
 
 /// Index of a side in per-side arrays.
-pub(crate) fn side_index(side: SideId) -> usize {
+pub fn side_index(side: SideId) -> usize {
     match side {
         SideId::Left => 0,
         SideId::Right => 1,

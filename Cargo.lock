@@ -3898,6 +3898,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-frontend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "directories",
+ "futures",
+ "image",
+ "sc-app",
+ "sc-archive",
+ "sc-config",
+ "sc-hash",
+ "sc-index",
+ "sc-ops",
+ "sc-panel",
+ "sc-providers",
+ "sc-transfer",
+ "sc-vfs",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "sc-hash"
 version = "0.1.0"
 dependencies = [
@@ -4077,18 +4101,13 @@ dependencies = [
 name = "sc-tui"
 version = "0.1.0"
 dependencies = [
- "async-trait",
- "bytes",
  "crossterm",
- "directories",
  "futures",
  "image",
  "ratatui",
  "sc-app",
- "sc-archive",
  "sc-config",
- "sc-hash",
- "sc-index",
+ "sc-frontend",
  "sc-ops",
  "sc-panel",
  "sc-providers",
@@ -4096,7 +4115,6 @@ dependencies = [
  "sc-vfs",
  "tempfile",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]

@@ -7,26 +7,20 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
+sc-frontend.workspace = true
 sc-vfs.workspace = true
-sc-hash.workspace = true
-sc-ops.workspace = true
-sc-transfer.workspace = true
-sc-index.workspace = true
-sc-archive.workspace = true
 sc-config.workspace = true
 sc-panel.workspace = true
+sc-transfer.workspace = true
 sc-app.workspace = true
-async-trait.workspace = true
-bytes.workspace = true
 futures.workspace = true
 image.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
-directories.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
-tokio-util.workspace = true
 
 [dev-dependencies]
+sc-ops.workspace = true
 image.workspace = true
 tempfile.workspace = true
 sc-providers.workspace = true

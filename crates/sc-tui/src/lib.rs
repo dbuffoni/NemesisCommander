@@ -4,21 +4,15 @@
 //! keyboard. F1 shows the main shortcuts and F9 opens a menu with every
 //! command, so nothing has to be memorized.
 //!
-//! The crate is split so that everything except the main loop can be tested
-//! without a terminal:
+//! The application itself (panels, dialogs, commands) is the shared
+//! [`sc_frontend::App`]; this crate adds what is specific to a terminal:
 //!
-//! * `app`: the [`App`] state machine (keys and background results in,
-//!   state out).
-//! * `dialogs`: the data of every overlay window.
-//! * `ui`: drawing with ratatui.
-//! * `input`: terminal key events to [`KeyPress`]es, and the text field.
-//! * `viewer`: the text and hex viewer.
+//! * `ui`: drawing the state with ratatui.
+//! * `terminal`: terminal key events to [`KeyPress`]es.
+//! * [`run`]: the main loop, and handing the terminal to an editor.
 
-mod app;
-mod dialogs;
-mod input;
+mod terminal;
 mod ui;
-mod viewer;
 
 use std::io;
 
@@ -27,9 +21,11 @@ use futures::StreamExt;
 use sc_app::AppContext;
 use sc_vfs::VfsPath;
 
-pub use app::{App, AppEvent, External, Status, display_location, resolve_location};
-pub use dialogs::{ChoosePurpose, ConfirmPurpose, InputPurpose, Overlay};
-pub use input::{KeyPress, TextField};
+pub use sc_frontend::{
+    App, AppEvent, ChoosePurpose, ConfirmPurpose, External, InputPurpose, KeyPress, Overlay,
+    Status, TextField, display_location, resolve_location,
+};
+pub use terminal::key_press;
 pub use ui::draw;
 
 /// Runs the terminal interface until the user quits.
@@ -66,7 +62,7 @@ pub async fn run(
         tokio::select! {
             key = keys.next() => match key {
                 Some(Ok(Event::Key(event))) => {
-                    if let Some(press) = KeyPress::from_event(&event) {
+                    if let Some(press) = key_press(&event) {
                         app.handle_key(press);
                     }
                 }

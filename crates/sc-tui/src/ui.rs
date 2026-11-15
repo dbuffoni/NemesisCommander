@@ -12,10 +12,10 @@ use sc_panel::{PARENT, Panel, SideId};
 use sc_transfer::{JobInfo, JobState};
 use sc_vfs::Entry;
 
-use crate::app::{App, display_location, side_index};
-use crate::dialogs::{ChooseDialog, InputDialog, MenuState, Overlay};
-use crate::input::TextField;
-use crate::viewer::Viewer;
+use sc_frontend::{
+    App, ChooseDialog, InputDialog, MenuState, Overlay, TextField, Viewer, display_location,
+    side_index,
+};
 
 const SIZE_WIDTH: usize = 9;
 const DATE_WIDTH: usize = 16;
@@ -594,7 +594,7 @@ fn draw_viewer(frame: &mut Frame, viewer: &Viewer, area: Rect) -> usize {
 
 /// Draws a picture centered in `area` with half-block characters.
 fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, area: Rect) {
-    let cells = crate::viewer::image_cells(picture, area.width, area.height);
+    let cells = sc_frontend::viewer::image_cells(picture, area.width, area.height);
     let height = cells.len() as u16;
     let width = cells.first().map_or(0, |row| row.len() as u16);
     let left = area.x + (area.width - width) / 2;
