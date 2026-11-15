@@ -68,7 +68,7 @@ pub fn parse_size(text: &str) -> Option<u64> {
             "t" => 1 << 40,
             _ => return None,
         };
-    (number >= 0.0).then(|| (number * multiplier as f64) as u64)
+    (number >= 0.0).then_some((number * multiplier as f64) as u64)
 }
 
 #[cfg(test)]
