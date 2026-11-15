@@ -13,10 +13,12 @@
 //! * `dialogs`: the data of every overlay window.
 //! * `input`: [`KeyPress`] and the one-line [`TextField`].
 //! * `viewer`: the text, hex and image viewer.
+//! * `view`: what the screen shows, as plain data (and shared text helpers).
 
 mod app;
 mod dialogs;
 mod input;
+pub mod view;
 pub mod viewer;
 
 pub use app::{App, AppEvent, External, Status, display_location, resolve_location, side_index};

@@ -1,0 +1,654 @@
+//! What the screen shows, as plain data.
+//!
+//! [`Screen::of`] describes everything a front end draws: both panels (only
+//! the rows that fit), the status line, the function key bar and the open
+//! dialog. The desktop interface sends it to QML as JSON; the text helpers
+//! are shared with the terminal interface, so both read the same.
+
+use sc_config::{Action, Category, Key, KeyChord};
+use sc_panel::format::{human_size, local_time, permissions};
+use sc_panel::{PARENT, Panel, SideId};
+use sc_transfer::{JobInfo, JobState};
+use sc_vfs::Entry;
+use serde::Serialize;
+
+use crate::app::{App, display_location, side_index};
+use crate::dialogs::{MenuState, Overlay};
+use crate::viewer::Viewer;
+
+/// The whole screen.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Screen {
+    /// Left and right panel (or quick view).
+    pub panels: [PanelView; 2],
+    /// The status line: a message, or details of the entry under the cursor.
+    pub status: StatusView,
+    /// Progress of running transfers (`2 jobs 40%`), empty when idle.
+    pub jobs: String,
+    /// Function keys F1–F10 with short labels.
+    pub keys: Vec<KeyLabel>,
+    /// The open dialog or window.
+    pub overlay: Option<OverlayView>,
+    /// A copy conflict waiting for an answer, shown above everything.
+    pub conflict: Option<ConflictView>,
+}
+
+/// One side of the window.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PanelView {
+    /// Location of the panel, as the user types it.
+    pub title: String,
+    /// Tabs, when there is more than one.
+    pub tabs: Vec<TabView>,
+    /// This side has the keyboard focus.
+    pub active: bool,
+    /// The visible rows.
+    pub rows: Vec<RowView>,
+    /// Index of the first visible row in the whole listing.
+    pub offset: usize,
+    /// Number of entries in the listing.
+    pub total: usize,
+    /// Counts, selection and filter.
+    pub footer: String,
+    /// Why the listing failed, when it did.
+    pub error: Option<String>,
+    /// A listing is in progress.
+    pub loading: bool,
+    /// The quick view, when this side shows it instead of a listing.
+    pub quick_view: Option<ViewerView>,
+}
+
+/// A tab of a panel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TabView {
+    /// Last name of the tab's location.
+    pub label: String,
+    /// The tab shown.
+    pub active: bool,
+}
+
+/// One entry of a listing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RowView {
+    /// Name; folders end with `/`.
+    pub name: String,
+    /// Size, `<DIR>`, or `UP` for the parent entry.
+    pub size: String,
+    /// Modification time.
+    pub date: String,
+    /// A folder (or the parent entry).
+    pub dir: bool,
+    /// A hidden entry.
+    pub hidden: bool,
+    /// Part of the selection.
+    pub selected: bool,
+    /// Under the cursor.
+    pub cursor: bool,
+}
+
+/// The status line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StatusView {
+    /// Text.
+    pub text: String,
+    /// A message (not entry details).
+    pub message: bool,
+    /// The message is an error.
+    pub error: bool,
+}
+
+/// A function key and what it does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct KeyLabel {
+    /// 1 to 10.
+    pub number: u8,
+    /// Short label (`Copy`), empty when unbound.
+    pub label: String,
+}
+
+/// The open dialog or window.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum OverlayView {
+    /// F1: the main shortcuts, by category.
+    Help {
+        /// Groups of `(keys, label)` rows.
+        groups: Vec<HelpGroup>,
+    },
+    /// F9: the menus, with the open menu and item.
+    Menu {
+        /// Every menu.
+        menus: Vec<MenuView>,
+        /// Open menu.
+        menu: usize,
+        /// Highlighted item.
+        item: usize,
+    },
+    /// A one-line question.
+    Input {
+        /// Window title.
+        title: String,
+        /// Question.
+        prompt: String,
+        /// Current text.
+        text: String,
+        /// Cursor position in characters.
+        cursor: usize,
+    },
+    /// A yes/no question.
+    Confirm {
+        /// Window title.
+        title: String,
+        /// Text.
+        lines: Vec<String>,
+    },
+    /// A list to pick from.
+    Choose {
+        /// Window title.
+        title: String,
+        /// Items.
+        items: Vec<String>,
+        /// Highlighted item.
+        cursor: usize,
+        /// Text below the list.
+        footer: String,
+    },
+    /// Information to read.
+    Message {
+        /// Window title.
+        title: String,
+        /// Text.
+        lines: Vec<String>,
+        /// Enter opens a follow-up question.
+        has_next: bool,
+    },
+    /// F3: the viewer.
+    Viewer(ViewerView),
+    /// Ctrl+J: the transfer queue.
+    Jobs {
+        /// One line per job.
+        rows: Vec<JobRow>,
+        /// Highlighted job.
+        cursor: usize,
+    },
+}
+
+/// A category of the help window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HelpGroup {
+    /// Category title.
+    pub title: String,
+    /// `(keys, label)` rows.
+    pub rows: Vec<(String, String)>,
+}
+
+/// A menu of the menu bar.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MenuView {
+    /// Title (`Files`).
+    pub title: String,
+    /// Commands.
+    pub items: Vec<MenuItem>,
+}
+
+/// A command in a menu.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MenuItem {
+    /// Action id, for [`App::perform`] through [`Action::from_id`].
+    pub id: String,
+    /// Label.
+    pub label: String,
+    /// First shortcut, empty when none.
+    pub shortcut: String,
+}
+
+/// The viewer or quick view.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ViewerView {
+    /// File shown.
+    pub title: String,
+    /// `text`, `hex` or `image`.
+    pub mode: String,
+    /// Visible lines (text or hex mode).
+    pub lines: Vec<String>,
+    /// Scroll position in percent.
+    pub percent: usize,
+    /// Only the start of the file was loaded.
+    pub truncated: bool,
+    /// The file could not be read.
+    pub error: Option<String>,
+    /// Still loading.
+    pub loading: bool,
+    /// For an image of the local disk, its `file://` URL, which a desktop
+    /// interface can show at full quality.
+    pub image_url: Option<String>,
+}
+
+/// A job of the transfer queue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JobRow {
+    /// The job as one line.
+    pub text: String,
+    /// `queued`, `running`, `paused`, `done`, `failed` or `cancelled`.
+    pub state: String,
+}
+
+/// A copy conflict question.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ConflictView {
+    /// What exists already.
+    pub destination: String,
+    /// The existing file.
+    pub existing: String,
+    /// The file being copied.
+    pub incoming: String,
+}
+
+impl Screen {
+    /// Describes the screen of `app`, with `rows` visible rows per panel.
+    ///
+    /// Like drawing, this keeps each panel scrolled so the cursor stays
+    /// visible (`app.scroll`) and records `rows` as the page size.
+    pub fn of(app: &mut App, rows: usize, viewer_rows: usize) -> Screen {
+        let active = app.workspace.active_side();
+        app.page = rows;
+        let panels = [SideId::Left, SideId::Right].map(|side| {
+            if side != active && app.quick_view.is_some() {
+                quick_view_panel(app, viewer_rows)
+            } else {
+                panel_view(app, side, rows)
+            }
+        });
+        let status = match app.status() {
+            Some(status) => {
+                StatusView { text: status.text.clone(), message: true, error: status.error }
+            }
+            None => StatusView {
+                text: entry_details(app.workspace.active()),
+                message: false,
+                error: false,
+            },
+        };
+        let keys = (1..=10u8)
+            .map(|number| KeyLabel {
+                number,
+                label: app
+                    .context()
+                    .keymap
+                    .action_for(&KeyChord::plain(Key::F(number)))
+                    .map(short_label)
+                    .unwrap_or("")
+                    .to_owned(),
+            })
+            .collect();
+        let overlay = overlay_view(app, viewer_rows);
+        let conflict = app.pending_conflict().map(|c| ConflictView {
+            destination: display_location(&c.destination),
+            existing: describe(&c.destination_entry),
+            incoming: describe(&c.source_entry),
+        });
+        Screen {
+            panels,
+            status,
+            jobs: jobs_summary(&app.jobs, app).unwrap_or_default(),
+            keys,
+            overlay,
+            conflict,
+        }
+    }
+}
+
+/// Every menu of the menu bar, from the action table.
+pub fn menus(app: &App) -> Vec<MenuView> {
+    (0..Category::ALL.len())
+        .map(|index| MenuView {
+            title: Category::ALL[index].title().to_owned(),
+            items: MenuState::items(index)
+                .into_iter()
+                .map(|action| MenuItem {
+                    id: action.id().to_owned(),
+                    label: action.label().to_owned(),
+                    shortcut: app.context().keymap.shortcut_text(action),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+/// The first visible row of a list of `total` rows showing `rows` rows, so
+/// that `cursor` stays visible, moving as little as possible from `offset`.
+pub fn scroll_offset(offset: usize, cursor: usize, rows: usize, total: usize) -> usize {
+    let rows = rows.max(1);
+    let offset = if cursor < offset {
+        cursor
+    } else if cursor >= offset + rows {
+        cursor + 1 - rows
+    } else {
+        offset
+    };
+    offset.min(total.saturating_sub(rows))
+}
+
+fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
+    let index = side_index(side);
+    let human = app.context().config.panels.human_sizes;
+    let active = app.workspace.active_side() == side;
+    let side_state = app.workspace.side(side);
+    let panel = side_state.panel();
+    let cursor = panel.cursor();
+    let total = panel.entries().len();
+    let offset = scroll_offset(app.scroll[index], cursor, rows, total);
+    let tabs = if side_state.tabs().len() > 1 {
+        side_state
+            .tabs()
+            .iter()
+            .enumerate()
+            .map(|(i, tab)| TabView {
+                label: format!("{}:{}", i + 1, tab_title(tab)),
+                active: i == side_state.active_tab(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let row_views = panel
+        .entries()
+        .iter()
+        .enumerate()
+        .skip(offset)
+        .take(rows)
+        .map(|(i, entry)| row_view(panel, entry, i == cursor, human))
+        .collect();
+    let view = PanelView {
+        title: display_location(panel.location()),
+        tabs,
+        active,
+        rows: row_views,
+        offset,
+        total,
+        footer: panel_footer(panel),
+        error: panel.error().filter(|_| panel.entries().is_empty()).map(str::to_owned),
+        loading: panel.is_loading(),
+        quick_view: None,
+    };
+    app.scroll[index] = offset;
+    view
+}
+
+fn row_view(panel: &Panel, entry: &Entry, cursor: bool, human: bool) -> RowView {
+    let mut name = entry.name.clone();
+    if entry.is_dir() && entry.name != PARENT {
+        name.push('/');
+    }
+    RowView {
+        name,
+        size: size_text(entry, human),
+        date: entry.modified.map(local_time).unwrap_or_default(),
+        dir: entry.is_dir(),
+        hidden: entry.is_hidden(),
+        selected: panel.is_selected(&entry.name),
+        cursor,
+    }
+}
+
+fn quick_view_panel(app: &App, rows: usize) -> PanelView {
+    let quick_view = match &app.quick_view {
+        Some(Some(viewer)) => viewer_view(viewer, rows),
+        _ => ViewerView {
+            title: "Quick view".into(),
+            mode: "text".into(),
+            lines: vec!["Move the cursor to a file to preview it".into()],
+            percent: 100,
+            truncated: false,
+            error: None,
+            loading: false,
+            image_url: None,
+        },
+    };
+    PanelView {
+        title: "Quick view".into(),
+        tabs: Vec::new(),
+        active: false,
+        rows: Vec::new(),
+        offset: 0,
+        total: 0,
+        footer: String::new(),
+        error: None,
+        loading: false,
+        quick_view: Some(quick_view),
+    }
+}
+
+fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
+    Some(match app.overlay()? {
+        Overlay::Help => OverlayView::Help {
+            groups: app
+                .context()
+                .keymap
+                .help()
+                .into_iter()
+                .map(|(category, rows)| HelpGroup {
+                    title: category.title().to_owned(),
+                    rows: rows.into_iter().map(|(keys, label)| (keys, label.to_owned())).collect(),
+                })
+                .collect(),
+        },
+        Overlay::Menu(state) => {
+            OverlayView::Menu { menus: menus(app), menu: state.menu, item: state.item }
+        }
+        Overlay::Input(dialog) => OverlayView::Input {
+            title: dialog.title.clone(),
+            prompt: dialog.prompt.clone(),
+            text: dialog.field.text().to_owned(),
+            cursor: dialog.field.cursor(),
+        },
+        Overlay::Confirm(dialog) => {
+            OverlayView::Confirm { title: dialog.title.clone(), lines: dialog.lines.clone() }
+        }
+        Overlay::Choose(dialog) => OverlayView::Choose {
+            title: dialog.title.clone(),
+            items: dialog.items.clone(),
+            cursor: dialog.cursor,
+            footer: dialog.footer.clone(),
+        },
+        Overlay::Message(dialog) => OverlayView::Message {
+            title: dialog.title.clone(),
+            lines: dialog.lines.clone(),
+            has_next: dialog.then.is_some(),
+        },
+        Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
+        Overlay::Jobs(view) => OverlayView::Jobs {
+            rows: app
+                .jobs
+                .iter()
+                .map(|job| JobRow { text: job_line(job, app), state: job_state(job.state).into() })
+                .collect(),
+            cursor: view.cursor,
+        },
+    })
+}
+
+/// Describes the viewer with `rows` visible lines.
+pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
+    let mode = match (viewer.hex, viewer.image.is_some()) {
+        (true, _) => "hex",
+        (false, true) => "image",
+        (false, false) => "text",
+    };
+    let total = viewer.row_count();
+    let image_url = viewer
+        .shows_image()
+        .then(|| viewer.path.to_local_path())
+        .flatten()
+        .map(|path| format!("file://{}", path.display()));
+    ViewerView {
+        title: display_location(&viewer.path),
+        mode: mode.into(),
+        lines: if viewer.shows_image() { Vec::new() } else { viewer.visible_rows(rows) },
+        percent: (viewer.scroll * 100).checked_div(total).map_or(100, |p| p.min(100)),
+        truncated: viewer.truncated,
+        error: viewer.error.clone(),
+        loading: viewer.data.is_none() && viewer.error.is_none(),
+        image_url,
+    }
+}
+
+// ------------------------------------------------------ shared text helpers
+
+/// Last name of a tab's location.
+pub fn tab_title(panel: &Panel) -> String {
+    panel.location().file_name().unwrap_or("/").to_owned()
+}
+
+/// The size column: `UP`, `<DIR>`, or the size.
+pub fn size_text(entry: &Entry, human: bool) -> String {
+    if entry.name == PARENT {
+        "UP".to_owned()
+    } else if entry.is_dir() {
+        "<DIR>".to_owned()
+    } else if human {
+        human_size(entry.size)
+    } else {
+        entry.size.to_string()
+    }
+}
+
+/// Size and date of an entry, for conflict questions.
+pub fn describe(entry: &Entry) -> String {
+    let date = entry.modified.map(local_time).unwrap_or_default();
+    format!("{} ({} bytes), {date}", human_size(entry.size), entry.size)
+}
+
+/// The line below a panel: item count or selection, filter, loading.
+pub fn panel_footer(panel: &Panel) -> String {
+    let summary = panel.selection_summary();
+    let mut text = if summary.files + summary.dirs > 0 {
+        format!(
+            "{} selected: {} files, {} folders, {}",
+            summary.files + summary.dirs,
+            summary.files,
+            summary.dirs,
+            human_size(summary.bytes)
+        )
+    } else {
+        let count = panel.entries().iter().filter(|e| e.name != PARENT).count();
+        format!("{count} items")
+    };
+    if !panel.filter().is_empty() {
+        text.push_str(&format!("  filter: {}", panel.filter()));
+    }
+    if panel.is_loading() {
+        text.push_str("  loading…");
+    }
+    text
+}
+
+/// Name, size, date, permissions and link target of the entry under the
+/// cursor.
+pub fn entry_details(panel: &Panel) -> String {
+    let Some(entry) = panel.current_entry().filter(|e| e.name != PARENT) else {
+        return String::new();
+    };
+    let mut parts = vec![entry.name.clone()];
+    if !entry.is_dir() {
+        parts.push(human_size(entry.size));
+    }
+    if let Some(modified) = entry.modified {
+        parts.push(local_time(modified));
+    }
+    if let Some(mode) = entry.permissions {
+        parts.push(permissions(mode));
+    }
+    if let Some(target) = &entry.symlink_target {
+        parts.push(format!("→ {target}"));
+    }
+    parts.join("  ")
+}
+
+/// A short label for the function key bar.
+pub fn short_label(action: Action) -> &'static str {
+    match action {
+        Action::Help => "Help",
+        Action::Rename => "Rename",
+        Action::View => "View",
+        Action::Edit => "Edit",
+        Action::Copy => "Copy",
+        Action::Move => "Move",
+        Action::MakeDir => "Mkdir",
+        Action::Delete => "Delete",
+        Action::Menu => "Menu",
+        Action::Quit => "Quit",
+        other => other.label().split_whitespace().next().unwrap_or("").trim_end_matches('…'),
+    }
+}
+
+/// `done` as a percentage of `total` (`None` when the total is unknown).
+pub fn percent(done: u64, total: u64) -> Option<u64> {
+    (done.min(total) * 100).checked_div(total)
+}
+
+/// `2 jobs 40%` for queued and running transfers.
+pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
+    let active: Vec<&JobInfo> =
+        jobs.iter().filter(|j| matches!(j.state, JobState::Queued | JobState::Running)).collect();
+    if active.is_empty() {
+        return None;
+    }
+    let total: u64 = active.iter().map(|j| j.total_bytes).sum();
+    let done: u64 =
+        active.iter().map(|j| j.done_bytes + app.live_bytes.get(&j.id).copied().unwrap_or(0)).sum();
+    let percent = percent(done, total).map_or("…".into(), |p| format!("{p}%"));
+    Some(format!("{} jobs {percent}", active.len()))
+}
+
+/// A job's state in words.
+pub fn job_state(state: JobState) -> &'static str {
+    match state {
+        JobState::Queued => "queued",
+        JobState::Running => "running",
+        JobState::Paused => "paused",
+        JobState::Completed => "done",
+        JobState::Failed => "failed",
+        JobState::Cancelled => "cancelled",
+    }
+}
+
+/// A job of the transfer queue as one line.
+pub fn job_line(job: &JobInfo, app: &App) -> String {
+    let done = job.done_bytes + app.live_bytes.get(&job.id).copied().unwrap_or(0);
+    let progress =
+        percent(done, job.total_bytes).map_or_else(|| "   -".to_owned(), |p| format!("{p:>3}%"));
+    let mut text = format!(
+        "#{:<4} {:<9} {progress} {:>9}  p{:<3} {}",
+        job.id.0,
+        job_state(job.state),
+        human_size(job.total_bytes),
+        job.spec.priority,
+        job.spec.title()
+    );
+    if let Some(error) = job.errors.first() {
+        text.push_str(&format!("  ({error})"));
+    }
+    text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scrolling_keeps_the_cursor_visible() {
+        assert_eq!(scroll_offset(0, 3, 10, 100), 0);
+        assert_eq!(scroll_offset(0, 12, 10, 100), 3, "cursor at the last visible row");
+        assert_eq!(scroll_offset(20, 5, 10, 100), 5, "cursor above: scroll up to it");
+        assert_eq!(scroll_offset(95, 99, 10, 100), 90, "never past the end");
+        assert_eq!(scroll_offset(4, 2, 10, 5), 0, "short lists start at the top");
+    }
+
+    #[test]
+    fn percentages() {
+        assert_eq!(percent(5, 10), Some(50));
+        assert_eq!(percent(20, 10), Some(100));
+        assert_eq!(percent(1, 0), None);
+    }
+}

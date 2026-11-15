@@ -19,6 +19,7 @@ sc-app.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true
+serde.workspace = true
 image.workspace = true
 directories.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
@@ -27,6 +28,7 @@ tokio-util.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 sc-providers.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 
 [lints]

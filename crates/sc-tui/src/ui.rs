@@ -6,12 +6,15 @@ use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
-use sc_config::{Action, Category, Key, KeyChord};
-use sc_panel::format::{human_size, local_time, permissions};
-use sc_panel::{PARENT, Panel, SideId};
-use sc_transfer::{JobInfo, JobState};
-use sc_vfs::Entry;
+use sc_config::{Category, Key, KeyChord};
+use sc_panel::format::local_time;
+use sc_panel::{PARENT, SideId};
+use sc_transfer::JobState;
 
+use sc_frontend::view::{
+    describe, entry_details, job_line, jobs_summary, panel_footer, scroll_offset, short_label,
+    size_text, tab_title,
+};
 use sc_frontend::{
     App, ChooseDialog, InputDialog, MenuState, Overlay, TextField, Viewer, display_location,
     side_index,
@@ -97,16 +100,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
-fn describe(entry: &Entry) -> String {
-    let date = entry.modified.map(local_time).unwrap_or_default();
-    format!("{} ({} bytes), {date}", human_size(entry.size), entry.size)
-}
-
 // ---------------------------------------------------------------- panels
-
-fn tab_title(panel: &Panel) -> String {
-    panel.location().file_name().unwrap_or("/").to_owned()
-}
 
 fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let is_active = app.workspace.active_side() == side;
@@ -157,13 +151,7 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let rows = inner.height as usize - 1;
     let index = side_index(side);
     let cursor = panel.cursor();
-    let mut offset = app.scroll[index];
-    if cursor < offset {
-        offset = cursor;
-    } else if cursor >= offset + rows {
-        offset = cursor + 1 - rows;
-    }
-    offset = offset.min(panel.entries().len().saturating_sub(rows));
+    let offset = scroll_offset(app.scroll[index], cursor, rows, panel.entries().len());
     app.scroll[index] = offset;
     if is_active {
         app.page = rows;
@@ -178,15 +166,7 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         if entry.is_dir() && entry.name != PARENT {
             name.push('/');
         }
-        let size = if entry.name == PARENT {
-            "UP".to_owned()
-        } else if entry.is_dir() {
-            "<DIR>".to_owned()
-        } else if app.context().config.panels.human_sizes {
-            human_size(entry.size)
-        } else {
-            entry.size.to_string()
-        };
+        let size = size_text(entry, app.context().config.panels.human_sizes);
         let date = if show_date {
             format!(" {:<DATE_WIDTH$}", entry.modified.map(local_time).unwrap_or_default())
         } else {
@@ -233,29 +213,6 @@ pub fn fit(text: &str, width: usize) -> String {
     cut
 }
 
-fn panel_footer(panel: &Panel) -> String {
-    let summary = panel.selection_summary();
-    let mut text = if summary.files + summary.dirs > 0 {
-        format!(
-            "{} selected: {} files, {} folders, {}",
-            summary.files + summary.dirs,
-            summary.files,
-            summary.dirs,
-            human_size(summary.bytes)
-        )
-    } else {
-        let count = panel.entries().iter().filter(|e| e.name != PARENT).count();
-        format!("{count} items")
-    };
-    if !panel.filter().is_empty() {
-        text.push_str(&format!("  filter: {}", panel.filter()));
-    }
-    if panel.is_loading() {
-        text.push_str("  loading…");
-    }
-    text
-}
-
 fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
     let block = Block::bordered().border_style(dim()).title(" Quick view ");
     let inner = block.inner(area);
@@ -281,24 +238,6 @@ fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
 
 // ------------------------------------------------------- status and keys
 
-/// `done` as a percentage of `total` (`None` when the total is unknown).
-fn percent(done: u64, total: u64) -> Option<u64> {
-    (done.min(total) * 100).checked_div(total)
-}
-
-fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
-    let active: Vec<&JobInfo> =
-        jobs.iter().filter(|j| matches!(j.state, JobState::Queued | JobState::Running)).collect();
-    if active.is_empty() {
-        return None;
-    }
-    let total: u64 = active.iter().map(|j| j.total_bytes).sum();
-    let done: u64 =
-        active.iter().map(|j| j.done_bytes + app.live_bytes.get(&j.id).copied().unwrap_or(0)).sum();
-    let percent = percent(done, total).map_or("…".into(), |p| format!("{p}%"));
-    Some(format!("{} jobs {percent}", active.len()))
-}
-
 fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     let right = jobs_summary(&app.jobs, app).unwrap_or_default();
     let (text, style) = match app.status() {
@@ -314,43 +253,6 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
         Span::styled(right, Style::new().fg(Color::Cyan)),
     ]);
     frame.render_widget(Paragraph::new(line), area);
-}
-
-fn entry_details(panel: &Panel) -> String {
-    let Some(entry) = panel.current_entry().filter(|e| e.name != PARENT) else {
-        return String::new();
-    };
-    let mut parts = vec![entry.name.clone()];
-    if !entry.is_dir() {
-        parts.push(human_size(entry.size));
-    }
-    if let Some(modified) = entry.modified {
-        parts.push(local_time(modified));
-    }
-    if let Some(mode) = entry.permissions {
-        parts.push(permissions(mode));
-    }
-    if let Some(target) = &entry.symlink_target {
-        parts.push(format!("→ {target}"));
-    }
-    parts.join("  ")
-}
-
-/// A short label for the function key bar.
-fn short_label(action: Action) -> &'static str {
-    match action {
-        Action::Help => "Help",
-        Action::Rename => "Rename",
-        Action::View => "View",
-        Action::Edit => "Edit",
-        Action::Copy => "Copy",
-        Action::Move => "Move",
-        Action::MakeDir => "Mkdir",
-        Action::Delete => "Delete",
-        Action::Menu => "Menu",
-        Action::Quit => "Quit",
-        other => other.label().split_whitespace().next().unwrap_or("").trim_end_matches('…'),
-    }
 }
 
 fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
@@ -610,17 +512,6 @@ fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, area: Rect) {
     }
 }
 
-fn job_state(state: JobState) -> &'static str {
-    match state {
-        JobState::Queued => "queued",
-        JobState::Running => "running",
-        JobState::Paused => "paused",
-        JobState::Completed => "done",
-        JobState::Failed => "failed",
-        JobState::Cancelled => "cancelled",
-    }
-}
-
 fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
     let area = frame.area();
     let rect =
@@ -641,20 +532,7 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
             .iter()
             .enumerate()
             .map(|(i, job)| {
-                let done = job.done_bytes + app.live_bytes.get(&job.id).copied().unwrap_or(0);
-                let progress = percent(done, job.total_bytes)
-                    .map_or_else(|| "   -".to_owned(), |p| format!("{p:>3}%"));
-                let mut text = format!(
-                    "#{:<4} {:<9} {progress} {:>9}  p{:<3} {}",
-                    job.id.0,
-                    job_state(job.state),
-                    human_size(job.total_bytes),
-                    job.spec.priority,
-                    job.spec.title()
-                );
-                if let Some(error) = job.errors.first() {
-                    text.push_str(&format!("  ({error})"));
-                }
+                let text = job_line(job, app);
                 let text = fit(&text, inner.width as usize);
                 let style = match job.state {
                     JobState::Failed => Style::new().fg(Color::Red),

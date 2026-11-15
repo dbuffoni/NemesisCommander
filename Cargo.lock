@@ -3916,6 +3916,8 @@ dependencies = [
  "sc-providers",
  "sc-transfer",
  "sc-vfs",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-util",
