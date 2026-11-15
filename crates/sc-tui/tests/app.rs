@@ -597,3 +597,20 @@ async fn edit_hands_the_file_to_the_editor() {
     assert_eq!(external.command[..2], ["my-editor", "--wait"]);
     assert!(external.command[2].ends_with("a.txt"));
 }
+
+#[tokio::test]
+async fn a_desktop_window_does_not_use_terminal_editors() {
+    let mut h = Harness::new().await;
+    h.app.graphical = true;
+    h.focus("a.txt");
+    h.key("F4");
+    let external = h.app.take_external().expect("editor requested");
+    let expected = if cfg!(windows) {
+        "notepad"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    assert_eq!(external.command[0], expected, "not $EDITOR, which needs a terminal");
+}

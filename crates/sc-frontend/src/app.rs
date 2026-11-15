@@ -147,6 +147,10 @@ pub struct App {
     pub scroll: [usize; 2],
     /// Rows per page, measured by the renderer.
     pub page: usize,
+    /// The front end is a desktop window, not a terminal: "Edit" then opens
+    /// a graphical editor instead of `$EDITOR`, which usually needs a
+    /// terminal.
+    pub graphical: bool,
     events: mpsc::UnboundedSender<AppEvent>,
     tasks: usize,
     search_cancel: Option<CancellationToken>,
@@ -245,6 +249,7 @@ impl App {
             search_cancel: None,
             external: None,
             running: true,
+            graphical: false,
         };
         for (_, request) in requests {
             app.load(request);
@@ -1310,17 +1315,22 @@ impl App {
     }
 
     /// The editor command line for `file`: the configured editor, then
-    /// `$VISUAL`, `$EDITOR`, and finally a platform default.
+    /// `$VISUAL`, `$EDITOR` (in a terminal only), and finally a platform
+    /// default.
     fn editor_command(&self, file: &Path) -> Vec<String> {
         let configured = self.context.config.general.editor.trim().to_owned();
-        let editor = [
-            configured,
-            std::env::var("VISUAL").unwrap_or_default(),
-            std::env::var("EDITOR").unwrap_or_default(),
-        ]
-        .into_iter()
-        .find(|e| !e.trim().is_empty())
-        .unwrap_or_else(|| if cfg!(windows) { "notepad".into() } else { "vi".into() });
+        let from_environment = if self.graphical {
+            Vec::new()
+        } else {
+            vec![
+                std::env::var("VISUAL").unwrap_or_default(),
+                std::env::var("EDITOR").unwrap_or_default(),
+            ]
+        };
+        let editor = std::iter::once(configured)
+            .chain(from_environment)
+            .find(|e| !e.trim().is_empty())
+            .unwrap_or_else(|| default_editor(self.graphical).into());
         let mut command: Vec<String> = editor.split_whitespace().map(str::to_owned).collect();
         command.push(file.display().to_string());
         command
@@ -1653,5 +1663,20 @@ fn expand_home(text: &str) -> PathBuf {
             .map(|dirs| dirs.home_dir().join(rest))
             .unwrap_or_else(|| PathBuf::from(text)),
         None => PathBuf::from(text),
+    }
+}
+
+/// The editor used when none is configured. A terminal gets `vi`; a desktop
+/// window gets the system's text editor, waiting for it where the platform
+/// allows (`open -W` on macOS).
+fn default_editor(graphical: bool) -> &'static str {
+    if cfg!(windows) {
+        "notepad"
+    } else if !graphical {
+        "vi"
+    } else if cfg!(target_os = "macos") {
+        "open -W -t"
+    } else {
+        "xdg-open"
     }
 }

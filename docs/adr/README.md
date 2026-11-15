@@ -20,6 +20,7 @@ taken while implementing it.
 | 0010 | [WebDAV over reqwest, logins from .netrc](0010-webdav.md) | Accepted |
 | 0011 | [S3 with a small signed-request client, settings from ~/.aws](0011-s3.md) | Accepted |
 | 0012 | [SMB with the pure-Rust smb2 client](0012-smb.md) | Accepted |
+| 0013 | [The Qt window draws a screen description; QML stays thin](0013-qt-gui.md) | Accepted |
 
 Template:
 

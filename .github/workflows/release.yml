@@ -1,6 +1,7 @@
 # Builds the distributable files:
 #
-# * the AppImage of the main application (x86_64), and
+# * the AppImage of the main application (x86_64): the window, with Qt
+#   bundled, and the `sc` program, and
 # * the agent: a static Linux `sc` per architecture, built without the
 #   terminal UI and desktop features, that controllers copy to servers.
 #
@@ -36,20 +37,41 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: appimage
-      - name: Build sc
-        run: cargo build --release --locked -p sc-cli
+      # A recent Qt from the Qt project (the system one is too old here); the
+      # AppImage bundles it.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          cache: true
+      - name: Install packaging tools and the libraries Qt's X11 plugin needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends file desktop-file-utils \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libegl1 libgl1
+      - name: Build sc and sc-gui
+        run: |
+          echo "QMAKE=$QT_ROOT_DIR/bin/qmake" >> "$GITHUB_ENV"
+          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p sc-cli -p sc-gui
       - name: Smoke test
         run: |
           target/release/sc --version
           target/release/sc keys | grep -q "Copy"
-      - name: Install AppImage tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends file desktop-file-utils
+          QT_QPA_PLATFORM=offscreen target/release/sc-gui --self-test --keys=F1 | grep -q '"help"'
       - name: Package
         run: packaging/linux/build-appimage.sh target/release "${GITHUB_REF_NAME//\//-}"
       - name: Check the AppImage starts
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          QT_QPA_PLATFORM: offscreen
         run: |
           chmod +x SuperCommander-*.AppImage
-          APPIMAGE_EXTRACT_AND_RUN=1 ./SuperCommander-*.AppImage --version
+          ./SuperCommander-*.AppImage sc --version
+          ./SuperCommander-*.AppImage --version
+          # The window, with the bundled Qt and QML modules.
+          ./SuperCommander-*.AppImage --self-test --keys="F1" | grep -q '"help"'
       - uses: actions/upload-artifact@v4
         with:
           name: appimage-x86_64

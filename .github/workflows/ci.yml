@@ -23,7 +23,8 @@ jobs:
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets
+      # The desktop interface needs Qt: it is checked in the `gui` job.
+      - run: cargo clippy --workspace --exclude sc-gui --all-targets
 
   test:
     name: Test (${{ matrix.os }})
@@ -42,4 +43,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openssh-sftp-server samba
           sudo scripts/smb-test-server.sh /var/tmp/sc-smb >> "$GITHUB_ENV"
-      - run: cargo test --workspace
+      - run: cargo test --workspace --exclude sc-gui
+
+  gui:
+    name: Desktop interface (Qt 6)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gui
+      - name: Install Qt 6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
+            qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            qml6-module-qtqml-workerscript qml6-module-qtqml-models
+      - run: cargo clippy -p sc-gui --all-targets
+      # The window tests use Qt's offscreen platform: no display needed.
+      - run: cargo test -p sc-gui
