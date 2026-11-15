@@ -1,0 +1,121 @@
+# Builds the distributable files:
+#
+# * the AppImage of the main application (x86_64), and
+# * the agent: a static Linux `sc` per architecture, built without the
+#   terminal UI and desktop features, that controllers copy to servers.
+#
+# Every push to dev builds them and keeps them as workflow artifacts; a
+# tag like v0.2.0 also publishes them as a GitHub release.
+name: Release
+
+on:
+  push:
+    branches: [dev]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    name: AppImage (x86_64)
+    # The oldest supported runner: the AppImage then runs on older glibc too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: appimage
+      - name: Build sc
+        run: cargo build --release --locked -p sc-cli
+      - name: Smoke test
+        run: |
+          target/release/sc --version
+          target/release/sc keys | grep -q "Copy"
+      - name: Install AppImage tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends file desktop-file-utils
+      - name: Package
+        run: packaging/linux/build-appimage.sh target/release "${GITHUB_REF_NAME//\//-}"
+      - name: Check the AppImage starts
+        run: |
+          chmod +x SuperCommander-*.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 ./SuperCommander-*.AppImage --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-x86_64
+          path: SuperCommander-*.AppImage
+          if-no-files-found: error
+
+  agent:
+    name: Agent (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: x86_64
+          - target: aarch64-unknown-linux-musl
+            arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: agent-${{ matrix.target }}
+      - name: Install Zig (C cross compiler)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Build the static agent
+        # No default features: no terminal UI, no recycle bin, no scripting.
+        run: cargo zigbuild --release --locked -p sc-cli --no-default-features --target ${{ matrix.target }}
+      - name: Check it is static and starts
+        run: |
+          bin=target/${{ matrix.target }}/release/sc
+          file "$bin"
+          file "$bin" | grep -Eq "statically linked|static-pie linked"
+          if [ "${{ matrix.arch }}" = x86_64 ]; then "$bin" --version; fi
+          cp "$bin" "sc-agent-linux-${{ matrix.arch }}"
+          ls -l "sc-agent-linux-${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.arch }}
+          path: sc-agent-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [appimage, agent]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
