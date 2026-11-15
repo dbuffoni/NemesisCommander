@@ -1,0 +1,22 @@
+[package]
+name = "sc-hash"
+description = "Streaming checksums (BLAKE3, XXH3, SHA-256) used for transfer verification."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+blake3.workspace = true
+xxhash-rust.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true
