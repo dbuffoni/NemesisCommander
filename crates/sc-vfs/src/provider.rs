@@ -149,6 +149,13 @@ pub trait Provider: Send + Sync + 'static {
         Err(self.unsupported_on(path, "server-side checksum"))
     }
 
+    /// Creates a symbolic link at `path` pointing to `target`.
+    /// See [`Capabilities::SYMLINKS`].
+    async fn create_symlink(&self, path: &VfsPath, target: &str) -> Result<()> {
+        let _ = target;
+        Err(self.unsupported_on(path, "create symlink"))
+    }
+
     /// Moves a path to the recycle bin. See [`Capabilities::TRASH`].
     async fn trash(&self, path: &VfsPath) -> Result<()> {
         Err(self.unsupported_on(path, "trash"))

@@ -1,0 +1,28 @@
+[package]
+name = "sc-ops"
+description = "File operations for SuperCommander: copy, move, rename, delete, attributes and conflict handling."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+sc-hash.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+tokio-util.workspace = true
+
+[dev-dependencies]
+sc-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tempfile.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

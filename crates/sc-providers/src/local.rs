@@ -284,6 +284,18 @@ impl Provider for LocalProvider {
         blocking(path, move || sc_hash::hash_local_file(&native, algorithm)).await
     }
 
+    async fn create_symlink(&self, path: &VfsPath, target: &str) -> Result<()> {
+        let native = native(path)?;
+        let target = PathBuf::from(target);
+        blocking(path, move || {
+            #[cfg(unix)]
+            return std::os::unix::fs::symlink(target, native);
+            #[cfg(windows)]
+            return std::os::windows::fs::symlink_file(target, native);
+        })
+        .await
+    }
+
     #[cfg(feature = "trash")]
     async fn trash(&self, path: &VfsPath) -> Result<()> {
         let native = native(path)?;
