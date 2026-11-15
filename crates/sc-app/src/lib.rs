@@ -8,7 +8,8 @@
 use std::sync::Arc;
 
 use sc_config::{AppPaths, Config, ConfigError, Keymap};
-use sc_transfer::{Journal, JournalError, ManagerOptions, TransferManager};
+use sc_ops::{ConflictPolicy, ConflictResolver, PlanOptions, RetryPolicy};
+use sc_transfer::{JobOptions, Journal, JournalError, ManagerOptions, TransferManager};
 use sc_vfs::ProviderRegistry;
 
 /// Everything a front end needs to start.
@@ -45,6 +46,15 @@ impl AppContext {
 
     /// Opens the persistent transfer journal and creates the manager.
     pub fn transfer_manager(&self) -> Result<TransferManager, JournalError> {
+        self.transfer_manager_with(None)
+    }
+
+    /// Like [`transfer_manager`](Self::transfer_manager), with a resolver
+    /// that answers conflicts of jobs using [`ConflictPolicy::Ask`].
+    pub fn transfer_manager_with(
+        &self,
+        resolver: Option<Arc<dyn ConflictResolver>>,
+    ) -> Result<TransferManager, JournalError> {
         if let Some(dir) = self.paths.journal_file().parent() {
             let _ = std::fs::create_dir_all(dir);
         }
@@ -53,7 +63,25 @@ impl AppContext {
             max_concurrent_jobs: self.config.transfers.parallel_jobs,
             global_bandwidth_limit: self.config.transfers.bandwidth_limit_kib * 1024,
         };
-        TransferManager::new(self.registry.clone(), journal, options)
+        let manager = TransferManager::new(self.registry.clone(), journal, options)?;
+        Ok(match resolver {
+            Some(resolver) => manager.with_resolver(resolver),
+            None => manager,
+        })
+    }
+
+    /// Job options from the transfer settings. `conflict` overrides the
+    /// configured conflict policy.
+    pub fn job_options(&self, conflict: Option<ConflictPolicy>) -> JobOptions {
+        let settings = &self.config.transfers;
+        JobOptions {
+            conflict: conflict.unwrap_or(settings.conflict),
+            verify: settings.verify,
+            plan: PlanOptions { preserve_mtime: true, preserve_permissions: true },
+            parallelism: settings.parallel_files.max(1),
+            retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
+            bandwidth_limit: settings.bandwidth_limit_kib * 1024,
+        }
     }
 }
 

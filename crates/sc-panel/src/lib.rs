@@ -18,5 +18,5 @@ pub mod format;
 mod panel;
 mod workspace;
 
-pub use panel::{Listing, LoadRequest, Panel, SelectionSummary, load};
+pub use panel::{Listing, LoadRequest, PARENT, Panel, SelectionSummary, load};
 pub use workspace::{Side, SideId, Workspace};

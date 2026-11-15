@@ -3,7 +3,7 @@
 use sc_index::SortSpec;
 use sc_vfs::VfsPath;
 
-use crate::panel::{LoadRequest, Panel};
+use crate::panel::{Listing, LoadRequest, Panel};
 
 /// Left or right half of the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -177,6 +177,18 @@ impl Workspace {
         std::mem::swap(&mut self.left, &mut self.right);
     }
 
+    /// Hands a listing to whichever panel (any side, any tab) asked for it.
+    /// Returns `false` when no panel is waiting for it any more.
+    pub fn apply(&mut self, listing: Listing) -> bool {
+        let wanted = |panel: &Panel| panel.pending_request() == Some(listing.id);
+        let panel =
+            self.left.tabs.iter_mut().chain(self.right.tabs.iter_mut()).find(|panel| wanted(panel));
+        match panel {
+            Some(panel) => panel.apply(listing),
+            None => false,
+        }
+    }
+
     /// Shows the focused panel's location in the other panel too.
     pub fn same_location_in_other(&mut self) -> LoadRequest {
         let location = self.active().location().clone();
@@ -190,6 +202,23 @@ mod tests {
 
     fn p(path: &str) -> VfsPath {
         VfsPath::parse(path).unwrap()
+    }
+
+    #[test]
+    fn listings_reach_the_panel_that_asked() {
+        let (mut ws, requests) = Workspace::new(p("/a"), p("/b"), SortSpec::default(), false);
+        let tab = ws.side_mut(SideId::Right).new_tab();
+        assert_ne!(requests[1].1.id, tab.id);
+        let listing = |request: &LoadRequest| Listing {
+            id: request.id,
+            path: request.path.clone(),
+            result: Ok(vec![sc_vfs::Entry::new("x", sc_vfs::EntryKind::File)]),
+        };
+        assert!(ws.apply(listing(&tab)));
+        assert!(!ws.apply(listing(&tab)), "a listing is applied once");
+        assert!(ws.apply(listing(&requests[0].1)));
+        assert_eq!(ws.side(SideId::Left).panel().entries().len(), 2, "`..` and x");
+        assert!(ws.side(SideId::Right).tabs()[0].is_loading());
     }
 
     #[test]

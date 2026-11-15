@@ -23,7 +23,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         eprintln!("sc: settings: {warning}");
     }
     let Some(command) = cli.command else {
-        return start_interface(context).await;
+        return start_interface(context, &cli.locations).await;
     };
     match command {
         Command::Ls(args) => files::ls(&context, args).await,
@@ -44,7 +44,15 @@ pub async fn run(cli: Cli) -> CmdResult {
     }
 }
 
-async fn start_interface(_context: AppContext) -> CmdResult {
+#[cfg(feature = "tui")]
+async fn start_interface(context: AppContext, locations: &[String]) -> CmdResult {
+    let mut panels = crate::location::parse_all(locations)?.into_iter();
+    sc_tui::run(context, panels.next(), panels.next()).await?;
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(not(feature = "tui"))]
+async fn start_interface(_context: AppContext, _locations: &[String]) -> CmdResult {
     Err("the terminal UI is not part of this build; see `sc --help` for commands".into())
 }
 

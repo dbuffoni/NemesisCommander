@@ -1,6 +1,7 @@
 //! A single directory view.
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use sc_index::{Mask, SortKey, SortSpec, sort_entries};
 use sc_vfs::{Entry, EntryKind, ProviderRegistry, Result, VfsPath, collect_listing};
@@ -66,9 +67,10 @@ pub struct Panel {
     /// Name to put the cursor on once the next listing arrives.
     focus_after_load: Option<String>,
     pending: Option<u64>,
-    next_id: u64,
     loading_error: Option<String>,
 }
+
+static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Name of the synthetic "parent directory" row.
 pub const PARENT: &str = "..";
@@ -90,7 +92,6 @@ impl Panel {
             forward: Vec::new(),
             focus_after_load: None,
             pending: None,
-            next_id: 1,
             loading_error: None,
         }
     }
@@ -98,8 +99,9 @@ impl Panel {
     // ------------------------------------------------------------ loading
 
     fn request(&mut self, path: VfsPath) -> LoadRequest {
-        let id = self.next_id;
-        self.next_id += 1;
+        // Ids are unique in the whole process, so a front end can offer a
+        // listing to every panel and exactly the one that asked takes it.
+        let id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         self.pending = Some(id);
         LoadRequest { id, path }
     }
@@ -108,6 +110,24 @@ impl Panel {
     pub fn reload(&mut self) -> LoadRequest {
         self.focus_after_load = self.current_entry().map(|e| e.name.clone());
         self.request(self.location.clone())
+    }
+
+    /// Lists the current location again and puts the cursor on `name` (for
+    /// example a folder that was just created).
+    pub fn reload_focus(&mut self, name: &str) -> LoadRequest {
+        let request = self.request(self.location.clone());
+        self.focus_after_load = Some(name.to_owned());
+        request
+    }
+
+    /// Opens the folder containing `path` with the cursor on it (used for
+    /// search results). `None` when `path` has no parent.
+    pub fn reveal(&mut self, path: &VfsPath) -> Option<LoadRequest> {
+        let parent = path.parent()?;
+        let name = path.file_name()?.to_owned();
+        let request = self.navigate(parent);
+        self.focus_after_load = Some(name);
+        Some(request)
     }
 
     /// Goes to `path`, recording history.
@@ -127,6 +147,11 @@ impl Panel {
     /// `true` while a listing is outstanding.
     pub fn is_loading(&self) -> bool {
         self.pending.is_some()
+    }
+
+    /// Id of the outstanding listing request, if any.
+    pub fn pending_request(&self) -> Option<u64> {
+        self.pending
     }
 
     /// The error of the last listing, if it failed.
@@ -291,6 +316,19 @@ impl Panel {
             }
         }
         self.move_cursor(1);
+    }
+
+    /// Selects or unselects the entry called `name` (ignored for `..` and
+    /// names that are not listed).
+    pub fn set_selected(&mut self, name: &str, select: bool) {
+        if name == PARENT || !self.all.iter().any(|e| e.name == name) {
+            return;
+        }
+        if select {
+            self.selected.insert(name.to_owned());
+        } else {
+            self.selected.remove(name);
+        }
     }
 
     /// Selects (or unselects) every visible entry matching `mask`.
@@ -458,6 +496,33 @@ mod tests {
         let request = panel.reload();
         run(&mut panel, &registry, Some(request)).await;
         (panel, registry)
+    }
+
+    #[tokio::test]
+    async fn reveal_and_reload_focus_place_the_cursor() {
+        let (mut panel, registry) = home().await;
+        let request = panel.reveal(&p("/home/docs/readme.md"));
+        run(&mut panel, &registry, request).await;
+        assert_eq!(panel.location(), &p("/home/docs"));
+        assert_eq!(panel.current_entry().unwrap().name, "readme.md");
+
+        let request = panel.parent();
+        run(&mut panel, &registry, request).await;
+        let request = panel.reload_focus("file2.log");
+        run(&mut panel, &registry, Some(request)).await;
+        assert_eq!(panel.current_entry().unwrap().name, "file2.log");
+    }
+
+    #[tokio::test]
+    async fn set_selected_ignores_unknown_names() {
+        let (mut panel, _) = home().await;
+        panel.set_selected("a.txt", true);
+        panel.set_selected("nope", true);
+        panel.set_selected("..", true);
+        assert_eq!(panel.selection_summary().files, 1);
+        panel.set_selected("a.txt", false);
+        assert!(panel.targets().len() <= 1);
+        assert!(!panel.is_selected("a.txt"));
     }
 
     #[tokio::test]

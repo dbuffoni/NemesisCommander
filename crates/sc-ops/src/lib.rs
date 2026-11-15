@@ -26,7 +26,9 @@ pub use conflict::{
     Conflict, ConflictAction, ConflictPolicy, ConflictResolver, FixedResolver, Resolution,
     unique_name,
 };
-pub use copy::{CopyFileOptions, CopyOutcome, Throttle, VerifyMode, copy_file, verify_copy};
+pub use copy::{
+    CopyFileOptions, CopyOutcome, Throttle, VerifyMode, checksum, copy_file, verify_copy,
+};
 pub use delete::{DeleteOptions, delete_paths};
 pub use execute::{
     ExecuteOptions, Executor, Observer, OpEvent, Report, RetryPolicy, StepOutcome, StepTracker,

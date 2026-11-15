@@ -20,5 +20,5 @@ pub use config::{
     ViewerSettings,
 };
 pub use export::{ExportBundle, ImportMode};
-pub use keymap::{Action, KeyChord, Keymap};
+pub use keymap::{Action, Category, Key, KeyChord, Keymap};
 pub use paths::AppPaths;

@@ -1,0 +1,34 @@
+[package]
+name = "sc-tui"
+description = "SuperCommander's terminal user interface: two panels, keyboard driven, F1 for the main shortcuts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+sc-hash.workspace = true
+sc-ops.workspace = true
+sc-transfer.workspace = true
+sc-index.workspace = true
+sc-archive.workspace = true
+sc-config.workspace = true
+sc-panel.workspace = true
+sc-app.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+directories.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+sc-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

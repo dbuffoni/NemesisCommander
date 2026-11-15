@@ -21,6 +21,7 @@ sc-archive.workspace = true
 sc-config.workspace = true
 sc-panel.workspace = true
 sc-app = { workspace = true, default-features = false }
+sc-tui = { workspace = true, optional = true }
 async-trait.workspace = true
 clap.workspace = true
 serde.workspace = true
@@ -29,9 +30,12 @@ tokio = { workspace = true, features = ["full"] }
 tokio-util.workspace = true
 
 [features]
-default = ["desktop"]
-# Desktop build: recycle bin support (and, later, the TUI and scripting).
+default = ["desktop", "tui"]
+# Desktop build: recycle bin support.
 desktop = ["sc-app/desktop"]
+# The terminal UI started by `sc` without a command. Agent-only server
+# builds leave it out.
+tui = ["dep:sc-tui"]
 rar = ["sc-app/rar"]
 
 [dev-dependencies]

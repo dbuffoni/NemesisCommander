@@ -8,10 +8,13 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 /// paths or URIs such as sftp://user@host/dir, agent://host/dir or
 /// zip:///path/archive.zip!/inside.
 #[derive(Debug, Parser)]
-#[command(name = "sc", version, about, long_about = None)]
+#[command(name = "sc", version, args_conflicts_with_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
+    /// Locations for the left and right panel of the terminal UI.
+    #[arg(value_name = "LOCATION", num_args = 0..=2)]
+    pub locations: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]

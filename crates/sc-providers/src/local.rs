@@ -275,8 +275,22 @@ impl Provider for LocalProvider {
         let (src, dst) = (native(from)?, native(to)?);
         // reflink_or_copy clones the extents when possible (btrfs, xfs, APFS)
         // and otherwise falls back to std::fs::copy, which uses
-        // copy_file_range / sendfile on Linux.
-        blocking(from, move || reflink_copy::reflink_or_copy(src, dst).map(|_| ())).await
+        // copy_file_range / sendfile on Linux. It refuses to replace an
+        // existing file, so the copy goes to a part file next to the target
+        // that is then renamed over it; the target is never half written.
+        blocking(to, move || {
+            let name =
+                dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let part = dst.with_file_name(format!(".{name}.sc-part"));
+            let _ = std::fs::remove_file(&part);
+            let result = reflink_copy::reflink_or_copy(&src, &part)
+                .and_then(|_| std::fs::rename(&part, &dst));
+            if result.is_err() {
+                let _ = std::fs::remove_file(&part);
+            }
+            result
+        })
+        .await
     }
 
     async fn checksum(&self, path: &VfsPath, algorithm: HashAlgorithm) -> Result<String> {
@@ -436,6 +450,20 @@ mod tests {
         let ha = p.checksum(&a, HashAlgorithm::Blake3).await.unwrap();
         let hb = p.checksum(&b, HashAlgorithm::Blake3).await.unwrap();
         assert_eq!(ha, hb);
+    }
+
+    #[tokio::test]
+    async fn copy_within_replaces_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = LocalProvider::new();
+        let a = vfs(&dir.path().join("a"));
+        let b = vfs(&dir.path().join("b"));
+        write_file(&p, &a, b"new contents", WriteOptions::create_new()).await;
+        write_file(&p, &b, b"old", WriteOptions::create_new()).await;
+        p.copy_within(&a, &b).await.unwrap();
+        assert_eq!(std::fs::read(dir.path().join("b")).unwrap(), b"new contents");
+        let leftovers = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(leftovers, 2, "no part file left behind");
     }
 
     #[tokio::test]
