@@ -335,6 +335,31 @@ async fn viewer_shows_text_and_hex() {
 }
 
 #[tokio::test]
+async fn viewer_draws_images() {
+    let mut h = Harness::new().await;
+    // A small solid green PNG.
+    let picture = image::RgbaImage::from_pixel(8, 8, image::Rgba([0, 200, 0, 255]));
+    picture.save(h.path("left/green.png")).unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("green.png");
+    h.key("F3");
+    h.settle().await;
+    assert!(h.screen().contains("[image]"));
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let green = buffer
+        .content()
+        .iter()
+        .filter(|cell| cell.symbol() == "▀" && cell.fg == ratatui::style::Color::Rgb(0, 200, 0))
+        .count();
+    assert_eq!(green, 8 * 4, "8 columns of 4 cells, two pixels each");
+    h.press(KeyPress::char('h'));
+    assert!(h.screen().contains("[hex]"));
+}
+
+#[tokio::test]
 async fn quick_view_follows_the_cursor() {
     let mut h = Harness::new().await;
     h.key("Ctrl+Q");

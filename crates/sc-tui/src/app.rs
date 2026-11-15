@@ -1237,7 +1237,12 @@ impl App {
 
     fn load_file(&mut self, path: VfsPath, quick: bool) {
         let registry = self.context.registry.clone();
-        let limit = if quick { QUICK_VIEW_LIMIT } else { VIEW_LIMIT };
+        // Quick view reads the start of a file, or a whole image.
+        let limit = if quick && !viewer::is_image_name(path.file_name().unwrap_or_default()) {
+            QUICK_VIEW_LIMIT
+        } else {
+            VIEW_LIMIT
+        };
         self.spawn_task(async move {
             let result = viewer::load(&registry, &path, limit).await.map_err(|e| e.to_string());
             AppEvent::Loaded { path, quick, result }

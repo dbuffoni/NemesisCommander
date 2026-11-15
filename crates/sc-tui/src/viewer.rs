@@ -1,6 +1,13 @@
 //! The internal file viewer (F3) and the quick view panel: text with tabs
-//! expanded, or a hex dump for binary files.
+//! expanded, a hex dump for binary files, or a picture for images.
+//!
+//! Images are drawn with "half block" characters: each terminal cell shows
+//! two pixels stacked, the upper one as the `▀` character's color and the
+//! lower one as the background. Any terminal with true color shows them.
 
+use std::sync::Arc;
+
+use image::RgbaImage;
 use sc_vfs::{ProviderRegistry, VfsPath};
 use tokio::io::AsyncReadExt;
 
@@ -10,6 +17,66 @@ pub const VIEW_LIMIT: u64 = 16 * 1024 * 1024;
 pub const QUICK_VIEW_LIMIT: u64 = 64 * 1024;
 /// Bytes shown per hex dump row.
 pub const HEX_ROW: usize = 16;
+/// Decoded images are reduced to fit this many pixels per side, which is
+/// more than any terminal shows and keeps memory use small.
+const IMAGE_SIDE: u32 = 1024;
+
+/// A pixel color.
+pub type Rgb = [u8; 3];
+
+/// `true` for file names of image formats the viewer shows.
+pub fn is_image_name(name: &str) -> bool {
+    let extension = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    matches!(
+        extension.as_deref(),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff")
+    )
+}
+
+/// Decodes `data` if it is an image in a supported format.
+pub fn decode_image(data: &[u8]) -> Option<RgbaImage> {
+    let format = image::guess_format(data).ok()?;
+    let picture = image::load_from_memory_with_format(data, format).ok()?;
+    let picture = if picture.width() > IMAGE_SIDE || picture.height() > IMAGE_SIDE {
+        picture.thumbnail(IMAGE_SIDE, IMAGE_SIDE)
+    } else {
+        picture
+    };
+    Some(picture.to_rgba8())
+}
+
+/// The cells showing `picture` in at most `columns` × `rows` cells, keeping
+/// its proportions: one row per cell row, each cell the (upper, lower)
+/// pixel colors. Transparent pixels are blended onto black.
+pub fn image_cells(picture: &RgbaImage, columns: u16, rows: u16) -> Vec<Vec<(Rgb, Rgb)>> {
+    let (width, height) = (picture.width().max(1), picture.height().max(1));
+    if columns == 0 || rows == 0 {
+        return Vec::new();
+    }
+    // A cell is one pixel wide and two pixels high.
+    let max_w = u32::from(columns);
+    let max_h = u32::from(rows) * 2;
+    let scale = f64::min(f64::from(max_w) / f64::from(width), f64::from(max_h) / f64::from(height))
+        .min(1.0);
+    let out_w = ((f64::from(width) * scale).round() as u32).max(1);
+    let out_h = ((f64::from(height) * scale).round() as u32).max(1);
+    let small = if (out_w, out_h) == (width, height) {
+        picture.clone()
+    } else {
+        image::imageops::resize(picture, out_w, out_h, image::imageops::FilterType::Triangle)
+    };
+    let pixel = |x: u32, y: u32| -> Rgb {
+        if y >= out_h {
+            return [0, 0, 0];
+        }
+        let [r, g, b, a] = small.get_pixel(x, y).0;
+        let blend = |c: u8| (u16::from(c) * u16::from(a) / 255) as u8;
+        [blend(r), blend(g), blend(b)]
+    };
+    (0..out_h.div_ceil(2))
+        .map(|row| (0..out_w).map(|x| (pixel(x, row * 2), pixel(x, row * 2 + 1))).collect())
+        .collect()
+}
 
 /// Reads up to `limit` bytes of `path`. Returns the data and whether the
 /// file was longer.
@@ -117,6 +184,8 @@ pub struct Viewer {
     pub scroll: usize,
     /// Loading error.
     pub error: Option<String>,
+    /// The decoded picture, when the file is an image.
+    pub image: Option<Arc<RgbaImage>>,
 }
 
 impl Viewer {
@@ -131,12 +200,20 @@ impl Viewer {
             wrap,
             scroll: 0,
             error: None,
+            image: None,
         }
     }
 
-    /// Shows loaded data. Binary data starts in hex mode.
+    /// `true` while the picture is shown (not its hex dump).
+    pub fn shows_image(&self) -> bool {
+        self.image.is_some() && !self.hex
+    }
+
+    /// Shows loaded data. Images start as a picture, other binary data in
+    /// hex mode.
     pub fn set_data(&mut self, data: Vec<u8>, truncated: bool, tab_width: usize) {
-        self.hex = !looks_like_text(&data);
+        self.image = if truncated { None } else { decode_image(&data).map(Arc::new) };
+        self.hex = self.image.is_none() && !looks_like_text(&data);
         self.lines = text_lines(&data, tab_width);
         self.data = Some(data);
         self.truncated = truncated;
@@ -148,6 +225,7 @@ impl Viewer {
         match &self.data {
             None => 0,
             Some(data) if self.hex => hex_rows(data.len()),
+            Some(_) if self.image.is_some() => 0,
             Some(_) => self.lines.len(),
         }
     }
@@ -158,9 +236,15 @@ impl Viewer {
         self.scroll = self.scroll.saturating_add_signed(delta).min(max);
     }
 
-    /// Switches between text and hex, keeping roughly the same position.
+    /// Switches between text (or the picture) and hex, keeping roughly the
+    /// same position.
     pub fn toggle_hex(&mut self) {
         if self.data.is_none() {
+            return;
+        }
+        if self.image.is_some() {
+            self.hex = !self.hex;
+            self.scroll = 0;
             return;
         }
         let offset = if self.hex {
@@ -246,6 +330,45 @@ mod tests {
 
         viewer.set_data(vec![0, 1, 2], false, 4);
         assert!(viewer.hex, "binary data opens as hex");
+    }
+
+    /// A 4×4 PNG: red on top, blue at the bottom, half transparent at
+    /// the right.
+    fn png() -> Vec<u8> {
+        let picture = RgbaImage::from_fn(4, 4, |x, y| {
+            let alpha = if x < 2 { 255 } else { 0 };
+            if y < 2 { image::Rgba([255, 0, 0, alpha]) } else { image::Rgba([0, 0, 255, alpha]) }
+        });
+        let mut data = std::io::Cursor::new(Vec::new());
+        picture.write_to(&mut data, image::ImageFormat::Png).unwrap();
+        data.into_inner()
+    }
+
+    #[test]
+    fn images_become_half_block_cells() {
+        let picture = decode_image(&png()).unwrap();
+        let cells = image_cells(&picture, 80, 24);
+        assert_eq!((cells.len(), cells[0].len()), (2, 4), "no upscaling; two pixels per cell");
+        assert_eq!(cells[0][0], ([255, 0, 0], [255, 0, 0]));
+        assert_eq!(cells[1][1], ([0, 0, 255], [0, 0, 255]));
+        assert_eq!(cells[0][3], ([0, 0, 0], [0, 0, 0]), "transparent shows as black");
+
+        let small = image_cells(&picture, 2, 24);
+        assert_eq!((small.len(), small[0].len()), (1, 2), "shrunk to fit, same proportions");
+        assert!(image_cells(&picture, 0, 10).is_empty());
+        assert!(decode_image(b"not an image").is_none());
+        assert!(is_image_name("Photo.JPG") && !is_image_name("notes.txt"));
+    }
+
+    #[test]
+    fn images_open_as_pictures_and_toggle_to_hex() {
+        let mut viewer = Viewer::new(VfsPath::parse("/a.png").unwrap(), false);
+        viewer.set_data(png(), false, 4);
+        assert!(viewer.shows_image());
+        viewer.toggle_hex();
+        assert!(!viewer.shows_image() && viewer.row_count() > 0);
+        viewer.toggle_hex();
+        assert!(viewer.shows_image());
     }
 
     #[tokio::test]

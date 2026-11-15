@@ -260,6 +260,12 @@ fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
     let block = Block::bordered().border_style(dim()).title(" Quick view ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    if let Some(Some(viewer)) = &app.quick_view
+        && let (true, Some(picture)) = (viewer.shows_image(), &viewer.image)
+    {
+        draw_image(frame, picture, inner);
+        return;
+    }
     let lines: Vec<Line> = match &app.quick_view {
         Some(Some(viewer)) => match (&viewer.error, &viewer.data) {
             (Some(error), _) => vec![Line::styled(error.clone(), Style::new().fg(Color::Red))],
@@ -551,7 +557,11 @@ fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog) -> usize {
 /// Draws the full-screen viewer; returns its page height.
 fn draw_viewer(frame: &mut Frame, viewer: &Viewer, area: Rect) -> usize {
     frame.render_widget(Clear, area);
-    let mode = if viewer.hex { "hex" } else { "text" };
+    let mode = match (viewer.hex, viewer.image.is_some()) {
+        (true, _) => "hex",
+        (false, true) => "image",
+        (false, false) => "text",
+    };
     let rows = viewer.row_count();
     let percent = if rows == 0 { 100 } else { (viewer.scroll * 100 / rows.max(1)).min(100) };
     let mut title = format!(" {} [{mode}] {percent}% ", display_location(&viewer.path));
@@ -559,12 +569,16 @@ fn draw_viewer(frame: &mut Frame, viewer: &Viewer, area: Rect) -> usize {
         title.push_str("(first 16 MiB) ");
     }
     let block = Block::bordered().title(Line::styled(title, bold())).title_bottom(Line::styled(
-        " Esc: close   F4 / h: hex   F2 / w: wrap   PgUp PgDn Home End ",
+        " Esc: close   F4 / h: hex (or back to text, image)   F2 / w: wrap   PgUp PgDn Home End ",
         dim(),
     ));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let page = inner.height as usize;
+    if let (true, Some(picture)) = (viewer.shows_image(), &viewer.image) {
+        draw_image(frame, picture, inner);
+        return page;
+    }
     let lines: Vec<Line> = match (&viewer.error, &viewer.data) {
         (Some(error), _) => vec![Line::styled(error.clone(), Style::new().fg(Color::Red))],
         (None, None) => vec![Line::styled("loading…", dim())],
@@ -576,6 +590,24 @@ fn draw_viewer(frame: &mut Frame, viewer: &Viewer, area: Rect) -> usize {
     }
     frame.render_widget(paragraph, inner);
     page
+}
+
+/// Draws a picture centered in `area` with half-block characters.
+fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, area: Rect) {
+    let cells = crate::viewer::image_cells(picture, area.width, area.height);
+    let height = cells.len() as u16;
+    let width = cells.first().map_or(0, |row| row.len() as u16);
+    let left = area.x + (area.width - width) / 2;
+    let top = area.y + (area.height - height) / 2;
+    let buffer = frame.buffer_mut();
+    for (y, row) in cells.iter().enumerate() {
+        for (x, (upper, lower)) in row.iter().enumerate() {
+            let cell = &mut buffer[(left + x as u16, top + y as u16)];
+            cell.set_char('▀');
+            cell.set_fg(Color::Rgb(upper[0], upper[1], upper[2]));
+            cell.set_bg(Color::Rgb(lower[0], lower[1], lower[2]));
+        }
+    }
 }
 
 fn job_state(state: JobState) -> &'static str {
