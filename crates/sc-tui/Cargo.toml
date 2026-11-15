@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 sc-frontend.workspace = true
+sc-preview.workspace = true
 sc-vfs.workspace = true
 sc-config.workspace = true
 sc-panel.workspace = true

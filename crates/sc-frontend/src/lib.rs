@@ -12,12 +12,14 @@
 //!   state out).
 //! * `dialogs`: the data of every overlay window.
 //! * `input`: [`KeyPress`] and the one-line [`TextField`].
-//! * `viewer`: the text, hex and image viewer.
+//! * `viewer`: the viewer of text, hex, pictures and previews.
+//! * `preview`: documents, PDF pages and 3D models for the viewer.
 //! * `view`: what the screen shows, as plain data (and shared text helpers).
 
 mod app;
 mod dialogs;
 mod input;
+pub mod preview;
 pub mod view;
 pub mod viewer;
 

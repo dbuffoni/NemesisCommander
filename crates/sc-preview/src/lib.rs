@@ -19,6 +19,7 @@ pub mod model;
 pub mod office;
 pub mod pdf;
 pub mod rich;
+pub mod samples;
 
 /// What kind of preview a file gets, from its name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

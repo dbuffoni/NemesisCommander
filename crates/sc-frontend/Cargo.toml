@@ -17,6 +17,7 @@ sc-archive.workspace = true
 sc-config.workspace = true
 sc-panel.workspace = true
 sc-app.workspace = true
+sc-preview.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true

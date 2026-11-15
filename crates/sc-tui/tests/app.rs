@@ -359,6 +359,143 @@ async fn viewer_draws_images() {
     assert!(h.screen().contains("[hex]"));
 }
 
+/// Writes the preview samples to `left/` and shows them in the panel.
+async fn with_samples() -> Harness {
+    let mut h = Harness::new().await;
+    for (name, data) in sc_preview::samples::all() {
+        fs::write(h.path("left").join(name), data).unwrap();
+    }
+    h.key("Ctrl+R");
+    h.settle().await;
+    h
+}
+
+/// The picture the open viewer shows.
+fn viewer_picture(h: &Harness) -> Option<std::sync::Arc<image::RgbaImage>> {
+    match h.app.overlay() {
+        Some(Overlay::Viewer(viewer)) => viewer.image.clone(),
+        _ => None,
+    }
+}
+
+/// Counts the cells drawn as picture pixels of `colour`.
+fn cells_of(h: &mut Harness, colour: ratatui::style::Color) -> usize {
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .filter(|c| c.symbol() == "▀" && c.fg == colour)
+        .count()
+}
+
+#[tokio::test]
+async fn viewer_formats_documents() {
+    let mut h = with_samples().await;
+    h.focus("guide.md");
+    h.key("F3");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains("[document]"), "{screen}");
+    assert!(screen.contains("Project notes") && !screen.contains("# Project"), "{screen}");
+    assert!(screen.contains("• Install the AppImage"), "{screen}");
+    assert!(screen.contains("F5  │ Copy"), "{screen}");
+    h.key("Esc");
+
+    h.focus("offer.docx");
+    h.key("F3");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(
+        screen.contains("Offer for the office move") && screen.contains("4,350 EUR"),
+        "{screen}"
+    );
+    assert!(screen.contains("Transport │ 8"), "{screen}");
+    h.key("Esc");
+
+    h.focus("budget.xlsx");
+    h.key("F3");
+    h.settle().await;
+    assert!(h.screen().contains("Servers  │ 1250.5"), "{}", h.screen());
+    h.press(KeyPress::char('h'));
+    assert!(
+        h.screen().contains("[hex]") && h.screen().contains("50 4b 03 04"),
+        "back to the bytes"
+    );
+}
+
+#[tokio::test]
+async fn viewer_turns_pdf_pages() {
+    let mut h = with_samples().await;
+    h.focus("report.pdf");
+    h.key("F3");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains("[pdf]") && screen.contains("page 1 of 3"), "{screen}");
+    // The band of page 1 is blue, the one of page 2 green.
+    let blue = ratatui::style::Color::Rgb(41, 97, 181);
+    assert!(cells_of(&mut h, blue) > 20, "page 1 drawn");
+    h.key("PageDown");
+    h.settle().await;
+    assert!(h.screen().contains("page 2 of 3"), "{}", h.screen());
+    assert_eq!(cells_of(&mut h, blue), 0, "page 2 is another picture");
+    h.key("End");
+    h.settle().await;
+    assert!(h.screen().contains("page 3 of 3"));
+    h.key("PageDown");
+    h.settle().await;
+    assert!(h.screen().contains("page 3 of 3"), "stops at the last page");
+}
+
+#[tokio::test]
+async fn viewer_turns_models_around() {
+    let mut h = with_samples().await;
+    h.focus("torus.stl");
+    h.key("F3");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains("[model]") && screen.contains("2304 triangles"), "{screen}");
+    let before = viewer_picture(&h).expect("drawn");
+    h.key("Right");
+    h.settle().await;
+    let after = viewer_picture(&h).expect("drawn");
+    assert_ne!(before.as_raw(), after.as_raw(), "a new angle is a new picture");
+    h.press(KeyPress::char('0'));
+    h.settle().await;
+    let reset = viewer_picture(&h).unwrap();
+    assert_eq!(before.as_raw(), reset.as_raw(), "0 goes back to the first angle");
+}
+
+#[tokio::test]
+async fn pictures_zoom_in_and_out() {
+    let mut h = Harness::new().await;
+    // Left half red, right half blue.
+    let picture = image::RgbaImage::from_fn(64, 32, |x, _| {
+        if x < 32 { image::Rgba([255, 0, 0, 255]) } else { image::Rgba([0, 0, 255, 255]) }
+    });
+    picture.save(h.path("left/halves.png")).unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("halves.png");
+    h.key("F3");
+    h.settle().await;
+    let red = ratatui::style::Color::Rgb(255, 0, 0);
+    let blue = ratatui::style::Color::Rgb(0, 0, 255);
+    let (red_fit, blue_fit) = (cells_of(&mut h, red), cells_of(&mut h, blue));
+    assert!(red_fit > 0 && red_fit == blue_fit, "{red_fit} {blue_fit}");
+    h.press(KeyPress::char('+'));
+    h.press(KeyPress::char('+'));
+    for _ in 0..10 {
+        h.key("Left");
+    }
+    assert!(h.screen().contains("200%"), "{}", h.screen());
+    assert_eq!(cells_of(&mut h, blue), 0, "zoomed into the red half");
+    h.press(KeyPress::char('0'));
+    assert_eq!(cells_of(&mut h, blue), blue_fit, "fit again");
+}
+
 #[tokio::test]
 async fn quick_view_follows_the_cursor() {
     let mut h = Harness::new().await;

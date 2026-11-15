@@ -8,7 +8,12 @@
 use std::sync::Arc;
 
 use image::RgbaImage;
+use sc_preview::Kind;
+use sc_preview::model::Camera;
+use sc_preview::rich::{Line, line_text};
 use sc_vfs::{ProviderRegistry, VfsPath};
+
+use crate::preview::{Prepared, RichText, Source, Zoom};
 use tokio::io::AsyncReadExt;
 
 /// At most this much of a file is loaded into the viewer.
@@ -76,6 +81,11 @@ pub fn image_cells(picture: &RgbaImage, columns: u16, rows: u16) -> Vec<Vec<(Rgb
     (0..out_h.div_ceil(2))
         .map(|row| (0..out_w).map(|x| (pixel(x, row * 2), pixel(x, row * 2 + 1))).collect())
         .collect()
+}
+
+/// The last name of `path`, for choosing a preview.
+fn path_name(path: &VfsPath) -> &str {
+    path.file_name().unwrap_or("")
 }
 
 /// Reads up to `limit` bytes of `path`. Returns the data and whether the
@@ -184,13 +194,31 @@ pub struct Viewer {
     pub scroll: usize,
     /// Loading error.
     pub error: Option<String>,
-    /// The decoded picture, when the file is an image.
+    /// The picture shown: the decoded image, or the rendered PDF page or
+    /// view of a model.
     pub image: Option<Arc<RgbaImage>>,
+    /// The native preview this file gets, from its name.
+    pub kind: Option<Kind>,
+    /// A formatted document (Markdown, Office).
+    pub rich: Option<RichText>,
+    /// A PDF: its bytes, page count and the page shown (from 0).
+    pub pdf: Option<(Arc<Vec<u8>>, usize, usize)>,
+    /// A 3D model and where it is seen from.
+    pub model: Option<(Arc<sc_preview::model::Mesh>, Camera)>,
+    /// The part of the picture shown.
+    pub zoom: Zoom,
+    /// `image` as a PNG file, for windows (made in the background).
+    pub picture_file: Option<std::path::PathBuf>,
+    /// Counts render requests; only the latest result is kept.
+    pub generation: u64,
+    /// A picture is being rendered.
+    pub rendering: bool,
 }
 
 impl Viewer {
     /// A viewer waiting for the contents of `path`.
     pub fn new(path: VfsPath, wrap: bool) -> Self {
+        let kind = crate::preview::kind_of(path_name(&path));
         Viewer {
             path,
             data: None,
@@ -201,12 +229,185 @@ impl Viewer {
             scroll: 0,
             error: None,
             image: None,
+            kind,
+            rich: None,
+            pdf: None,
+            model: None,
+            zoom: Zoom::default(),
+            picture_file: None,
+            generation: 0,
+            rendering: false,
+        }
+    }
+
+    /// Shows a loaded file with its preview. Returns what must be rendered
+    /// in the background, if anything.
+    pub fn set_loaded(
+        &mut self,
+        data: Vec<u8>,
+        truncated: bool,
+        prepared: Prepared,
+        tab_width: usize,
+    ) -> Option<Source> {
+        match prepared {
+            Prepared::Plain => {
+                self.set_data(data, truncated, tab_width);
+                // A picture also gets a PNG, for windows.
+                let picture = self.image.clone()?;
+                self.generation += 1;
+                Some(Source::Picture(picture))
+            }
+            Prepared::Rich(blocks) => {
+                self.set_data(data, truncated, tab_width);
+                self.hex = false;
+                self.rich = Some(RichText::new(blocks));
+                None
+            }
+            Prepared::Pdf { data: pdf, pages } => {
+                self.set_data(data, truncated, tab_width);
+                self.hex = false;
+                self.pdf = Some((pdf, pages, 0));
+                self.render_source()
+            }
+            Prepared::Model(mesh) => {
+                self.set_data(data, truncated, tab_width);
+                self.hex = false;
+                self.model = Some((mesh, Camera::default()));
+                self.render_source()
+            }
+        }
+    }
+
+    /// What to render for the current page or angle (PDF and models).
+    pub fn render_source(&mut self) -> Option<Source> {
+        let source = if let Some((data, _, page)) = &self.pdf {
+            Source::Page { data: data.clone(), page: *page }
+        } else if let Some((mesh, camera)) = &self.model {
+            Source::Model { mesh: mesh.clone(), camera: *camera }
+        } else {
+            return None;
+        };
+        self.generation += 1;
+        self.rendering = true;
+        Some(source)
+    }
+
+    /// A rendered picture arrived for request `generation`.
+    pub fn set_rendered(
+        &mut self,
+        generation: u64,
+        result: Result<(Arc<RgbaImage>, Option<std::path::PathBuf>), String>,
+    ) {
+        if generation != self.generation {
+            // Outdated: the page or angle changed again meanwhile.
+            if let Ok((_, Some(file))) = result {
+                crate::preview::forget_png(&file);
+            }
+            return;
+        }
+        self.rendering = false;
+        match result {
+            Ok((picture, file)) => {
+                self.image = Some(picture);
+                if let Some(old) = std::mem::replace(&mut self.picture_file, file) {
+                    crate::preview::forget_png(&old);
+                }
+                self.error = None;
+            }
+            Err(error) => self.error = Some(error),
+        }
+    }
+
+    /// Next (`delta` > 0) or previous PDF page; returns what to render.
+    pub fn turn_page(&mut self, delta: isize) -> Option<Source> {
+        let (_, pages, page) = self.pdf.as_mut()?;
+        let next = page.saturating_add_signed(delta).min(*pages - 1);
+        if next == *page {
+            return None;
+        }
+        *page = next;
+        self.zoom = Zoom::default();
+        self.render_source()
+    }
+
+    /// Turns the model (degrees) or zooms it; returns what to render.
+    pub fn turn_model(&mut self, yaw: f32, pitch: f32, zoom_steps: i32) -> Option<Source> {
+        let (_, camera) = self.model.as_mut()?;
+        camera.yaw = (camera.yaw + yaw).rem_euclid(360.0);
+        camera.pitch = (camera.pitch + pitch).clamp(-89.0, 89.0);
+        camera.zoom = (camera.zoom * 2f32.sqrt().powi(zoom_steps)).clamp(0.2, 20.0);
+        self.render_source()
+    }
+
+    /// Back to the first view of a model; returns what to render.
+    pub fn reset_model(&mut self) -> Option<Source> {
+        let (_, camera) = self.model.as_mut()?;
+        *camera = Camera::default();
+        self.render_source()
+    }
+
+    /// Lays a formatted document out for `columns` (front ends call this
+    /// with their width before drawing).
+    pub fn layout(&mut self, columns: usize) {
+        if let Some(rich) = &mut self.rich {
+            rich.layout(columns);
+            let max = rich.lines.len().saturating_sub(1);
+            self.scroll = self.scroll.min(max);
+        }
+    }
+
+    /// The formatted lines to draw, from the scroll position (empty when
+    /// the file is not a formatted document or shown in hex).
+    pub fn visible_rich(&self, count: usize) -> Vec<Line> {
+        match &self.rich {
+            Some(rich) if !self.hex => rich.lines.iter().skip(self.scroll).take(count).cloned().collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// The name of the current mode: `text`, `hex`, `image`, `document`,
+    /// `pdf` or `model`.
+    pub fn mode(&self) -> &'static str {
+        if self.hex {
+            "hex"
+        } else if self.pdf.is_some() {
+            "pdf"
+        } else if self.model.is_some() {
+            "model"
+        } else if self.rich.is_some() {
+            "document"
+        } else if self.image.is_some() {
+            "image"
+        } else {
+            "text"
+        }
+    }
+
+    /// One line about what is shown: the picture's size and zoom, the
+    /// page, the model's size.
+    pub fn info(&self) -> String {
+        if self.hex {
+            return String::new();
+        }
+        let zoom = if self.zoom.factor > 1.0 { format!("  zoom {:.0}%", self.zoom.factor * 100.0) } else { String::new() };
+        if let Some((_, pages, page)) = &self.pdf {
+            return format!("page {} of {pages}{zoom}", page + 1);
+        }
+        if let Some((mesh, camera)) = &self.model {
+            return format!("{} triangles  turned {:.0}°, {:.0}°  zoom {:.0}%", mesh.triangle_count(), camera.yaw, camera.pitch, camera.zoom * 100.0);
+        }
+        if let Some(kind) = self.kind.filter(|_| self.rich.is_some()) {
+            return kind.label().to_owned();
+        }
+        match &self.image {
+            Some(picture) => format!("{} × {} pixels{zoom}", picture.width(), picture.height()),
+            None => String::new(),
         }
     }
 
     /// `true` while the picture is shown (not its hex dump).
     pub fn shows_image(&self) -> bool {
-        self.image.is_some() && !self.hex
+        (self.image.is_some() || self.pdf.is_some() || self.model.is_some()) && !self.hex
     }
 
     /// Shows loaded data. Images start as a picture, other binary data in
@@ -225,7 +426,8 @@ impl Viewer {
         match &self.data {
             None => 0,
             Some(data) if self.hex => hex_rows(data.len()),
-            Some(_) if self.image.is_some() => 0,
+            Some(_) if self.image.is_some() || self.pdf.is_some() || self.model.is_some() => 0,
+            Some(_) if self.rich.is_some() => self.rich.as_ref().map_or(0, |r| r.lines.len()),
             Some(_) => self.lines.len(),
         }
     }
@@ -242,7 +444,7 @@ impl Viewer {
         if self.data.is_none() {
             return;
         }
-        if self.image.is_some() {
+        if self.image.is_some() || self.rich.is_some() || self.pdf.is_some() || self.model.is_some() {
             self.hex = !self.hex;
             self.scroll = 0;
             return;
@@ -277,6 +479,7 @@ impl Viewer {
                 ..(self.scroll + count).min(hex_rows(data.len())))
                 .map(|row| hex_row(data, row))
                 .collect(),
+            Some(_) if self.rich.is_some() => self.visible_rich(count).iter().map(line_text).collect(),
             Some(_) => self.lines.iter().skip(self.scroll).take(count).cloned().collect(),
         }
     }

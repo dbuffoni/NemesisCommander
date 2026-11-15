@@ -11,6 +11,7 @@ use sc_panel::format::local_time;
 use sc_panel::{PARENT, SideId};
 use sc_transfer::JobState;
 
+use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
     describe, entry_details, job_line, jobs_summary, panel_footer, scroll_offset, short_label,
     size_text, tab_title,
@@ -37,6 +38,16 @@ fn highlight() -> Style {
 
 /// Draws the whole screen.
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    // Documents are laid out for the width they get: the whole screen in
+    // the viewer, one panel in the quick view (both inside a border).
+    let width = frame.area().width as usize;
+    app.columns = width.saturating_sub(2);
+    if let Some(Overlay::Viewer(viewer)) = &mut app.overlay {
+        viewer.layout(width.saturating_sub(2));
+    }
+    if let Some(Some(viewer)) = &mut app.quick_view {
+        viewer.layout((width / 2).saturating_sub(2));
+    }
     let [panels, status, keys] =
         Layout::vertical([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)])
             .areas(frame.area());
@@ -214,26 +225,22 @@ pub fn fit(text: &str, width: usize) -> String {
 }
 
 fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
-    let block = Block::bordered().border_style(dim()).title(" Quick view ");
+    let mut block = Block::bordered().border_style(dim()).title(" Quick view ");
+    if let Some(Some(viewer)) = &app.quick_view {
+        let info = viewer.info();
+        if !info.is_empty() {
+            block = block.title_bottom(Line::styled(format!(" {info} "), dim()));
+        }
+    }
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    if let Some(Some(viewer)) = &app.quick_view
-        && let (true, Some(picture)) = (viewer.shows_image(), &viewer.image)
-    {
-        draw_image(frame, picture, inner);
-        return;
+    match &app.quick_view {
+        Some(Some(viewer)) => draw_content(frame, viewer, inner),
+        _ => frame.render_widget(
+            Paragraph::new(Line::styled("Move the cursor to a file to preview it", dim())),
+            inner,
+        ),
     }
-    let lines: Vec<Line> = match &app.quick_view {
-        Some(Some(viewer)) => match (&viewer.error, &viewer.data) {
-            (Some(error), _) => vec![Line::styled(error.clone(), Style::new().fg(Color::Red))],
-            (None, None) => vec![Line::styled("loading…", dim())],
-            (None, Some(_)) => {
-                viewer.visible_rows(inner.height as usize).into_iter().map(Line::raw).collect()
-            }
-        },
-        _ => vec![Line::styled("Move the cursor to a file to preview it", dim())],
-    };
-    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 // ------------------------------------------------------- status and keys
@@ -459,44 +466,106 @@ fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog) -> usize {
 /// Draws the full-screen viewer; returns its page height.
 fn draw_viewer(frame: &mut Frame, viewer: &Viewer, area: Rect) -> usize {
     frame.render_widget(Clear, area);
-    let mode = match (viewer.hex, viewer.image.is_some()) {
-        (true, _) => "hex",
-        (false, true) => "image",
-        (false, false) => "text",
-    };
-    let rows = viewer.row_count();
-    let percent = if rows == 0 { 100 } else { (viewer.scroll * 100 / rows.max(1)).min(100) };
-    let mut title = format!(" {} [{mode}] {percent}% ", display_location(&viewer.path));
-    if viewer.truncated {
+    let view = sc_frontend::view::viewer_view(viewer, area.height.saturating_sub(2) as usize);
+    let mut title = format!(" {} [{}] ", view.title, view.mode);
+    if !viewer.shows_image() {
+        title.push_str(&format!("{}% ", view.percent));
+    }
+    if view.truncated {
         title.push_str("(first 16 MiB) ");
     }
-    let block = Block::bordered().title(Line::styled(title, bold())).title_bottom(Line::styled(
-        " Esc: close   F4 / h: hex (or back to text, image)   F2 / w: wrap   PgUp PgDn Home End ",
-        dim(),
-    ));
+    let mut block = Block::bordered()
+        .title(Line::styled(title, bold()))
+        .title_bottom(Line::styled(format!(" {} ", view.keys), dim()));
+    if !view.info.is_empty() {
+        block = block.title_bottom(Line::styled(format!(" {} ", view.info), dim()).right_aligned());
+    }
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let page = inner.height as usize;
-    if let (true, Some(picture)) = (viewer.shows_image(), &viewer.image) {
-        draw_image(frame, picture, inner);
-        return page;
+    draw_content(frame, viewer, inner);
+    inner.height as usize
+}
+
+/// Draws what a viewer shows (text, hex, a document or a picture) in `area`.
+fn draw_content(frame: &mut Frame, viewer: &Viewer, area: Rect) {
+    let page = area.height as usize;
+    if let Some(error) = &viewer.error {
+        let line = Line::styled(error.clone(), Style::new().fg(Color::Red));
+        frame.render_widget(Paragraph::new(line).wrap(Wrap { trim: false }), area);
+        return;
     }
-    let lines: Vec<Line> = match (&viewer.error, &viewer.data) {
-        (Some(error), _) => vec![Line::styled(error.clone(), Style::new().fg(Color::Red))],
-        (None, None) => vec![Line::styled("loading…", dim())],
-        (None, Some(_)) => viewer.visible_rows(page).into_iter().map(Line::raw).collect(),
-    };
+    if viewer.data.is_none() {
+        frame.render_widget(Paragraph::new(Line::styled("loading…", dim())), area);
+        return;
+    }
+    if viewer.shows_image() {
+        match &viewer.image {
+            Some(picture) => draw_image(frame, picture, viewer.zoom, area),
+            None => frame.render_widget(Paragraph::new(Line::styled("drawing…", dim())), area),
+        }
+        return;
+    }
+    if viewer.rich.is_some() && !viewer.hex {
+        let lines: Vec<Line> = viewer.visible_rich(page).iter().map(rich_line).collect();
+        frame.render_widget(Paragraph::new(lines), area);
+        return;
+    }
+    let lines: Vec<Line> = viewer.visible_rows(page).into_iter().map(Line::raw).collect();
     let mut paragraph = Paragraph::new(lines);
     if viewer.wrap && !viewer.hex {
         paragraph = paragraph.wrap(Wrap { trim: false });
     }
-    frame.render_widget(paragraph, inner);
-    page
+    frame.render_widget(paragraph, area);
 }
 
-/// Draws a picture centered in `area` with half-block characters.
-fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, area: Rect) {
-    let cells = sc_frontend::viewer::image_cells(picture, area.width, area.height);
+/// A line of a formatted document in terminal colours.
+fn rich_line(line: &sc_preview::rich::Line) -> Line<'static> {
+    Line::from(
+        line.iter()
+            .map(|span| Span::styled(span.text.clone(), rich_style(&span.style)))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// How a document style looks in a terminal.
+fn rich_style(style: &sc_preview::rich::Style) -> Style {
+    let mut out = Style::new();
+    match style.heading {
+        0 => {}
+        1 => out = out.fg(Color::Yellow).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+        2 => out = out.fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        _ => out = out.fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    }
+    if style.bold {
+        out = out.add_modifier(Modifier::BOLD);
+    }
+    if style.italic {
+        out = out.add_modifier(Modifier::ITALIC);
+    }
+    if style.code {
+        out = out.fg(Color::Green);
+    }
+    if style.link {
+        out = out.fg(Color::Blue).add_modifier(Modifier::UNDERLINED);
+    }
+    if style.mark {
+        out = out.fg(Color::DarkGray);
+    }
+    out
+}
+
+/// Draws the zoomed part of a picture centered in `area` with half-block
+/// characters.
+fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, zoom: Zoom, area: Rect) {
+    let (x, y, w, h) = zoom.region(picture.width(), picture.height());
+    let cropped;
+    let shown = if (w, h) == picture.dimensions() {
+        picture
+    } else {
+        cropped = image::imageops::crop_imm(picture, x, y, w, h).to_image();
+        &cropped
+    };
+    let cells = sc_frontend::viewer::image_cells(shown, area.width, area.height);
     let height = cells.len() as u16;
     let width = cells.first().map_or(0, |row| row.len() as u16);
     let left = area.x + (area.width - width) / 2;

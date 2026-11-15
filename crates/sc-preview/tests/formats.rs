@@ -246,3 +246,36 @@ fn kinds_of_real_names() {
     assert_eq!(Kind::of("Q3 report.xlsx").map(Kind::label), Some("spreadsheet"));
     assert_eq!(Kind::of("deck.pptx").map(Kind::label), Some("slides"));
 }
+
+#[test]
+fn every_sample_previews() {
+    for (name, data) in sc_preview::samples::all() {
+        match Kind::of(name).unwrap() {
+            Kind::Markdown => assert!(
+                !sc_preview::markdown::parse(std::str::from_utf8(&data).unwrap()).is_empty()
+            ),
+            Kind::Office(format) => {
+                let text = text_of(&office::read(format, &data).unwrap()).join("\n");
+                assert!(text.len() > 40, "{name}: {text}");
+            }
+            Kind::Pdf => {
+                let data = Arc::new(data);
+                assert_eq!(pdf::page_count(&data).unwrap(), 3);
+                let page = pdf::render_page(&data, 0, 420, 595).unwrap();
+                // The title is white text on the blue band.
+                let band_row = (page.height() as f32 * 0.07) as u32;
+                let white = (0..page.width())
+                    .filter(|&x| page.get_pixel(x, band_row).0[..3] == [255, 255, 255])
+                    .count();
+                let blue = (0..page.width())
+                    .filter(|&x| page.get_pixel(x, 5).0[2] > 150 && page.get_pixel(x, 5).0[0] < 80)
+                    .count();
+                assert!(blue > page.width() as usize / 2, "band drawn");
+                assert!(white > 0, "title drawn");
+            }
+            Kind::Model => {
+                assert_eq!(Mesh::load(name, &data).unwrap().triangle_count(), 48 * 24 * 2)
+            }
+        }
+    }
+}

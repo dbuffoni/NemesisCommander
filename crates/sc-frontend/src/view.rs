@@ -219,9 +219,48 @@ pub struct ViewerView {
     pub error: Option<String>,
     /// Still loading.
     pub loading: bool,
-    /// For an image of the local disk, its `file://` URL, which a desktop
-    /// interface can show at full quality.
+    /// The picture as a `file://` URL a desktop interface can show at full
+    /// quality: the file itself for pictures on this disk, otherwise a PNG
+    /// rendered for it (PDF pages, models, remote pictures).
     pub image_url: Option<String>,
+    /// Formatted lines (documents), from the scroll position.
+    pub rich: Vec<Vec<SpanView>>,
+    /// One line about what is shown (picture size, page, zoom).
+    pub info: String,
+    /// The keys of this mode, for the window's header.
+    pub keys: String,
+    /// Picture zoom: 1 fits the picture.
+    pub zoom: f64,
+    /// The point of the picture in the middle, as fractions.
+    pub center: [f64; 2],
+    /// A new picture is being drawn.
+    pub rendering: bool,
+}
+
+/// A piece of formatted text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SpanView {
+    /// The text.
+    pub text: String,
+    /// How it looks, as space-separated words: `h1`-`h6`, `bold`,
+    /// `italic`, `code`, `link`, `mark` (decorations); empty for plain.
+    pub style: String,
+}
+
+impl SpanView {
+    fn of(span: &sc_preview::rich::Span) -> Self {
+        let s = span.style;
+        let mut words: Vec<String> = Vec::new();
+        if s.heading > 0 {
+            words.push(format!("h{}", s.heading));
+        }
+        for (on, word) in [(s.bold, "bold"), (s.italic, "italic"), (s.code, "code"), (s.link, "link"), (s.mark, "mark")] {
+            if on {
+                words.push(word.to_owned());
+            }
+        }
+        SpanView { text: span.text.clone(), style: words.join(" ") }
+    }
 }
 
 /// A job of the transfer queue.
@@ -252,6 +291,14 @@ impl Screen {
     pub fn of(app: &mut App, rows: usize, viewer_rows: usize) -> Screen {
         let active = app.workspace.active_side();
         app.page = rows;
+        let columns = app.columns;
+        if let Some(Overlay::Viewer(viewer)) = &mut app.overlay {
+            viewer.layout(columns);
+        }
+        if let Some(Some(viewer)) = &mut app.quick_view {
+            // The quick view is half the window wide.
+            viewer.layout(columns / 2);
+        }
         let panels = [SideId::Left, SideId::Right].map(|side| {
             if side != active && app.quick_view.is_some() {
                 quick_view_panel(app, viewer_rows)
@@ -394,16 +441,36 @@ fn row_view(panel: &Panel, entry: &Entry, cursor: bool, human: bool) -> RowView 
 fn quick_view_panel(app: &App, rows: usize) -> PanelView {
     let quick_view = match &app.quick_view {
         Some(Some(viewer)) => viewer_view(viewer, rows),
-        _ => ViewerView {
-            title: "Quick view".into(),
-            mode: "text".into(),
-            lines: vec!["Move the cursor to a file to preview it".into()],
-            percent: 100,
-            truncated: false,
-            error: None,
-            loading: false,
-            image_url: None,
-        },
+        _ => {
+            let panel = app.workspace.active();
+            let lines = match panel.current_entry() {
+                Some(entry) if entry.is_dir() && entry.name != PARENT => vec![
+                    format!("{}/", entry.name),
+                    String::new(),
+                    "A folder.".into(),
+                    format!("Modified: {}", entry.modified.map(local_time).unwrap_or_default()),
+                    String::new(),
+                    "F3 counts its size; Enter opens it.".into(),
+                ],
+                _ => vec!["Move the cursor to a file to preview it.".into()],
+            };
+            ViewerView {
+                title: "Quick view".into(),
+                mode: "text".into(),
+                lines,
+                percent: 100,
+                truncated: false,
+                error: None,
+                loading: false,
+                image_url: None,
+                rich: Vec::new(),
+                info: String::new(),
+                keys: String::new(),
+                zoom: 1.0,
+                center: [0.5, 0.5],
+                rendering: false,
+            }
+        }
     };
     PanelView {
         title: "Quick view".into(),
@@ -470,26 +537,55 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
 
 /// Describes the viewer with `rows` visible lines.
 pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
-    let mode = match (viewer.hex, viewer.image.is_some()) {
-        (true, _) => "hex",
-        (false, true) => "image",
-        (false, false) => "text",
-    };
     let total = viewer.row_count();
-    let image_url = viewer
-        .shows_image()
-        .then(|| viewer.path.to_local_path())
-        .flatten()
-        .map(|path| format!("file://{}", path.display()));
+    let image_url = if viewer.shows_image() {
+        let plain_picture = viewer.pdf.is_none() && viewer.model.is_none();
+        let file = viewer
+            .picture_file
+            .clone()
+            .or_else(|| plain_picture.then(|| viewer.path.to_local_path()).flatten());
+        file.map(|path| file_url(&path))
+    } else {
+        None
+    };
+    let rich: Vec<Vec<SpanView>> = viewer
+        .visible_rich(rows)
+        .iter()
+        .map(|line| line.iter().map(SpanView::of).collect())
+        .collect();
+    let lines = if viewer.shows_image() || !rich.is_empty() { Vec::new() } else { viewer.visible_rows(rows) };
     ViewerView {
         title: display_location(&viewer.path),
-        mode: mode.into(),
-        lines: if viewer.shows_image() { Vec::new() } else { viewer.visible_rows(rows) },
-        percent: (viewer.scroll * 100).checked_div(total).map_or(100, |p| p.min(100)),
+        mode: viewer.mode().into(),
+        lines,
+        percent: if total <= rows { 100 } else { ((viewer.scroll + rows) * 100 / total).min(100) },
         truncated: viewer.truncated,
         error: viewer.error.clone(),
         loading: viewer.data.is_none() && viewer.error.is_none(),
         image_url,
+        rich,
+        info: viewer.info(),
+        keys: viewer_keys(viewer).into(),
+        zoom: f64::from(viewer.zoom.factor),
+        center: [f64::from(viewer.zoom.center.0), f64::from(viewer.zoom.center.1)],
+        rendering: viewer.rendering,
+    }
+}
+
+/// A `file://` URL of a local path, as Qt and browsers read it.
+fn file_url(path: &std::path::Path) -> String {
+    let text = path.display().to_string().replace('\\', "/");
+    if text.starts_with('/') { format!("file://{text}") } else { format!("file:///{text}") }
+}
+
+/// The keys that matter in the viewer's current mode.
+pub fn viewer_keys(viewer: &Viewer) -> &'static str {
+    match viewer.mode() {
+        "pdf" => "PgUp/PgDn: page   +/-: zoom   0: fit   F4: hex   Esc: close",
+        "model" => "Arrows: turn   +/-: zoom   0: reset   F4: hex   Esc: close",
+        "image" => "+/-: zoom   0: fit   arrows: move   F4: hex   Esc: close",
+        "document" => "PgUp/PgDn: scroll   F4: hex   Esc: close",
+        _ => "F2: wrap   F4: hex   Esc: close",
     }
 }
 

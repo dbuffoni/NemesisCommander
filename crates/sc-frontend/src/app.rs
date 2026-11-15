@@ -69,8 +69,19 @@ pub enum AppEvent {
         path: VfsPath,
         /// For the quick view (otherwise the full viewer).
         quick: bool,
-        /// Data and "file is longer", or an error.
-        result: Result<(Vec<u8>, bool), String>,
+        /// Data, "file is longer" and its preview, or an error.
+        result: Result<(Vec<u8>, bool, crate::preview::Prepared), String>,
+    },
+    /// A picture for the viewer or quick view was rendered.
+    Rendered {
+        /// Which file.
+        path: VfsPath,
+        /// For the quick view (otherwise the full viewer).
+        quick: bool,
+        /// The request it answers.
+        generation: u64,
+        /// The picture and its PNG file (windows only), or an error.
+        result: Result<(Arc<image::RgbaImage>, Option<PathBuf>), String>,
     },
     /// A plugin command or script ended.
     ScriptDone {
@@ -93,6 +104,7 @@ impl AppEvent {
                 | AppEvent::Show(_)
                 | AppEvent::SearchDone(_)
                 | AppEvent::Loaded { .. }
+                | AppEvent::Rendered { .. }
                 | AppEvent::ScriptDone { .. }
         )
     }
@@ -161,6 +173,9 @@ pub struct App {
     pub scroll: [usize; 2],
     /// Rows per page, measured by the renderer.
     pub page: usize,
+    /// Columns of text the viewer shows, measured by the renderer
+    /// (formatted documents are laid out for it).
+    pub columns: usize,
     /// The front end is a desktop window, not a terminal: "Edit" then opens
     /// a graphical editor instead of `$EDITOR`, which usually needs a
     /// terminal.
@@ -258,6 +273,7 @@ impl App {
             quick_view: None,
             scroll: [0, 0],
             page: 20,
+            columns: 80,
             events,
             tasks: 0,
             search_cancel: None,
@@ -475,21 +491,26 @@ impl App {
             }
             AppEvent::Loaded { path, quick, result } => {
                 let tab_width = self.context.config.viewer.tab_width;
-                let target = if quick {
-                    match &mut self.quick_view {
-                        Some(Some(viewer)) => Some(viewer),
-                        _ => None,
+                let source = self.viewer_for(&path, quick).and_then(|viewer| match result {
+                    Ok((data, truncated, prepared)) => {
+                        viewer.set_loaded(data, truncated, prepared, tab_width)
                     }
-                } else {
-                    match &mut self.overlay {
-                        Some(Overlay::Viewer(viewer)) => Some(viewer),
-                        _ => None,
+                    Err(e) => {
+                        viewer.error = Some(e);
+                        None
                     }
-                };
-                if let Some(viewer) = target.filter(|v| v.path == path) {
-                    match result {
-                        Ok((data, truncated)) => viewer.set_data(data, truncated, tab_width),
-                        Err(e) => viewer.error = Some(e),
+                });
+                if let Some(source) = source {
+                    self.render_picture(path, quick, source);
+                }
+            }
+            AppEvent::Rendered { path, quick, generation, result } => {
+                match self.viewer_for(&path, quick) {
+                    Some(viewer) => viewer.set_rendered(generation, result),
+                    None => {
+                        if let Ok((_, Some(file))) = result {
+                            crate::preview::forget_png(&file);
+                        }
                     }
                 }
             }
@@ -649,6 +670,15 @@ impl App {
             Overlay::Viewer(mut viewer) => {
                 let page = self.page.max(1);
                 let ipage = page as isize;
+                if let Some(source) = viewer_picture_key(&mut viewer, key, press.text) {
+                    let path = viewer.path.clone();
+                    self.overlay = Some(Overlay::Viewer(viewer));
+                    self.render_picture(path, false, source);
+                    return self.overlay.take();
+                }
+                if viewer.shows_image() && viewer_zoom_key(&mut viewer, key, press.text) {
+                    return Some(Overlay::Viewer(viewer));
+                }
                 match (key, press.text) {
                     (Some(Key::Esc | Key::F(3) | Key::F(10)), _) | (_, Some('q')) => return None,
                     (Some(Key::Up), _) => viewer.scroll_by(-1, page),
@@ -1292,15 +1322,68 @@ impl App {
 
     fn load_file(&mut self, path: VfsPath, quick: bool) {
         let registry = self.context.registry.clone();
-        // Quick view reads the start of a file, or a whole image.
-        let limit = if quick && !viewer::is_image_name(path.file_name().unwrap_or_default()) {
+        let name = path.file_name().unwrap_or_default().to_owned();
+        // Quick view reads the start of a file, or a whole image or
+        // previewed document.
+        let limit = if crate::preview::kind_of(&name).is_some() {
+            crate::preview::PREVIEW_LIMIT
+        } else if quick && !viewer::is_image_name(&name) {
             QUICK_VIEW_LIMIT
         } else {
             VIEW_LIMIT
         };
         self.spawn_task(async move {
-            let result = viewer::load(&registry, &path, limit).await.map_err(|e| e.to_string());
+            let loaded = viewer::load(&registry, &path, limit).await.map_err(|e| e.to_string());
+            let result = match loaded {
+                Ok((data, truncated)) => tokio::task::spawn_blocking(move || {
+                    let prepared = crate::preview::prepare(&name, &data, truncated)?;
+                    Ok((data, truncated, prepared))
+                })
+                .await
+                .unwrap_or_else(|e| Err(format!("the preview failed: {e}"))),
+                Err(e) => Err(e),
+            };
             AppEvent::Loaded { path, quick, result }
+        });
+    }
+
+    /// The viewer or quick view showing `path`, if it still does.
+    fn viewer_for(&mut self, path: &VfsPath, quick: bool) -> Option<&mut Viewer> {
+        let viewer = if quick {
+            match &mut self.quick_view {
+                Some(Some(viewer)) => Some(viewer),
+                _ => None,
+            }
+        } else {
+            match &mut self.overlay {
+                Some(Overlay::Viewer(viewer)) => Some(viewer),
+                _ => None,
+            }
+        };
+        viewer.filter(|v| &v.path == path)
+    }
+
+    /// Renders a picture for the viewer in the background (and its PNG for
+    /// windows; plain pictures of this disk need none, the window reads
+    /// the file itself).
+    fn render_picture(&mut self, path: VfsPath, quick: bool, source: crate::preview::Source) {
+        let Some(generation) = self.viewer_for(&path, quick).map(|v| v.generation) else { return };
+        let local_picture =
+            matches!(source, crate::preview::Source::Picture(_)) && path.to_local_path().is_some();
+        let png = self.graphical && !local_picture;
+        if matches!(source, crate::preview::Source::Picture(_)) && !png {
+            return;
+        }
+        let size = if quick { crate::preview::QUICK_RENDER_SIZE } else { crate::preview::RENDER_SIZE };
+        self.spawn_task(async move {
+            let result = tokio::task::spawn_blocking(move || {
+                let picture = crate::preview::render(&source, size)?;
+                let file = if png { Some(crate::preview::write_png(&picture)?) } else { None };
+                Ok((picture, file))
+            })
+            .await
+            .unwrap_or_else(|e| Err(format!("drawing failed: {e}")));
+            AppEvent::Rendered { path, quick, generation, result }
         });
     }
 
@@ -1588,6 +1671,67 @@ impl App {
             None => self.quick_view = Some(None),
         }
     }
+}
+
+/// Keys that change a PDF page or the view of a model. Returns what to
+/// render when the key did something.
+fn viewer_picture_key(
+    viewer: &mut Viewer,
+    key: Option<Key>,
+    text: Option<char>,
+) -> Option<crate::preview::Source> {
+    if viewer.hex {
+        return None;
+    }
+    if viewer.pdf.is_some() && viewer.zoom.factor <= 1.0 {
+        return match (key, text) {
+            (Some(Key::PageDown | Key::Space | Key::Right | Key::Down), _) => viewer.turn_page(1),
+            (Some(Key::PageUp | Key::Left | Key::Up), _) => viewer.turn_page(-1),
+            (Some(Key::Home), _) => viewer.turn_page(isize::MIN / 2),
+            (Some(Key::End), _) => viewer.turn_page(isize::MAX / 2),
+            _ => None,
+        };
+    }
+    if viewer.pdf.is_some() {
+        return match key {
+            Some(Key::PageDown | Key::Space) => viewer.turn_page(1),
+            Some(Key::PageUp) => viewer.turn_page(-1),
+            _ => None,
+        };
+    }
+    if viewer.model.is_some() {
+        return match (key, text) {
+            (Some(Key::Left), _) => viewer.turn_model(-15.0, 0.0, 0),
+            (Some(Key::Right), _) => viewer.turn_model(15.0, 0.0, 0),
+            (Some(Key::Up), _) => viewer.turn_model(0.0, 15.0, 0),
+            (Some(Key::Down), _) => viewer.turn_model(0.0, -15.0, 0),
+            (_, Some('+' | '=')) => viewer.turn_model(0.0, 0.0, 1),
+            (_, Some('-')) => viewer.turn_model(0.0, 0.0, -1),
+            (Some(Key::Home), _) | (_, Some('0')) => viewer.reset_model(),
+            _ => None,
+        };
+    }
+    None
+}
+
+/// Zoom and pan keys of pictures and PDF pages: `+`, `-`, `0` (fit) and,
+/// when zoomed in, the arrows. Returns whether the key was used.
+fn viewer_zoom_key(viewer: &mut Viewer, key: Option<Key>, text: Option<char>) -> bool {
+    if viewer.model.is_some() {
+        return false;
+    }
+    let zoomed = viewer.zoom.factor > 1.0;
+    match (key, text) {
+        (_, Some('+' | '=')) => viewer.zoom.change(1),
+        (_, Some('-')) => viewer.zoom.change(-1),
+        (_, Some('0')) => viewer.zoom = crate::preview::Zoom::default(),
+        (Some(Key::Left), _) if zoomed => viewer.zoom.pan(-1, 0),
+        (Some(Key::Right), _) if zoomed => viewer.zoom.pan(1, 0),
+        (Some(Key::Up), _) if zoomed => viewer.zoom.pan(0, -1),
+        (Some(Key::Down), _) if zoomed => viewer.zoom.pan(0, 1),
+        _ => return false,
+    }
+    true
 }
 
 /// The result of a background task as a [`AppEvent::TaskDone`] that
