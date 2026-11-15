@@ -306,7 +306,6 @@ impl Provider for LocalProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sc_vfs::collect_listing;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn vfs(path: &Path) -> VfsPath {
@@ -400,7 +399,7 @@ mod tests {
         std::os::unix::fs::symlink("real", dir.path().join("link")).unwrap();
         std::os::unix::fs::symlink("nowhere", dir.path().join("dangling")).unwrap();
         let p = LocalProvider::new();
-        let entries = collect_listing(&p, &vfs(dir.path())).await.unwrap();
+        let entries = sc_vfs::collect_listing(&p, &vfs(dir.path())).await.unwrap();
         let link = entries.iter().find(|e| e.name == "link").unwrap();
         assert_eq!(link.kind, EntryKind::Symlink);
         assert!(link.link_is_dir);
