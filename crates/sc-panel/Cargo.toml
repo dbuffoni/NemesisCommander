@@ -1,0 +1,20 @@
+[package]
+name = "sc-panel"
+description = "UI-independent model of SuperCommander's dual-pane workspace: panels, tabs, selection, history."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+sc-index.workspace = true
+sc-archive.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+sc-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

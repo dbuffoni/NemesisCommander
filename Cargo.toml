@@ -36,6 +36,7 @@ sc-transfer = { path = "crates/sc-transfer" }
 sc-index = { path = "crates/sc-index" }
 sc-archive = { path = "crates/sc-archive" }
 sc-config = { path = "crates/sc-config" }
+sc-panel = { path = "crates/sc-panel" }
 
 # async & utilities
 async-trait = "0.1.92"
@@ -49,6 +50,10 @@ regex = "1.13.1"
 serde_json = "1.0.154"
 toml = "1.2.1"
 directories = "6.0.0"
+jiff = "0.2.45"
+clap = { version = "4.6.7", features = ["derive"] }
+ratatui = "0.30.2"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
 rusqlite = { version = "0.43.0", features = ["bundled"] }
 globset = "0.4.21"
 memchr = "2"
