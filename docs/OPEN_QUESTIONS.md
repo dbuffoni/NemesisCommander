@@ -27,3 +27,14 @@ Decisions that should not be taken without the owner.
    same code everywhere, but only the Linux AppImage is produced. Installers
    for Windows (MSI/NSIS with windeployqt) and macOS (signed .dmg with
    macdeployqt) need signing certificates that only the owner can provide.
+
+6. **High-level functions in phase 4.** The roadmap puts "TypeScript
+   extensions and high-level functions" in phase 4, while the base version
+   leaves out folder synchronization and disk utilities (space used,
+   cleanup, duplicates). Extensions are done (ADR 0015, 0016); the
+   high-level functions are not started. Build them natively next, leave
+   them to plugins, or keep them out for now?
+
+7. **Plugin trust.** A grant belongs to a plugin's name and request
+   (ADR 0016). If plugins are shared publicly, should they be signed, and
+   should SuperCommander keep a list of known publishers?
