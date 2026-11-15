@@ -1,0 +1,13 @@
+[package]
+name = "sc-ssh"
+description = "Starting programs on other machines through the OpenSSH client, for SuperCommander's SFTP and agent providers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["process"] }
+
+[lints]
+workspace = true

@@ -36,4 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
+      # OpenSSH's sftp-server, for the SFTP provider tests (macOS ships it).
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends openssh-sftp-server
       - run: cargo test --workspace

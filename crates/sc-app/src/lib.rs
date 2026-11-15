@@ -90,6 +90,7 @@ pub fn build_registry() -> ProviderRegistry {
     let mut registry = sc_providers::default_registry();
     sc_archive::register_archive_providers(&mut registry);
     registry.register(sc_agent::AgentFactory);
+    registry.register(sc_sftp::SftpFactory);
     registry
 }
 
@@ -105,6 +106,7 @@ mod tests {
         assert!(context.warnings.is_empty());
         assert!(context.registry.schemes().contains(&"zip"));
         assert!(context.registry.schemes().contains(&"agent"));
+        assert!(context.registry.schemes().contains(&"sftp"));
 
         context.config.keys.insert("nope".into(), vec!["F12".into()]);
         context.save_config().unwrap();

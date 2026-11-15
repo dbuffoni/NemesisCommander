@@ -1,0 +1,24 @@
+[package]
+name = "sc-sftp"
+description = "SFTP provider for SuperCommander, carried by the system's OpenSSH client."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+sc-ssh.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+russh-sftp = "3.0.1"
+tokio = { workspace = true, features = ["io-util", "process", "sync", "time"] }
+
+[dev-dependencies]
+sc-providers.workspace = true
+sc-ops.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

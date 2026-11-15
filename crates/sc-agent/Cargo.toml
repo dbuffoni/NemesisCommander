@@ -11,6 +11,7 @@ sc-vfs.workspace = true
 sc-hash.workspace = true
 sc-providers.workspace = true
 sc-proto.workspace = true
+sc-ssh.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true

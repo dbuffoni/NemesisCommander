@@ -16,6 +16,7 @@ taken while implementing it.
 | 0006 | [Archives are read-only providers; packing is separate](0006-archives.md) | Accepted |
 | 0007 | [Front ends share one model; the TUI is an event-driven state machine](0007-front-ends-share-one-model.md) | Accepted |
 | 0008 | [The agent speaks gRPC over the SSH session's standard streams](0008-agent-protocol.md) | Accepted |
+| 0009 | [SSH connections go through the system's OpenSSH client](0009-openssh-client-as-transport.md) | Accepted |
 
 Template:
 

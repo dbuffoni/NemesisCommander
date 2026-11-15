@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use sc_proto::transport::{Duplex, connect};
+use sc_ssh::{Remote, Target, ssh_args};
 use sc_vfs::{Provider, ProviderFactory, ProviderRegistry, Result, VfsError, VfsPath};
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
@@ -29,51 +30,6 @@ const MISSING_MARKER: &str = "sc-agent-missing";
 /// How long the handshake may take (SSH login included).
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// `[user@]host[:port]` of an `agent://` URI.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Target {
-    /// Login name, if given.
-    pub user: Option<String>,
-    /// Host name or address.
-    pub host: String,
-    /// SSH port, if not the default.
-    pub port: Option<u16>,
-}
-
-impl Target {
-    /// Parses an authority. IPv6 addresses go in brackets: `[::1]:2222`.
-    pub fn parse(authority: &str) -> std::result::Result<Target, String> {
-        let (user, rest) = match authority.rsplit_once('@') {
-            Some((user, rest)) => (Some(user.to_owned()), rest),
-            None => (None, authority),
-        };
-        let (host, port) = if let Some(inner) = rest.strip_prefix('[') {
-            let (host, after) = inner.split_once(']').ok_or("missing ] in the address")?;
-            let port = after.strip_prefix(':').map(str::parse::<u16>).transpose();
-            (host.to_owned(), port.map_err(|_| "invalid port")?)
-        } else {
-            match rest.rsplit_once(':') {
-                Some((host, port)) => {
-                    (host.to_owned(), Some(port.parse::<u16>().map_err(|_| "invalid port")?))
-                }
-                None => (rest.to_owned(), None),
-            }
-        };
-        if host.is_empty() {
-            return Err("agent:// needs a host name".into());
-        }
-        Ok(Target { user, host, port })
-    }
-
-    /// The `ssh` destination (`user@host`).
-    pub fn destination(&self) -> String {
-        match &self.user {
-            Some(user) => format!("{user}@{}", self.host),
-            None => self.host.clone(),
-        }
-    }
-}
-
 /// The shell script run on the server: start the cached or installed `sc`
 /// of the right version, or report that it is missing.
 pub fn remote_start_script(version: &str) -> String {
@@ -86,43 +42,14 @@ pub fn remote_start_script(version: &str) -> String {
     )
 }
 
-/// The `ssh` arguments that run `script` on `target`. Batch mode: keys or
-/// an SSH agent are required, because a password prompt would land in the
-/// middle of the protocol.
-pub fn ssh_args(target: &Target, script: &str) -> Vec<String> {
-    let mut args = vec!["-T".to_owned(), "-o".to_owned(), "BatchMode=yes".to_owned()];
-    if let Some(port) = target.port {
-        args.push("-p".into());
-        args.push(port.to_string());
+/// The command line that starts the agent for `authority`.
+fn agent_command(authority: &str) -> std::result::Result<(String, Vec<String>), String> {
+    if let Some(command) = sc_ssh::command_override(AGENT_COMMAND_VAR, authority) {
+        return Ok(command);
     }
-    args.push(target.destination());
-    args.push("--".into());
-    // The remote login shell may not be POSIX (fish, ...): run sh explicitly.
-    args.push(format!("sh -c '{script}'"));
-    args
-}
-
-/// The command that starts the agent for `authority`.
-fn agent_command(authority: &str) -> std::result::Result<Command, String> {
-    let (program, args) = match std::env::var(AGENT_COMMAND_VAR) {
-        Ok(template) if !template.trim().is_empty() => {
-            let mut words = template.split_whitespace().map(|w| w.replace("{host}", authority));
-            let program = words.next().unwrap_or_default();
-            (program, words.collect::<Vec<_>>())
-        }
-        _ => {
-            let target = Target::parse(authority)?;
-            ("ssh".to_owned(), ssh_args(&target, &remote_start_script(crate::VERSION)))
-        }
-    };
-    let mut command = Command::new(program);
-    command
-        .args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    Ok(command)
+    let target = Target::parse(authority)?;
+    let script = remote_start_script(crate::VERSION);
+    Ok(("ssh".to_owned(), ssh_args(&target, Remote::Script(&script))))
 }
 
 /// Why starting failed.
@@ -135,10 +62,9 @@ enum StartError {
 
 /// Starts the agent process and performs the handshake.
 async fn start(authority: &str) -> std::result::Result<AgentProvider, StartError> {
-    let mut child = agent_command(authority)
-        .map_err(StartError::Other)?
-        .spawn()
-        .map_err(|e| StartError::Other(format!("cannot start ssh: {e}")))?;
+    let (program, args) = agent_command(authority).map_err(StartError::Other)?;
+    let mut child = sc_ssh::spawn(&program, &args)
+        .map_err(|e| StartError::Other(format!("cannot start {program}: {e}")))?;
     let stdin = child.stdin.take().expect("piped");
     let stdout = child.stdout.take().expect("piped");
     let mut stderr = child.stderr.take().expect("piped");
@@ -209,7 +135,10 @@ async fn ssh_run(
     input: Option<PathBuf>,
 ) -> std::result::Result<String, String> {
     let mut command = Command::new("ssh");
-    command.args(ssh_args(target, script)).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+        .args(ssh_args(target, Remote::Script(script)))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     command.stdin(match &input {
         Some(file) => Stdio::from(std::fs::File::open(file).map_err(|e| e.to_string())?),
         None => Stdio::null(),
@@ -284,31 +213,6 @@ impl AgentProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn targets() {
-        let t = Target::parse("me@example.org:2222").unwrap();
-        assert_eq!(
-            (t.user.as_deref(), t.host.as_str(), t.port),
-            (Some("me"), "example.org", Some(2222))
-        );
-        assert_eq!(t.destination(), "me@example.org");
-        let t = Target::parse("[::1]:22").unwrap();
-        assert_eq!((t.host.as_str(), t.port), ("::1", Some(22)));
-        assert_eq!(Target::parse("host").unwrap().port, None);
-        assert!(Target::parse("host:abc").is_err());
-        assert!(Target::parse("me@").is_err());
-    }
-
-    #[test]
-    fn ssh_command_line() {
-        let target = Target::parse("me@h:2200").unwrap();
-        let args = ssh_args(&target, "echo hi");
-        assert_eq!(
-            args,
-            ["-T", "-o", "BatchMode=yes", "-p", "2200", "me@h", "--", "sh -c 'echo hi'"]
-        );
-    }
 
     #[test]
     fn start_script_prefers_the_cached_binary() {

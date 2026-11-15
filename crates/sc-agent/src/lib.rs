@@ -15,7 +15,7 @@ pub mod launch;
 pub mod server;
 
 pub use client::AgentProvider;
-pub use launch::{AgentFactory, Target, connect_agent};
+pub use launch::{AgentFactory, connect_agent};
 pub use server::{AgentService, Limits, serve_stdio};
 
 /// Version of this program; the controller and the agent must match.

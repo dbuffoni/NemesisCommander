@@ -41,6 +41,8 @@ sc-app = { path = "crates/sc-app", default-features = false }
 sc-tui = { path = "crates/sc-tui" }
 sc-proto = { path = "crates/sc-proto" }
 sc-agent = { path = "crates/sc-agent" }
+sc-ssh = { path = "crates/sc-ssh" }
+sc-sftp = { path = "crates/sc-sftp" }
 
 # async & utilities
 async-trait = "0.1.92"
