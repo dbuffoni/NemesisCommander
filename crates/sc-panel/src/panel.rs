@@ -209,10 +209,10 @@ impl Panel {
                 .cloned(),
         );
         self.visible = visible;
-        if let Some(name) = focus {
-            if let Some(i) = self.visible.iter().position(|e| e.name == name) {
-                self.cursor = i;
-            }
+        if let Some(name) = focus
+            && let Some(i) = self.visible.iter().position(|e| e.name == name)
+        {
+            self.cursor = i;
         }
         self.cursor = self.cursor.min(self.visible.len().saturating_sub(1));
     }

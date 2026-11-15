@@ -132,7 +132,13 @@ struct CopyReport {
 /// A location as a script writes it: local paths stay plain paths.
 fn display(path: &VfsPath) -> String {
     if path.scheme() == "file" && path.container().is_none() {
-        path.path().to_owned()
+        // Windows paths are kept as `C:/dir`, which every function here
+        // and Windows itself read back.
+        let text = path.path();
+        match text.strip_prefix('/') {
+            Some(rest) if is_drive(rest) => rest.to_owned(),
+            _ => text.to_owned(),
+        }
     } else {
         path.to_string()
     }
@@ -142,10 +148,22 @@ fn vfs_error(error: VfsError) -> JsErrorBox {
     JsErrorBox::generic(error.to_string())
 }
 
+/// `C:` or `C:/...`: a Windows drive.
+fn is_drive(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() >= 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && bytes.get(2).is_none_or(|b| *b == b'/' || *b == b'\\')
+}
+
 /// Resolves `text` (a URI, an absolute path, or a path relative to `base`).
 fn resolve(base: &Path, text: &str) -> Result<VfsPath, JsErrorBox> {
     let parsed = if text.contains("://") {
         VfsPath::parse(text)
+    } else if cfg!(windows) && (is_drive(text) || text.strip_prefix('/').is_some_and(is_drive)) {
+        // A drive path is absolute even where `Path` does not know drives.
+        VfsPath::from_local(text.trim_start_matches('/'))
     } else {
         VfsPath::from_local(base.join(text))
     };

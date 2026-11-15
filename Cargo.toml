@@ -8,7 +8,7 @@ default-members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.92"
 repository = "https://github.com/dbuffoni/SuperCommander"
 license = "MIT"
 
@@ -55,6 +55,7 @@ sc-s3 = { path = "crates/sc-s3" }
 sc-smb = { path = "crates/sc-smb" }
 sc-tls = { path = "crates/sc-tls" }
 sc-script = { path = "crates/sc-script" }
+sc-preview = { path = "crates/sc-preview" }
 
 # async & utilities
 async-trait = "0.1.92"

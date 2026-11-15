@@ -83,9 +83,10 @@ jobs:
           key: gui
       # Qt's official build, as the installers will use; it puts qmake and
       # Qt's libraries on PATH.
+      # 6.9 or later: 6.8's headers do not build with the current Xcode.
       - uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.3"
+          version: "6.9.3"
           cache: true
       - run: cargo test -p sc-gui
         env:

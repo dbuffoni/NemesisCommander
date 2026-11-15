@@ -32,6 +32,8 @@ pub struct Startup {
     pub right: Option<String>,
     /// Run [`SelfTest`] instead of waiting for the user.
     pub self_test: Option<SelfTest>,
+    /// The window's size in pixels when it opens (default 1200×760).
+    pub size: Option<(i32, i32)>,
 }
 
 /// A scripted run, for tests and screenshots: once the listings are loaded,
@@ -62,6 +64,9 @@ pub struct CommanderRust {
     pub(crate) menus: QString,
     pub(crate) running: bool,
     pub(crate) screenshot: QString,
+    /// The window's size when it opens.
+    pub(crate) window_width: i32,
+    pub(crate) window_height: i32,
     test: Option<SelfTest>,
     runtime: Option<Runtime>,
     app: Option<App>,
@@ -80,6 +85,8 @@ impl Default for CommanderRust {
             menus: QString::default(),
             running: true,
             screenshot: QString::default(),
+            window_width: STARTUP.get().and_then(|s| s.size).map_or(1200, |(w, _)| w),
+            window_height: STARTUP.get().and_then(|s| s.size).map_or(760, |(_, h)| h),
             test: None,
             runtime: None,
             app: None,

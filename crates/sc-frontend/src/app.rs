@@ -429,27 +429,27 @@ impl App {
             }
             AppEvent::Show(overlay) => self.overlay = Some(*overlay),
             AppEvent::SearchHit(hit) => {
-                if let Some(Overlay::Choose(dialog)) = &mut self.overlay {
-                    if let ChoosePurpose::SearchResults(paths) = &mut dialog.purpose {
-                        let mut row = display_location(&hit.path);
-                        if let Some((line, text)) = &hit.first_match {
-                            row.push_str(&format!(":{line}: {text}"));
-                        }
-                        dialog.items.push(row);
-                        paths.push(hit.path);
-                        dialog.footer = format!("{} found, searching…", paths.len());
+                if let Some(Overlay::Choose(dialog)) = &mut self.overlay
+                    && let ChoosePurpose::SearchResults(paths) = &mut dialog.purpose
+                {
+                    let mut row = display_location(&hit.path);
+                    if let Some((line, text)) = &hit.first_match {
+                        row.push_str(&format!(":{line}: {text}"));
                     }
+                    dialog.items.push(row);
+                    paths.push(hit.path);
+                    dialog.footer = format!("{} found, searching…", paths.len());
                 }
             }
             AppEvent::SearchDone(error) => {
                 self.search_cancel = None;
-                if let Some(Overlay::Choose(dialog)) = &mut self.overlay {
-                    if let ChoosePurpose::SearchResults(paths) = &dialog.purpose {
-                        dialog.footer = match &error {
-                            Some(e) => format!("{} found, stopped: {e}", paths.len()),
-                            None => format!("{} found", paths.len()),
-                        };
-                    }
+                if let Some(Overlay::Choose(dialog)) = &mut self.overlay
+                    && let ChoosePurpose::SearchResults(paths) = &dialog.purpose
+                {
+                    dialog.footer = match &error {
+                        Some(e) => format!("{} found, stopped: {e}", paths.len()),
+                        None => format!("{} found", paths.len()),
+                    };
                 }
             }
             AppEvent::ScriptDone { title, lines, error } => {

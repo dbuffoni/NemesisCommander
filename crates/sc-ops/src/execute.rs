@@ -239,10 +239,10 @@ impl Executor {
                         }
                     }
                 }
-                if let Step::CopyFile { size, .. } = &plan.steps[i] {
-                    if outcome == StepOutcome::Done {
-                        report.bytes += size;
-                    }
+                if let Step::CopyFile { size, .. } = &plan.steps[i]
+                    && outcome == StepOutcome::Done
+                {
+                    report.bytes += size;
                 }
             }
             index = end;
@@ -367,12 +367,12 @@ impl Executor {
         let mut resolution = resolver.resolve(&conflict).await;
         // A resolver may propose a name that is itself taken; pick the next
         // free one rather than failing.
-        if let ConflictAction::RenameTo(name) = &resolution.action {
-            if taken(name) {
-                let original = conflict.destination.file_name().unwrap_or("file");
-                resolution.action =
-                    ConflictAction::RenameTo(crate::conflict::unique_name(original, taken));
-            }
+        if let ConflictAction::RenameTo(name) = &resolution.action
+            && taken(name)
+        {
+            let original = conflict.destination.file_name().unwrap_or("file");
+            resolution.action =
+                ConflictAction::RenameTo(crate::conflict::unique_name(original, taken));
         }
         if resolution.apply_to_all {
             let standing = match &resolution.action {

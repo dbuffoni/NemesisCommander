@@ -32,7 +32,8 @@ fn run(home: &Path, keys: &str, screenshot: Option<&Path>) -> Run {
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
     assert!(output.status.success(), "sc-gui failed: {stderr}");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let screen = serde_json::from_str(stdout.trim()).unwrap_or_else(|e| panic!("{e}: {stdout}"));
+    let screen = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("keys {keys:?}: {e}\nstdout: {stdout}\nstderr: {stderr}"));
     Run { screen, stderr }
 }
 

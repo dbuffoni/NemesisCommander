@@ -47,7 +47,7 @@ impl App {
         let mut choices = Vec::new();
         if let Some(current) = self.workspace.active().current_path().filter(is_script) {
             items.push(format!("Run script {}", current.file_name().unwrap_or("")));
-            choices.push(PluginChoice::Script(PathBuf::from(current.path())));
+            choices.push(PluginChoice::Script(current.to_local_path().unwrap_or_default()));
         }
         let (plugins, problems) = list_plugins(&self.context.paths.plugins_dir());
         for (dir, name, commands) in plugins {
@@ -222,7 +222,7 @@ async fn run_choice(
             permissions.allow_write(panel.clone()).allow_read(other.clone());
             let options = ScriptOptions {
                 registry,
-                base: PathBuf::from(panel.path()),
+                base: panel.to_local_path().unwrap_or_default(),
                 permissions,
                 args: Vec::new(),
                 output,

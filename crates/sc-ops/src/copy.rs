@@ -144,12 +144,11 @@ async fn stream_copy(
         && use_part_file
         && dst_caps.contains(Capabilities::RESUME_WRITE)
         && src_caps.contains(Capabilities::SEEK_READ)
+        && let Ok(part) = destination_provider.stat(&target).await
     {
-        if let Ok(part) = destination_provider.stat(&target).await {
-            let source_size = source_provider.stat(source).await?.size;
-            if part.size <= source_size {
-                offset = part.size;
-            }
+        let source_size = source_provider.stat(source).await?.size;
+        if part.size <= source_size {
+            offset = part.size;
         }
     }
 

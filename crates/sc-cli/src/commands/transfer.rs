@@ -63,10 +63,12 @@ pub async fn copy_or_move(context: &AppContext, args: TransferArgs, is_move: boo
         destination: &destination,
         conflict: if conflict == ConflictPolicy::Ask { ConflictPolicy::Fail } else { conflict },
     };
-    if !is_move && !args.queue && between_servers.is_between_servers() {
-        if let Some(code) = server_to_server(context, &between_servers, args.route).await? {
-            return Ok(code);
-        }
+    if !is_move
+        && !args.queue
+        && between_servers.is_between_servers()
+        && let Some(code) = server_to_server(context, &between_servers, args.route).await?
+    {
+        return Ok(code);
     }
 
     if args.queue {

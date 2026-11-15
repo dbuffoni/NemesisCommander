@@ -10,8 +10,8 @@ import SuperCommander
 
 ApplicationWindow {
     id: window
-    width: 1200
-    height: 760
+    width: commander.window_width
+    height: commander.window_height
     visible: true
     title: screen ? "SuperCommander — " + screen.panels[activeSide].title : "SuperCommander"
 

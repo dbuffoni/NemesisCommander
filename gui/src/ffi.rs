@@ -20,6 +20,8 @@ pub mod qobject {
         #[qproperty(QString, menus)]
         #[qproperty(bool, running)]
         #[qproperty(QString, screenshot)]
+        #[qproperty(i32, window_width)]
+        #[qproperty(i32, window_height)]
         type Commander = super::CommanderRust;
 
         /// Creates the application; call once, when the window is ready.

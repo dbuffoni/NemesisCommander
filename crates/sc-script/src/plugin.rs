@@ -284,7 +284,7 @@ impl Plugin {
             .panel
             .as_ref()
             .filter(|panel| panel.scheme() == "file" && panel.container().is_none())
-            .map(|panel| PathBuf::from(panel.path()))
+            .and_then(VfsPath::to_local_path)
             .or_else(|| context.home.clone())
             .unwrap_or_else(|| self.dir.clone());
         let limits = self.manifest.limits;

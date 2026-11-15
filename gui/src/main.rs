@@ -25,6 +25,13 @@ fn main() {
             "--self-test" => test = Some(sc_gui::SelfTest::default()),
             _ if argument.starts_with("--keys=") => keys = argument[7..].to_owned(),
             _ if argument.starts_with("--screenshot=") => shot = Some(argument[13..].to_owned()),
+            _ if argument.starts_with("--size=") => match parse_size(&argument[7..]) {
+                Some(size) => startup.size = Some(size),
+                None => {
+                    eprintln!("sc-gui: --size takes WIDTHxHEIGHT, such as 1280x800");
+                    std::process::exit(2);
+                }
+            },
             _ => places.push(argument),
         }
     }
@@ -43,4 +50,11 @@ fn main() {
     if !sc_gui::run(startup) {
         std::process::exit(1);
     }
+}
+
+/// `1280x800` as (1280, 800); at least 320×200.
+fn parse_size(text: &str) -> Option<(i32, i32)> {
+    let (width, height) = text.split_once('x')?;
+    let (width, height) = (width.parse().ok()?, height.parse().ok()?);
+    (width >= 320 && height >= 200).then_some((width, height))
 }
