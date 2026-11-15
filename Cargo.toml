@@ -34,6 +34,7 @@ sc-providers = { path = "crates/sc-providers" }
 sc-ops = { path = "crates/sc-ops" }
 sc-transfer = { path = "crates/sc-transfer" }
 sc-index = { path = "crates/sc-index" }
+sc-archive = { path = "crates/sc-archive" }
 
 # async & utilities
 async-trait = "0.1.92"
@@ -55,6 +56,16 @@ blake3 = { version = "1.8.7", features = ["mmap", "rayon"] }
 xxhash-rust = { version = "0.8.21", features = ["xxh3"] }
 sha2 = "0.11.1"
 hex = "0.4.3"
+
+# archives and compression
+zip = { version = "9.6.0", default-features = false, features = ["deflate", "bzip2", "zstd", "lzma", "xz", "time"] }
+tar = "0.4.46"
+flate2 = "1.1.11"
+liblzma = { version = "0.4.9", features = ["static"] }
+bzip2 = "0.6.1"
+zstd = "0.14.4"
+sevenz-rust2 = { version = "0.25.0", default-features = false, features = ["compress", "util"] }
+unrar = "0.5.8"
 
 # file system helpers
 filetime = "0.2.29"

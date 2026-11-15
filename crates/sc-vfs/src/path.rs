@@ -262,13 +262,13 @@ impl VfsPath {
     }
 }
 
-/// Splits `"scheme://rest"` into its parts. The scheme must be a valid URI
-/// scheme (letters, digits, `+`, `-`, `.`, starting with a letter) and is
-/// lowercased.
+/// Splits `"scheme://rest"` into its parts. The scheme is made of letters,
+/// digits, `+`, `-` and `.` and is lowercased. Unlike RFC 3986 it may start
+/// with a digit, so that `7z://` works.
 fn split_scheme(input: &str) -> Option<(String, &str)> {
     let (scheme, rest) = input.split_once("://")?;
     let mut chars = scheme.chars();
-    let valid = chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+    let valid = chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
     // A single letter is a Windows drive (`C://x` is a mangled `C:/x`), not a scheme.
     (valid && scheme.len() > 1).then(|| (scheme.to_ascii_lowercase(), rest))
@@ -386,6 +386,13 @@ mod tests {
         assert_eq!(path.container().unwrap(), &p("/tmp/a.zip"));
         assert_eq!(path.path(), "/docs/readme.md");
         assert_eq!(path.to_string(), "zip://file:///tmp/a.zip!/docs/readme.md");
+    }
+
+    #[test]
+    fn schemes_may_start_with_a_digit() {
+        let path = p("7z:///tmp/a.7z!/x");
+        assert_eq!(path.scheme(), "7z");
+        assert_eq!(path.container().unwrap(), &p("/tmp/a.7z"));
     }
 
     #[test]

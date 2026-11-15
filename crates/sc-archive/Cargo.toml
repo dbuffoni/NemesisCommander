@@ -1,0 +1,41 @@
+[package]
+name = "sc-archive"
+description = "Native archive and compression support for SuperCommander: browse archives as folders, pack and unpack."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "io-util", "fs"] }
+tokio-util = { workspace = true, features = ["io"] }
+tempfile.workspace = true
+zip.workspace = true
+tar.workspace = true
+flate2.workspace = true
+liblzma.workspace = true
+bzip2.workspace = true
+zstd.workspace = true
+sevenz-rust2.workspace = true
+unrar = { workspace = true, optional = true }
+
+[features]
+default = []
+# Read-only RAR support through the unRAR library (C++, non-OSI license;
+# see docs/adr/0006-archives.md).
+rar = ["dep:unrar"]
+
+[dev-dependencies]
+sc-providers.workspace = true
+sc-ops.workspace = true
+tokio = { workspace = true, features = ["full"] }
+proptest.workspace = true
+
+[lints]
+workspace = true

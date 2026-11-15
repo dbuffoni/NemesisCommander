@@ -13,6 +13,7 @@ taken while implementing it.
 | 0003 | [Paths are URIs with nested archive containers](0003-path-model.md) | Accepted |
 | 0004 | [Operations are plans of idempotent steps](0004-plans-of-idempotent-steps.md) | Accepted |
 | 0005 | [Transfer journal in SQLite, planning at start time](0005-transfer-journal.md) | Accepted |
+| 0006 | [Archives are read-only providers; packing is separate](0006-archives.md) | Accepted |
 
 Template:
 
