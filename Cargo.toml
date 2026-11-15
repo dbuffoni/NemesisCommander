@@ -39,6 +39,8 @@ sc-config = { path = "crates/sc-config" }
 sc-panel = { path = "crates/sc-panel" }
 sc-app = { path = "crates/sc-app", default-features = false }
 sc-tui = { path = "crates/sc-tui" }
+sc-proto = { path = "crates/sc-proto" }
+sc-agent = { path = "crates/sc-agent" }
 
 # async & utilities
 async-trait = "0.1.92"

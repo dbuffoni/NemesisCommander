@@ -13,6 +13,7 @@ sc-archive.workspace = true
 sc-config.workspace = true
 sc-ops.workspace = true
 sc-transfer.workspace = true
+sc-agent.workspace = true
 
 [features]
 default = ["desktop"]

@@ -56,6 +56,18 @@ async fn start_interface(_context: AppContext, _locations: &[String]) -> CmdResu
     Err("the terminal UI is not part of this build; see `sc --help` for commands".into())
 }
 
+/// `sc agent --stdio`: serve this machine to a controller over SSH.
+#[cfg(target_os = "linux")]
+async fn agent(_context: AppContext, args: crate::cli::AgentArgs) -> CmdResult {
+    let limits = sc_agent::Limits {
+        roots: args.roots.iter().map(std::path::PathBuf::from).collect(),
+        read_only: args.read_only,
+    };
+    sc_agent::serve_stdio(limits).await?;
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(not(target_os = "linux"))]
 async fn agent(_context: AppContext, _args: crate::cli::AgentArgs) -> CmdResult {
-    Err("agent mode is not part of this build".into())
+    Err("the agent runs on Linux only; on this system use sc as a controller".into())
 }

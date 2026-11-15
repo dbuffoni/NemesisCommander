@@ -89,6 +89,7 @@ impl AppContext {
 pub fn build_registry() -> ProviderRegistry {
     let mut registry = sc_providers::default_registry();
     sc_archive::register_archive_providers(&mut registry);
+    registry.register(sc_agent::AgentFactory);
     registry
 }
 
@@ -103,6 +104,7 @@ mod tests {
         let mut context = AppContext::load_from(paths.clone()).unwrap();
         assert!(context.warnings.is_empty());
         assert!(context.registry.schemes().contains(&"zip"));
+        assert!(context.registry.schemes().contains(&"agent"));
 
         context.config.keys.insert("nope".into(), vec!["F12".into()]);
         context.save_config().unwrap();
