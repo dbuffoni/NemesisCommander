@@ -28,6 +28,8 @@ pub use conflict::{
 };
 pub use copy::{CopyFileOptions, CopyOutcome, Throttle, VerifyMode, copy_file, verify_copy};
 pub use delete::{DeleteOptions, delete_paths};
-pub use execute::{ExecuteOptions, Executor, Observer, OpEvent, Report, StepOutcome};
+pub use execute::{
+    ExecuteOptions, Executor, Observer, OpEvent, Report, RetryPolicy, StepOutcome, StepTracker,
+};
 pub use plan::{Plan, PlanOptions, Step, plan_copy, plan_delete, plan_move};
 pub use rename::{CaseChange, RenameError, RenameRule, apply_renames, preview_renames};

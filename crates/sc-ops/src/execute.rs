@@ -1,6 +1,7 @@
 //! Running a [`Plan`].
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use futures::StreamExt;
 use sc_vfs::{
@@ -73,6 +74,40 @@ pub struct ExecuteOptions {
     pub throttle: Option<Arc<dyn Throttle>>,
     /// Cancels the plan.
     pub cancel: CancellationToken,
+    /// Retries for transient failures (network hiccups, verification
+    /// mismatches). Permanent errors such as "permission denied" are never
+    /// retried.
+    pub retry: RetryPolicy,
+}
+
+/// How often and how patiently a failed step is retried.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetryPolicy {
+    /// Extra attempts after the first one (0 = no retry).
+    pub attempts: u32,
+    /// Delay before the first retry; doubled after each failure.
+    pub initial_delay: Duration,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        RetryPolicy { attempts: 0, initial_delay: Duration::from_millis(500) }
+    }
+}
+
+/// Lets a caller persist step results and skip steps that already ran, so a
+/// plan interrupted by a crash continues where it stopped. `sc-transfer`
+/// implements this on top of its journal.
+pub trait StepTracker: Send + Sync {
+    /// `true` if the step finished in an earlier run and must not run again.
+    fn is_finished(&self, index: usize) -> bool;
+    /// Called once per step with its final outcome (after retries).
+    fn record(&self, index: usize, outcome: &StepOutcome);
+}
+
+/// `true` for errors that might go away if the step is tried again.
+fn is_transient(error: &VfsError) -> bool {
+    matches!(error, VfsError::Io { .. } | VfsError::Other(_))
 }
 
 impl Default for ExecuteOptions {
@@ -85,6 +120,7 @@ impl Default for ExecuteOptions {
             continue_on_error: true,
             throttle: None,
             cancel: CancellationToken::new(),
+            retry: RetryPolicy::default(),
         }
     }
 }
@@ -156,6 +192,16 @@ impl Executor {
     /// decision, or by a failure when `continue_on_error` is off); individual
     /// failures are otherwise listed in the [`Report`].
     pub async fn run(&self, plan: &Plan) -> Result<Report> {
+        self.run_tracked(plan, None).await
+    }
+
+    /// Like [`run`](Self::run), but skips steps the tracker reports as
+    /// finished and records every outcome in it.
+    pub async fn run_tracked(
+        &self,
+        plan: &Plan,
+        tracker: Option<&dyn StepTracker>,
+    ) -> Result<Report> {
         let mut report = Report::default();
         let mut index = 0;
         while index < plan.steps.len() {
@@ -168,8 +214,9 @@ impl Executor {
             } else {
                 index + 1
             };
-            let batch = futures::stream::iter(index..end)
-                .map(|i| async move { (i, self.run_step(i, &plan.steps[i]).await) })
+            let pending = (index..end).filter(|&i| !tracker.is_some_and(|t| t.is_finished(i)));
+            let batch = futures::stream::iter(pending)
+                .map(|i| async move { (i, self.run_step_with_retry(i, &plan.steps[i]).await) })
                 .buffer_unordered(self.options.parallelism.max(1))
                 .collect::<Vec<_>>()
                 .await;
@@ -179,6 +226,9 @@ impl Executor {
                     Err(VfsError::Cancelled) => return Err(VfsError::Cancelled),
                     Err(e) => StepOutcome::Failed(e.to_string()),
                 };
+                if let Some(tracker) = tracker {
+                    tracker.record(i, &outcome);
+                }
                 match &outcome {
                     StepOutcome::Done => report.done += 1,
                     StepOutcome::Skipped => report.skipped += 1,
@@ -200,8 +250,33 @@ impl Executor {
         Ok(report)
     }
 
-    /// Runs a single step and reports it to the observer. Public so the
-    /// transfer engine can drive steps one by one from its journal.
+    /// Runs a step, retrying transient failures per [`ExecuteOptions::retry`].
+    async fn run_step_with_retry(&self, index: usize, step: &Step) -> Result<StepOutcome> {
+        let mut delay = self.options.retry.initial_delay;
+        let mut attempt = 0;
+        loop {
+            let result = self.run_step(index, step).await;
+            let retryable = match &result {
+                Ok(StepOutcome::Failed(_)) => true,
+                Err(e) => is_transient(e),
+                Ok(_) => false,
+            };
+            if !retryable
+                || attempt >= self.options.retry.attempts
+                || self.options.cancel.is_cancelled()
+            {
+                return result;
+            }
+            attempt += 1;
+            tokio::select! {
+                _ = tokio::time::sleep(delay) => {}
+                _ = self.options.cancel.cancelled() => return Err(VfsError::Cancelled),
+            }
+            delay *= 2;
+        }
+    }
+
+    /// Runs a single step once and reports it to the observer.
     pub async fn run_step(&self, index: usize, step: &Step) -> Result<StepOutcome> {
         self.emit(OpEvent::StepStarted { index });
         let result = match step {
@@ -708,6 +783,114 @@ mod tests {
             ..Default::default()
         };
         assert!(Executor::new(registry, options).run(&plan).await.is_err());
+    }
+
+    /// Fails reads of one file a given number of times, then behaves.
+    struct Flaky {
+        inner: MemoryProvider,
+        failures: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl Provider for Flaky {
+        fn scheme(&self) -> &str {
+            "mem"
+        }
+        fn capabilities(&self) -> Capabilities {
+            self.inner.capabilities()
+        }
+        async fn stat(&self, p: &VfsPath) -> Result<sc_vfs::Entry> {
+            self.inner.stat(p).await
+        }
+        async fn list(&self, p: &VfsPath) -> Result<sc_vfs::ListStream> {
+            self.inner.list(p).await
+        }
+        async fn read(&self, p: &VfsPath, offset: u64) -> Result<sc_vfs::ReadStream> {
+            if self
+                .failures
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
+                .is_ok()
+            {
+                return Err(VfsError::Other("connection reset".into()));
+            }
+            self.inner.read(p, offset).await
+        }
+    }
+
+    fn flaky_setup(failures: usize) -> (Arc<ProviderRegistry>, MemoryProvider) {
+        let registry = ProviderRegistry::new();
+        let src = MemoryProvider::new();
+        src.put_file("/f", "data");
+        let dst = MemoryProvider::new();
+        registry.insert(
+            &p("a", "/"),
+            Arc::new(Flaky { inner: src, failures: AtomicUsize::new(failures) }),
+        );
+        registry.insert(&p("b", "/"), Arc::new(dst.clone()));
+        (Arc::new(registry), dst)
+    }
+
+    fn copy_f_plan() -> Plan {
+        let step = Step::CopyFile {
+            from: p("a", "/f"),
+            to: p("b", "/f"),
+            size: 4,
+            modified: None,
+            permissions: None,
+        };
+        Plan { steps: vec![step], total_bytes: 4, total_files: 1, warnings: vec![] }
+    }
+
+    #[tokio::test]
+    async fn transient_errors_are_retried() {
+        let (registry, dst) = flaky_setup(2);
+        let retry = RetryPolicy { attempts: 2, initial_delay: Duration::from_millis(1) };
+        let options =
+            ExecuteOptions { conflict: ConflictPolicy::Fail, retry, ..Default::default() };
+        let report = Executor::new(registry, options).run(&copy_f_plan()).await.unwrap();
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        assert_eq!(dst.get_file("/f").unwrap(), b"data");
+    }
+
+    #[tokio::test]
+    async fn retries_are_bounded() {
+        let (registry, _) = flaky_setup(5);
+        let retry = RetryPolicy { attempts: 2, initial_delay: Duration::from_millis(1) };
+        let options =
+            ExecuteOptions { conflict: ConflictPolicy::Fail, retry, ..Default::default() };
+        let report = Executor::new(registry, options).run(&copy_f_plan()).await.unwrap();
+        assert_eq!(report.failed.len(), 1);
+    }
+
+    struct Recorder(Mutex<Vec<(usize, StepOutcome)>>, usize);
+
+    impl StepTracker for Recorder {
+        fn is_finished(&self, index: usize) -> bool {
+            index < self.1
+        }
+        fn record(&self, index: usize, outcome: &StepOutcome) {
+            self.0.lock().unwrap().push((index, outcome.clone()));
+        }
+    }
+
+    #[tokio::test]
+    async fn tracker_skips_finished_steps_and_records_the_rest() {
+        let (registry, a, b) = setup();
+        a.put_file("/x", "1");
+        a.put_file("/y", "2");
+        let plan = plan_copy(
+            &registry,
+            &[p("a", "/x"), p("a", "/y")],
+            &p("b", "/"),
+            PlanOptions::default(),
+        )
+        .await
+        .unwrap();
+        let tracker = Recorder(Mutex::new(Vec::new()), 1); // step 0 "already done"
+        executor(&registry, ConflictPolicy::Fail).run_tracked(&plan, Some(&tracker)).await.unwrap();
+        assert_eq!(*tracker.0.lock().unwrap(), [(1, StepOutcome::Done)]);
+        assert!(b.get_file("/x").is_none());
+        assert!(b.get_file("/y").is_some());
     }
 
     #[tokio::test]

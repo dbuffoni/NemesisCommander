@@ -32,6 +32,7 @@ sc-vfs = { path = "crates/sc-vfs" }
 sc-hash = { path = "crates/sc-hash" }
 sc-providers = { path = "crates/sc-providers" }
 sc-ops = { path = "crates/sc-ops" }
+sc-transfer = { path = "crates/sc-transfer" }
 
 # async & utilities
 async-trait = "0.1.92"
@@ -43,6 +44,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 tokio-util = "0.7.20"
 regex = "1.13.1"
+serde_json = "1.0.154"
+rusqlite = { version = "0.43.0", features = ["bundled"] }
 globset = "0.4.21"
 tokio = { version = "1.54.1", features = ["io-util", "rt", "macros"] }
 
