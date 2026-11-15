@@ -54,10 +54,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: gui
+      # lld: cxx-qt picks a linker that handles Qt's object files; without
+      # it, it picks gold, which drops cxx-qt's initializers.
       - name: Install Qt 6
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get install -y --no-install-recommends lld \
             qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
             qml6-module-qtquick-controls qml6-module-qtquick-layouts \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
