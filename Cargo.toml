@@ -33,6 +33,7 @@ sc-hash = { path = "crates/sc-hash" }
 sc-providers = { path = "crates/sc-providers" }
 sc-ops = { path = "crates/sc-ops" }
 sc-transfer = { path = "crates/sc-transfer" }
+sc-index = { path = "crates/sc-index" }
 
 # async & utilities
 async-trait = "0.1.92"
@@ -47,6 +48,7 @@ regex = "1.13.1"
 serde_json = "1.0.154"
 rusqlite = { version = "0.43.0", features = ["bundled"] }
 globset = "0.4.21"
+memchr = "2"
 tokio = { version = "1.54.1", features = ["io-util", "rt", "macros"] }
 
 # hashing
