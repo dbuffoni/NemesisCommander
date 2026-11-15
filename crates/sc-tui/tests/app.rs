@@ -614,3 +614,91 @@ async fn a_desktop_window_does_not_use_terminal_editors() {
     };
     assert_eq!(external.command[0], expected, "not $EDITOR, which needs a terminal");
 }
+
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn the_script_under_the_cursor_runs_after_a_confirmation() {
+    let mut h = Harness::new().await;
+    let script = r#"
+        const names = (await sc.list(sc.context!.panel!)).map((e) => e.name).sort();
+        await sc.writeText("listing.txt", names.join(","));
+        sc.print(`listed ${names.length}`);
+        sc.print("second line");
+    "#;
+    fs::write(h.path("left/list.ts"), script).unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("list.ts");
+    h.key("Alt+X");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert_eq!(dialog.items[0], "Run script list.ts");
+    h.key("Enter");
+    let Some(Overlay::Confirm(confirm)) = h.app.overlay() else { panic!("a confirmation") };
+    assert!(confirm.lines[1].contains("left"), "{:?}", confirm.lines);
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(
+        fs::read_to_string(h.path("left/listing.txt")).unwrap(),
+        "a.txt,docs,list.ts,notes.txt"
+    );
+    let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("the output") };
+    assert_eq!(message.lines, ["listed 4", "second line"]);
+    h.key("Enter");
+    h.settle_until(|app| {
+        app.workspace().active().entries().iter().any(|e| e.name == "listing.txt")
+    })
+    .await;
+}
+
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn plugin_commands_ask_once_then_run_on_the_selection() {
+    let mut h = Harness::new().await;
+    let plugin = h.path("settings/data/plugins/upper");
+    fs::create_dir_all(&plugin).unwrap();
+    let manifest = r#"{
+        "name": "upper",
+        "version": "1.0.0",
+        "commands": [{ "id": "copy", "title": "Uppercase copy to the other panel" }],
+        "permissions": { "read": ["$SELECTION"], "write": ["$OTHER"] }
+    }"#;
+    fs::write(plugin.join("plugin.json"), manifest).unwrap();
+    let main = r#"
+        const ctx = sc.context!;
+        for (const path of ctx.selection) {
+          const text = await sc.readText(path);
+          await sc.writeText(sc.join(ctx.other!, sc.basename(path)), text.toUpperCase());
+        }
+        sc.print(`${ctx.selection.length} copied`);
+    "#;
+    fs::write(plugin.join("main.ts"), main).unwrap();
+
+    h.focus("a.txt");
+    h.key("Alt+X");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert_eq!(dialog.items, ["upper: Uppercase copy to the other panel"]);
+    h.key("Enter");
+    let Some(Overlay::Confirm(confirm)) = h.app.overlay() else { panic!("a permission question") };
+    assert!(confirm.lines.iter().any(|l| l.contains("the selected files")), "{:?}", confirm.lines);
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(fs::read_to_string(h.path("right/a.txt")).unwrap(), "ALPHA\n");
+    assert_eq!(h.status(), "Uppercase copy to the other panel: 1 copied");
+
+    // Allowed now: the second run asks nothing.
+    h.focus("notes.txt");
+    h.key("Alt+X");
+    h.key("Enter");
+    assert!(h.app.overlay().is_none(), "no second question");
+    h.settle().await;
+    assert_eq!(fs::read_to_string(h.path("right/notes.txt")).unwrap(), "THE NEEDLE IS HERE\n");
+}
+
+#[tokio::test]
+async fn without_plugins_alt_x_says_how_to_add_one() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Alt+X");
+    assert!(h.app.overlay().is_none());
+    assert!(h.status().contains("plugin") || h.status().contains("Plugins"), "{}", h.status());
+}

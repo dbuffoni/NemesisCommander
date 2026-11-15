@@ -34,6 +34,7 @@
   const sc = {
     version: ops.op_sc_version(),
     args: ops.op_sc_args(),
+    context: Object.freeze(ops.op_sc_context()),
     print: (...values) => ops.op_sc_print(values.map(text).join(" ")),
     list: (path) => ops.op_sc_list(stringArgument("path", path)),
     stat: (path) => ops.op_sc_stat(stringArgument("path", path)),

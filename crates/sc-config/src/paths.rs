@@ -48,6 +48,16 @@ impl AppPaths {
         self.config_dir.join("tls")
     }
 
+    /// Installed TypeScript plugins, one folder each.
+    pub fn plugins_dir(&self) -> PathBuf {
+        self.data_dir.join("plugins")
+    }
+
+    /// The permissions the user granted to plugins.
+    pub fn plugin_grants_file(&self) -> PathBuf {
+        self.config_dir.join("plugin-grants.json")
+    }
+
     /// The SQLite transfer journal.
     pub fn journal_file(&self) -> PathBuf {
         self.data_dir.join("transfers.db")

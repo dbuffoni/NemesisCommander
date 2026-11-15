@@ -15,6 +15,7 @@
 
 mod ops;
 pub mod permissions;
+pub mod plugin;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,7 +25,7 @@ use std::time::Duration;
 use deno_core::{JsRuntime, ModuleSpecifier, RuntimeOptions, v8};
 use sc_vfs::ProviderRegistry;
 
-pub use ops::{Output, READ_TEXT_LIMIT};
+pub use ops::{Invocation, Output, READ_TEXT_LIMIT};
 pub use permissions::{Access, Permissions};
 
 /// The TypeScript declarations of the `sc` API, for editors.
@@ -69,6 +70,8 @@ pub struct ScriptOptions {
     pub heap_limit: usize,
     /// How long the script may run; `None` for no limit.
     pub time_limit: Option<Duration>,
+    /// For a plugin command: where it was started (`sc.context`).
+    pub invocation: Option<Invocation>,
 }
 
 /// Transpiles `source` to JavaScript when `name` ends in `.ts`, `.mts` or
@@ -128,6 +131,7 @@ async fn run_here(name: &str, source: &str, options: ScriptOptions) -> Result<()
         permissions: options.permissions,
         args: options.args,
         output: options.output,
+        invocation: options.invocation,
     };
     let mut runtime = JsRuntime::new(RuntimeOptions {
         extensions: vec![ops::sc_script::init(state)],
@@ -206,6 +210,15 @@ fn specifier(name: &str) -> ModuleSpecifier {
     } else {
         std::env::current_dir().unwrap_or_default().join(path)
     };
+    // The runtime compares normalized URLs: `a/../b` must already be `b`.
+    let absolute = std::fs::canonicalize(&absolute).unwrap_or(absolute);
+    // Windows canonical paths start with `\\?\`, which URLs cannot hold.
+    #[cfg(windows)]
+    let absolute = absolute
+        .to_str()
+        .and_then(|text| text.strip_prefix(r"\\?\"))
+        .map(PathBuf::from)
+        .unwrap_or(absolute);
     ModuleSpecifier::from_file_path(&absolute)
         .unwrap_or_else(|_| ModuleSpecifier::parse("file:///script.ts").expect("a valid URL"))
 }

@@ -19,6 +19,10 @@ ratatui.workspace = true
 crossterm.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 
+[features]
+# Plugin commands and scripts (Alt+X), see sc-frontend.
+scripting = ["sc-frontend/scripting"]
+
 [dev-dependencies]
 sc-ops.workspace = true
 image.workspace = true

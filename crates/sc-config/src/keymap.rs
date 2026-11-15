@@ -140,7 +140,7 @@ actions! {
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           ["Ctrl+J"];
     Connect       = "tools.connect",        Tools, true,  "Connect…",                 ["Ctrl+N"];
-    RunScript     = "tools.run-script",     Tools, false, "Run script…",              ["Alt+X"];
+    RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Alt+X"];
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        ["F1"];
     Menu          = "app.menu",             App, true,  "Menu",                       ["F9"];

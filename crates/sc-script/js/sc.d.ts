@@ -32,6 +32,18 @@ declare namespace sc {
     bytes: number;
   }
 
+  /** Where a plugin command was started. */
+  interface Context {
+    /** The command's id, as in the plugin's manifest. */
+    command: string;
+    /** The folder shown in the active panel. */
+    panel: string | null;
+    /** The folder shown in the other panel. */
+    other: string | null;
+    /** The selected entries, or the entry under the cursor. */
+    selection: string[];
+  }
+
   /** What `copy` does when a destination exists. */
   type Conflict =
     | "fail"
@@ -45,6 +57,8 @@ declare namespace sc {
   const version: string;
   /** Arguments given after the script name. */
   const args: string[];
+  /** In a plugin command, where it was started; `null` in `sc run`. */
+  const context: Context | null;
 
   /** Prints values on standard output, separated by spaces. */
   function print(...values: unknown[]): void;

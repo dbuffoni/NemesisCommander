@@ -58,6 +58,8 @@ pub enum Command {
     Tls(TlsArgs),
     /// Run a TypeScript (or JavaScript) script with the `sc` API.
     Run(RunArgs),
+    /// Install, list, allow and run TypeScript plugins.
+    Plugin(PluginArgs),
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -439,4 +441,51 @@ pub struct RunArgs {
     /// and exit.
     #[arg(long)]
     pub types: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct PluginArgs {
+    #[command(subcommand)]
+    pub action: PluginAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PluginAction {
+    /// The installed plugins, their commands and permissions.
+    List,
+    /// Install (or update) the plugin in a folder.
+    Install {
+        /// A folder with a plugin.json.
+        folder: String,
+    },
+    /// Uninstall a plugin and forget its permissions.
+    Remove {
+        /// The plugin's name.
+        name: String,
+    },
+    /// Allow a plugin what its manifest asks for.
+    Allow {
+        /// The plugin's name.
+        name: String,
+    },
+    /// Withdraw what a plugin was allowed.
+    Deny {
+        /// The plugin's name.
+        name: String,
+    },
+    /// Run a plugin command as if started from the panels.
+    Run {
+        /// The plugin's name.
+        name: String,
+        /// The command's id.
+        command: String,
+        /// The selected entries.
+        selection: Vec<String>,
+        /// The active panel's folder. Default: the current folder.
+        #[arg(long, value_name = "LOCATION")]
+        panel: Option<String>,
+        /// The other panel's folder.
+        #[arg(long, value_name = "LOCATION")]
+        other: Option<String>,
+    },
 }

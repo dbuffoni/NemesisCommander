@@ -35,6 +35,37 @@ pub(crate) struct ScriptState {
     pub permissions: Permissions,
     pub args: Vec<String>,
     pub output: Output,
+    pub invocation: Option<Invocation>,
+}
+
+/// Where a plugin command was started: `sc.context` in the script.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct Invocation {
+    /// The command's id from the manifest.
+    pub command: String,
+    /// The folder of the active panel.
+    pub panel: Option<String>,
+    /// The folder of the other panel.
+    pub other: Option<String>,
+    /// The selected (or current) entries of the active panel.
+    pub selection: Vec<String>,
+}
+
+impl Invocation {
+    /// The context of `command` run with these panels and selection.
+    pub fn new(
+        command: &str,
+        panel: Option<&VfsPath>,
+        other: Option<&VfsPath>,
+        selection: &[VfsPath],
+    ) -> Self {
+        Invocation {
+            command: command.to_owned(),
+            panel: panel.map(display),
+            other: other.map(display),
+            selection: selection.iter().map(display).collect(),
+        }
+    }
 }
 
 deno_core::extension!(
@@ -42,6 +73,7 @@ deno_core::extension!(
     ops = [
         op_sc_version,
         op_sc_args,
+        op_sc_context,
         op_sc_print,
         op_sc_list,
         op_sc_stat,
@@ -154,6 +186,12 @@ fn op_sc_version() -> String {
 #[serde]
 fn op_sc_args(state: &mut OpState) -> Vec<String> {
     state.borrow::<ScriptState>().args.clone()
+}
+
+#[op2]
+#[serde]
+fn op_sc_context(state: &mut OpState) -> Option<Invocation> {
+    state.borrow::<ScriptState>().invocation.clone()
 }
 
 #[op2(fast)]

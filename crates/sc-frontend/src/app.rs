@@ -33,6 +33,10 @@ use crate::dialogs::{
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
+mod plugins;
+
+pub use plugins::PluginChoice;
+
 /// Results of background work, delivered to [`App::handle_event`].
 #[derive(Debug)]
 pub enum AppEvent {
@@ -68,6 +72,15 @@ pub enum AppEvent {
         /// Data and "file is longer", or an error.
         result: Result<(Vec<u8>, bool), String>,
     },
+    /// A plugin command or script ended.
+    ScriptDone {
+        /// What ran, for messages.
+        title: String,
+        /// What it printed.
+        lines: Vec<String>,
+        /// Why it failed, if it did.
+        error: Option<String>,
+    },
 }
 
 impl AppEvent {
@@ -80,6 +93,7 @@ impl AppEvent {
                 | AppEvent::Show(_)
                 | AppEvent::SearchDone(_)
                 | AppEvent::Loaded { .. }
+                | AppEvent::ScriptDone { .. }
         )
     }
 }
@@ -436,6 +450,27 @@ impl App {
                             None => format!("{} found", paths.len()),
                         };
                     }
+                }
+            }
+            AppEvent::ScriptDone { title, lines, error } => {
+                self.reload_panels(None);
+                match (&error, lines.len()) {
+                    (None, 0) => self.set_status(format!("{title}: done")),
+                    (None, 1) => self.set_status(format!("{title}: {}", lines[0])),
+                    _ => {
+                        let mut text = lines;
+                        if let Some(error) = &error {
+                            text.push(format!("Stopped: {error}"));
+                        }
+                        self.overlay = Some(Overlay::Message(MessageDialog {
+                            title: title.clone(),
+                            lines: text,
+                            then: None,
+                        }));
+                    }
+                }
+                if let Some(error) = error {
+                    self.set_error(format!("{title}: {error}"));
                 }
             }
             AppEvent::Loaded { path, quick, result } => {
@@ -885,9 +920,7 @@ impl App {
                     ChoosePurpose::Connections,
                 )));
             }
-            Action::RunScript => {
-                self.set_status("Scripts come with TypeScript extensions in a later version")
-            }
+            Action::RunScript => self.choose_plugin_command(),
             Action::Help => self.overlay = Some(Overlay::Help),
             Action::Menu => self.overlay = Some(Overlay::Menu(MenuState::default())),
             Action::Settings => {
@@ -1134,6 +1167,7 @@ impl App {
                     done(result.map(|()| format!("{verb}: {count} {noun}")), None)
                 });
             }
+            ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
             ConfirmPurpose::MultiRename { paths, names } => {
                 self.workspace.active_mut().clear_selection();
                 self.spawn_task(async move {
@@ -1182,6 +1216,11 @@ impl App {
                 if let Some(path) = paths.get(cursor) {
                     let request = self.workspace.active_mut().reveal(path);
                     self.load_opt(request);
+                }
+            }
+            ChoosePurpose::Plugin(mut choices) => {
+                if cursor < choices.len() {
+                    self.plugin_chosen(choices.swap_remove(cursor));
                 }
             }
             ChoosePurpose::ImportMode(bundle) => {

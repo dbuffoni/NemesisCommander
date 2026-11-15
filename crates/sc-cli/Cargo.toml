@@ -41,7 +41,7 @@ desktop = ["sc-app/desktop"]
 tui = ["dep:sc-tui"]
 # `sc run`: TypeScript scripts on V8 (adds 30-40 MB). Agent-only server
 # builds leave it out.
-scripting = ["dep:sc-script"]
+scripting = ["dep:sc-script", "sc-tui?/scripting"]
 rar = ["sc-app/rar"]
 
 [dev-dependencies]

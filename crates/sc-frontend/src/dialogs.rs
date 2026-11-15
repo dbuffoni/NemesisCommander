@@ -113,6 +113,8 @@ pub enum ConfirmPurpose {
         /// Their new names.
         names: Vec<String>,
     },
+    /// Run a plugin command or a script (allowing it first).
+    RunPlugin(crate::app::PluginChoice),
 }
 
 /// A yes/no question.
@@ -137,6 +139,8 @@ pub enum ChoosePurpose {
     SearchResults(Vec<VfsPath>),
     /// Replace or merge imported settings.
     ImportMode(Box<ExportBundle>),
+    /// Run one of these plugin commands or scripts.
+    Plugin(Vec<crate::app::PluginChoice>),
 }
 
 /// Pick one item from a list.

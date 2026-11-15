@@ -16,6 +16,7 @@ deno_core = "0.413.0"
 deno_error = "0.7.1"
 deno_ast = { version = "0.53.3", features = ["transpiling"] }
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "net"] }
 

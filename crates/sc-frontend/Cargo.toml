@@ -24,6 +24,11 @@ image.workspace = true
 directories.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 tokio-util.workspace = true
+sc-script = { workspace = true, optional = true }
+
+[features]
+# Plugin commands and scripts from the panels (Alt+X); needs V8.
+scripting = ["dep:sc-script"]
 
 [dev-dependencies]
 tempfile.workspace = true

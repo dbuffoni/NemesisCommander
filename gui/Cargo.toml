@@ -14,7 +14,7 @@ name = "sc-gui"
 path = "src/main.rs"
 
 [dependencies]
-sc-frontend.workspace = true
+sc-frontend = { workspace = true, features = ["scripting"] }
 sc-app = { workspace = true, features = ["desktop"] }
 sc-config.workspace = true
 sc-vfs.workspace = true

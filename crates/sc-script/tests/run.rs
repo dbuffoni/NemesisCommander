@@ -32,6 +32,7 @@ impl Sandbox {
             output: Arc::new(move |line| printed.lock().unwrap().push(line.to_owned())),
             heap_limit: sc_script::DEFAULT_HEAP_LIMIT,
             time_limit: None,
+            invocation: None,
         }
     }
 
@@ -70,10 +71,10 @@ async fn typescript_prints_and_sees_its_arguments() {
         const pair: Pair = { a: 1, b: 2 };
         sc.print(greet("world"));
         sc.print(sc.args.join(","), pair);
-        sc.print(typeof Deno);
+        sc.print(typeof Deno, sc.context);
     "#;
     s.run(source, Permissions::none()).await.unwrap();
-    assert_eq!(s.printed(), ["hello world", r#"first,second {"a":1,"b":2}"#, "undefined"]);
+    assert_eq!(s.printed(), ["hello world", r#"first,second {"a":1,"b":2}"#, "undefined null"]);
 }
 
 #[tokio::test]
