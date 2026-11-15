@@ -80,6 +80,27 @@ impl VfsError {
         }
     }
 
+    /// Turns the error into an [`io::Error`] whose kind matches the
+    /// variant, for code that must report through an I/O interface (a
+    /// [`WriteSink`](crate::WriteSink), for example). [`from_io`](Self::from_io)
+    /// maps it back to the same variant.
+    pub fn into_io(self) -> io::Error {
+        let kind = match &self {
+            VfsError::NotFound(_) => io::ErrorKind::NotFound,
+            VfsError::AlreadyExists(_) => io::ErrorKind::AlreadyExists,
+            VfsError::PermissionDenied(_) => io::ErrorKind::PermissionDenied,
+            VfsError::NotADirectory(_) => io::ErrorKind::NotADirectory,
+            VfsError::IsADirectory(_) => io::ErrorKind::IsADirectory,
+            VfsError::DirectoryNotEmpty(_) => io::ErrorKind::DirectoryNotEmpty,
+            VfsError::Io { source, .. } => source.kind(),
+            _ => io::ErrorKind::Other,
+        };
+        match self {
+            VfsError::Io { source, .. } => source,
+            other => io::Error::new(kind, other.to_string()),
+        }
+    }
+
     /// Shorthand for [`VfsError::Unsupported`].
     pub fn unsupported(operation: &'static str, scheme: impl Into<String>) -> Self {
         VfsError::Unsupported { operation, scheme: scheme.into() }
@@ -94,6 +115,20 @@ impl VfsError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn io_round_trip_keeps_the_kind() {
+        let path = VfsPath::parse("/tmp/x").unwrap();
+        for error in [
+            VfsError::NotFound(path.clone()),
+            VfsError::AlreadyExists(path.clone()),
+            VfsError::DirectoryNotEmpty(path.clone()),
+        ] {
+            let text = format!("{error:?}");
+            let back = VfsError::from_io(&path, error.into_io());
+            assert_eq!(format!("{back:?}"), text);
+        }
+    }
 
     #[test]
     fn io_errors_map_to_specific_variants() {

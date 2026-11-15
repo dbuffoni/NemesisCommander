@@ -17,6 +17,7 @@ taken while implementing it.
 | 0007 | [Front ends share one model; the TUI is an event-driven state machine](0007-front-ends-share-one-model.md) | Accepted |
 | 0008 | [The agent speaks gRPC over the SSH session's standard streams](0008-agent-protocol.md) | Accepted |
 | 0009 | [SSH connections go through the system's OpenSSH client](0009-openssh-client-as-transport.md) | Accepted |
+| 0010 | [WebDAV over reqwest, logins from .netrc](0010-webdav.md) | Accepted |
 
 Template:
 

@@ -5,7 +5,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 /// SuperCommander: a fast dual-pane file manager for local and remote files.
 ///
 /// Run without a command to start the terminal UI. Locations can be local
-/// paths or URIs such as sftp://user@host/dir, agent://host/dir or
+/// paths or URIs such as sftp://user@host/dir, davs://host/dir,
+/// agent://host/dir or
 /// zip:///path/archive.zip!/inside.
 #[derive(Debug, Parser)]
 #[command(name = "sc", version, args_conflicts_with_subcommands = true)]

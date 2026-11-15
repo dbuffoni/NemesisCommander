@@ -43,6 +43,7 @@ sc-proto = { path = "crates/sc-proto" }
 sc-agent = { path = "crates/sc-agent" }
 sc-ssh = { path = "crates/sc-ssh" }
 sc-sftp = { path = "crates/sc-sftp" }
+sc-webdav = { path = "crates/sc-webdav" }
 
 # async & utilities
 async-trait = "0.1.92"

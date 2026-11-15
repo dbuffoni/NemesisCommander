@@ -91,6 +91,8 @@ pub fn build_registry() -> ProviderRegistry {
     sc_archive::register_archive_providers(&mut registry);
     registry.register(sc_agent::AgentFactory);
     registry.register(sc_sftp::SftpFactory);
+    registry.register(sc_webdav::WebDavFactory::https());
+    registry.register(sc_webdav::WebDavFactory::http());
     registry
 }
 
@@ -106,7 +108,9 @@ mod tests {
         assert!(context.warnings.is_empty());
         assert!(context.registry.schemes().contains(&"zip"));
         assert!(context.registry.schemes().contains(&"agent"));
-        assert!(context.registry.schemes().contains(&"sftp"));
+        for scheme in ["sftp", "dav", "davs"] {
+            assert!(context.registry.schemes().contains(&scheme), "{scheme}");
+        }
 
         context.config.keys.insert("nope".into(), vec!["F12".into()]);
         context.save_config().unwrap();

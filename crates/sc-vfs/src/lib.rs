@@ -23,6 +23,7 @@ mod error;
 mod path;
 mod provider;
 mod registry;
+mod upload;
 mod walk;
 
 pub use capabilities::Capabilities;
@@ -34,4 +35,5 @@ pub use provider::{
     WriteSink, collect_listing,
 };
 pub use registry::{ProviderFactory, ProviderRegistry};
+pub use upload::{UPLOAD_CHUNK, UploadBody, upload_sink};
 pub use walk::{WalkItem, walk};
