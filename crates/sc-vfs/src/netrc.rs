@@ -7,7 +7,7 @@
 //! ```
 //!
 //! SuperCommander never stores passwords itself; users who want saved
-//! WebDAV logins keep them where their other tools already look.
+//! logins (WebDAV, SMB) keep them where their other tools already look.
 
 use std::path::PathBuf;
 

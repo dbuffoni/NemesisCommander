@@ -762,7 +762,7 @@ impl App {
                 let here = display_location(self.workspace.active().location());
                 self.ask(
                     "Go to",
-                    "Folder, archive or URI (sftp://, davs://, s3://, agent://, zip://…):",
+                    "Folder, archive or URI (sftp://, smb://, davs://, s3://, agent://, zip://…):",
                     &here,
                     InputPurpose::GoTo,
                 );
@@ -1154,7 +1154,7 @@ impl App {
                 },
                 None => self.ask(
                     "Connect",
-                    "Location (sftp://user@host/path, davs://host/path, s3://bucket/path, agent://host/path, …):",
+                    "Location (sftp://user@host/path, davs://host/path, s3://bucket/path, smb://host/share, agent://host/path, …):",
                     "sftp://",
                     InputPurpose::GoTo,
                 ),

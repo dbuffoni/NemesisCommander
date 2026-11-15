@@ -48,6 +48,7 @@ sc-ssh = { path = "crates/sc-ssh" }
 sc-sftp = { path = "crates/sc-sftp" }
 sc-webdav = { path = "crates/sc-webdav" }
 sc-s3 = { path = "crates/sc-s3" }
+sc-smb = { path = "crates/sc-smb" }
 
 # async & utilities
 async-trait = "0.1.92"

@@ -13,7 +13,7 @@
 //! permissions, so the provider supports neither resume nor attribute
 //! changes. Renames and copies happen on the server (`MOVE`, `COPY`).
 
-pub mod netrc;
+pub use sc_vfs::netrc;
 mod xml;
 
 use std::sync::Arc;

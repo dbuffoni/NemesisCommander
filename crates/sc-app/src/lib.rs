@@ -94,6 +94,7 @@ pub fn build_registry() -> ProviderRegistry {
     registry.register(sc_webdav::WebDavFactory::https());
     registry.register(sc_webdav::WebDavFactory::http());
     registry.register(sc_s3::S3Factory);
+    registry.register(sc_smb::SmbFactory);
     registry
 }
 
@@ -109,7 +110,7 @@ mod tests {
         assert!(context.warnings.is_empty());
         assert!(context.registry.schemes().contains(&"zip"));
         assert!(context.registry.schemes().contains(&"agent"));
-        for scheme in ["sftp", "dav", "davs", "s3"] {
+        for scheme in ["sftp", "dav", "davs", "s3", "smb"] {
             assert!(context.registry.schemes().contains(&scheme), "{scheme}");
         }
 
