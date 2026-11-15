@@ -133,7 +133,8 @@ mod tests {
 
     #[test]
     fn times_round_trip_including_before_1970() {
-        for ns in [0i64, 1, 1_700_000_000_123_456_789, -1_000_000_000] {
+        // Multiples of 100 ns: Windows keeps times at that resolution.
+        for ns in [0i64, 100, 1_700_000_000_123_456_700, -1_000_000_000] {
             assert_eq!(time_to_ns(ns_to_time(ns)), ns);
         }
     }
