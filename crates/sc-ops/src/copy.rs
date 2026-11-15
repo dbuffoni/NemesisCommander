@@ -227,6 +227,7 @@ async fn stream_copy(
 
 /// How thoroughly a finished copy is checked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum VerifyMode {
     /// No check.
     None,

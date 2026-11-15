@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// The user's standing choice for name collisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ConflictPolicy {
     /// Ask the [`ConflictResolver`] for every conflict (the default for UIs).
     #[default]

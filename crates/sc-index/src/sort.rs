@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// The column entries are sorted by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum SortKey {
     /// File name, natural order (`file2` before `file10`).
     #[default]
