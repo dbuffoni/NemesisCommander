@@ -3,3 +3,5 @@
 .DS_Store
 /dist
 *.AppImage
+# Written by the Qt build for the QML language server (local paths).
+.qmlls.ini
