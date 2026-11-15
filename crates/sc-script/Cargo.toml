@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
+license.workspace = true
 
 # V8 adds 30-40 MB to the program: `sc` includes this crate only with its
 # `scripting` feature, which server (agent) builds leave out.

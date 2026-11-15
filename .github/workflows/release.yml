@@ -54,7 +54,7 @@ jobs:
       - name: Build sc and sc-gui
         run: |
           echo "QMAKE=$QT_ROOT_DIR/bin/qmake" >> "$GITHUB_ENV"
-          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p sc-cli -p sc-gui
+          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p sc-cli -p sc-gui --features sc-cli/rar,sc-gui/rar
       - name: Smoke test
         run: |
           target/release/sc --version

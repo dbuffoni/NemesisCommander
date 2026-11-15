@@ -10,7 +10,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 repository = "https://github.com/dbuffoni/SuperCommander"
-# License intentionally not declared yet: see docs/OPEN_QUESTIONS.md.
+license = "MIT"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

@@ -2,39 +2,27 @@
 
 Decisions that should not be taken without the owner.
 
-1. **License.** GPL (like Double Commander) or MIT/Apache-2.0 (friendlier to
-   plugins and integrations)? Note: the repository's initial commit already
-   contains an MIT `LICENSE` file created by GitHub. It was left untouched;
-   `Cargo.toml` deliberately declares no license until this is decided.
+## Decided
 
-2. **RAR in release builds.** RAR reading needs RARLAB's unRAR library,
-   whose license is not OSI-approved. It is behind the Cargo feature `rar`
-   (off by default). Enable it in the AppImage? Debian ships it in
-   `non-free`; with a GPL license the combination is questionable.
+- **License: MIT** (2026-11-15). The `LICENSE` file from the initial commit
+  stays; every crate declares `license = "MIT"`.
+- **RAR in release builds: enabled** (2026-11-15), with the licensing
+  notes in [`TODO.md`](../TODO.md). Qt's LGPL notices are listed there too.
 
-3. **Dependency licenses for the chosen license.** All current dependencies
-   are MIT, Apache-2.0, BSD or similar, except optional `unrar` (see 2).
-   `smb2` is MIT/Apache. If the project picks MIT/Apache, nothing changes;
-   if GPL, the same set is compatible.
+## Open
 
-4. **Qt in the AppImage.** The window links Qt 6 dynamically and the
-   AppImage bundles Qt's shared libraries (LGPLv3). That is allowed with any
-   of the licenses above, but the AppImage should then ship Qt's license
-   text and say where Qt's source is. To do once the project license is
-   chosen, together with a third-party notices file.
-
-5. **Windows and macOS packages of the window.** The window builds on the
+1. **Windows and macOS packages of the window.** The window builds on the
    same code everywhere, but only the Linux AppImage is produced. Installers
    for Windows (MSI/NSIS with windeployqt) and macOS (signed .dmg with
    macdeployqt) need signing certificates that only the owner can provide.
 
-6. **High-level functions in phase 4.** The roadmap puts "TypeScript
+2. **High-level functions in phase 4.** The roadmap puts "TypeScript
    extensions and high-level functions" in phase 4, while the base version
    leaves out folder synchronization and disk utilities (space used,
    cleanup, duplicates). Extensions are done (ADR 0015, 0016); the
    high-level functions are not started. Build them natively next, leave
    them to plugins, or keep them out for now?
 
-7. **Plugin trust.** A grant belongs to a plugin's name and request
+3. **Plugin trust.** A grant belongs to a plugin's name and request
    (ADR 0016). If plugins are shared publicly, should they be signed, and
    should SuperCommander keep a list of known publishers?
