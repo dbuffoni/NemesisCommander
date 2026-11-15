@@ -1,6 +1,6 @@
 //! `sc serve` and `sc tls`: the permanent agent and its certificates.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::ExitCode;
 
 use sc_app::AppContext;
@@ -14,7 +14,7 @@ use crate::cli::{ServeArgs, TlsAction, TlsArgs};
 pub async fn serve(args: ServeArgs) -> CmdResult {
     let identity = sc_tls::ServerIdentity::load(Path::new(&args.tls))?;
     let limits = sc_agent::Limits {
-        roots: args.roots.iter().map(PathBuf::from).collect(),
+        roots: args.roots.iter().map(std::path::PathBuf::from).collect(),
         read_only: args.read_only,
     };
     let listener = tokio::net::TcpListener::bind(&args.listen)
