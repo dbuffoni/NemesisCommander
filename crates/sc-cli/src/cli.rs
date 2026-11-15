@@ -56,6 +56,8 @@ pub enum Command {
     /// Certificates for `sc serve`: create the authority, issue server
     /// bundles.
     Tls(TlsArgs),
+    /// Run a TypeScript (or JavaScript) script with the `sc` API.
+    Run(RunArgs),
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -405,4 +407,36 @@ pub enum TlsAction {
     },
     /// Print the folder holding this machine's certificates.
     Path,
+}
+
+#[derive(Debug, Args)]
+#[command(after_help = "Scripts start with no access to files: grant locations with \
+    --allow-read and --allow-write (repeatable, any location sc understands), \
+    or everything with --allow-all.\n\nExample:\n  sc run tidy.ts --allow-write ~/Downloads -- --dry-run")]
+pub struct RunArgs {
+    /// The script: a .ts or .js file.
+    #[arg(required_unless_present = "types")]
+    pub script: Option<String>,
+    /// Arguments for the script, as `sc.args`.
+    #[arg(last = true)]
+    pub args: Vec<String>,
+    /// Let the script read below this location (repeatable).
+    #[arg(long, value_name = "LOCATION")]
+    pub allow_read: Vec<String>,
+    /// Let the script read and write below this location (repeatable).
+    #[arg(long, value_name = "LOCATION")]
+    pub allow_write: Vec<String>,
+    /// Let the script read and write everything this user can.
+    #[arg(long)]
+    pub allow_all: bool,
+    /// Limit of the script's memory, in MiB.
+    #[arg(long, value_name = "MIB", default_value_t = 512)]
+    pub memory: usize,
+    /// Stop the script after this many seconds.
+    #[arg(long, value_name = "SECONDS")]
+    pub timeout: Option<f64>,
+    /// Print the TypeScript declarations of the `sc` API (for editors)
+    /// and exit.
+    #[arg(long)]
+    pub types: bool,
 }

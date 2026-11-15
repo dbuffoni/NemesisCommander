@@ -1,0 +1,28 @@
+[package]
+name = "sc-script"
+description = "SuperCommander's TypeScript scripting: V8 through deno_core, the `sc` API over the copy engine and providers, and per-script permissions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+# V8 adds 30-40 MB to the program: `sc` includes this crate only with its
+# `scripting` feature, which server (agent) builds leave out.
+
+[dependencies]
+sc-vfs.workspace = true
+sc-ops.workspace = true
+deno_core = "0.413.0"
+deno_error = "0.7.1"
+deno_ast = { version = "0.53.3", features = ["transpiling"] }
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "net"] }
+
+[dev-dependencies]
+sc-providers.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

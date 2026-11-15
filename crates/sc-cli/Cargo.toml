@@ -24,6 +24,7 @@ sc-app = { workspace = true, default-features = false }
 sc-tui = { workspace = true, optional = true }
 sc-agent.workspace = true
 sc-tls.workspace = true
+sc-script = { workspace = true, optional = true }
 async-trait.workspace = true
 clap.workspace = true
 serde.workspace = true
@@ -32,12 +33,15 @@ tokio = { workspace = true, features = ["full"] }
 tokio-util.workspace = true
 
 [features]
-default = ["desktop", "tui"]
+default = ["desktop", "tui", "scripting"]
 # Desktop build: recycle bin support.
 desktop = ["sc-app/desktop"]
 # The terminal UI started by `sc` without a command. Agent-only server
 # builds leave it out.
 tui = ["dep:sc-tui"]
+# `sc run`: TypeScript scripts on V8 (adds 30-40 MB). Agent-only server
+# builds leave it out.
+scripting = ["dep:sc-script"]
 rar = ["sc-app/rar"]
 
 [dev-dependencies]

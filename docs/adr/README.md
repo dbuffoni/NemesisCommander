@@ -22,6 +22,7 @@ taken while implementing it.
 | 0012 | [SMB with the pure-Rust smb2 client](0012-smb.md) | Accepted |
 | 0013 | [The Qt window draws a screen description; QML stays thin](0013-qt-gui.md) | Accepted |
 | 0014 | [`sc serve`: mutual TLS from a private authority, signed one-time tokens](0014-serve-mtls-and-tokens.md) | Accepted |
+| 0015 | [TypeScript scripts: deno_core, one `sc` global, no access by default](0015-typescript-scripts.md) | Accepted |
 
 Template:
 
