@@ -67,3 +67,26 @@ jobs:
       - run: cargo clippy -p sc-gui --all-targets
       # The window tests use Qt's offscreen platform: no display needed.
       - run: cargo test -p sc-gui
+
+  gui-other:
+    name: Desktop interface (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gui
+      # Qt's official build, as the installers will use; it puts qmake and
+      # Qt's libraries on PATH.
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          cache: true
+      - run: cargo test -p sc-gui
+        env:
+          QT_QPA_PLATFORM: offscreen
