@@ -1,6 +1,8 @@
-// The viewer (F3) and quick view: text or hex lines, or a picture. `view`
-// is a ViewerView of the screen description; the application has already
-// cut the lines to what fits, so this only draws them.
+// The viewer (F3) and quick view. `view` is a ViewerView of the screen
+// description: text or hex lines, a formatted document (lines of styled
+// spans), or a picture (an image, a PDF page, a view of a 3D model) with
+// its zoom. The application has already cut the lines to what fits, so
+// this only draws them.
 
 import QtQuick
 import QtQuick.Controls
@@ -9,22 +11,81 @@ import QtQuick.Layouts
 Item {
     id: viewer
     property var view: null
+    // The quick view has no header of keys: it is half a window wide.
+    property bool compact: false
     readonly property var theme: ApplicationWindow.window
-    readonly property bool showsImage: view !== null && view.mode === "image"
+    readonly property bool showsImage: view !== null && view.image_url !== null
+                                       && view.image_url !== undefined
+    readonly property bool isPicture: view !== null
+                                      && ["image", "pdf", "model"].indexOf(view.mode) >= 0
+    readonly property bool isDocument: view !== null && view.rich.length > 0
+
+    // Text for StyledText: special characters escaped, spaces kept.
+    function escaped(text) {
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                   .replace(/ /g, "&nbsp;")
+    }
+
+    // One document line as StyledText.
+    function styledLine(spans, level) {
+        let out = ""
+        for (const span of spans) {
+            let text = escaped(span.text)
+            const style = span.style.split(" ")
+            if (style.indexOf("code") >= 0)
+                text = "<font color=\"" + viewer.theme.codeColor + "\">" + text + "</font>"
+            if (style.indexOf("link") >= 0)
+                text = "<font color=\"" + viewer.theme.linkColor + "\"><u>" + text + "</u></font>"
+            if (style.indexOf("mark") >= 0)
+                text = "<font color=\"" + viewer.theme.dim + "\">" + text + "</font>"
+            if (style.indexOf("italic") >= 0)
+                text = "<i>" + text + "</i>"
+            if (style.indexOf("bold") >= 0 || level > 0)
+                text = "<b>" + text + "</b>"
+            out += text
+        }
+        return out
+    }
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 2
+        spacing: 4
+
+        // Header: what is shown, and the keys of this mode.
+        RowLayout {
+            Layout.fillWidth: true
+            visible: !viewer.compact && viewer.view !== null
+            spacing: 12
+            Label {
+                Layout.fillWidth: true
+                elide: Text.ElideMiddle
+                font.bold: true
+                text: viewer.view ? viewer.view.title : ""
+            }
+            Label {
+                text: viewer.view ? viewer.view.keys : ""
+                color: viewer.theme.dim
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 1
+            visible: !viewer.compact
+            color: viewer.theme.lineColor
+        }
 
         Item {
+            id: content
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
 
+            // Text and hex lines.
             Column {
-                visible: !viewer.showsImage
+                visible: !viewer.isPicture && !viewer.isDocument
                 Repeater {
-                    model: viewer.view && !viewer.showsImage ? viewer.view.lines : []
+                    model: viewer.view && !viewer.isPicture && !viewer.isDocument
+                           ? viewer.view.lines : []
                     delegate: Text {
                         text: modelData
                         font: viewer.theme.fixedFont
@@ -36,40 +97,117 @@ Item {
                 }
             }
 
-            // Pictures of the local disk are shown at full quality; others
-            // only have a description.
-            Image {
-                anchors.fill: parent
-                visible: viewer.showsImage && source != ""
-                source: viewer.showsImage && viewer.view.image_url ? viewer.view.image_url : ""
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                smooth: true
+            // A formatted document: headings larger, rules as thin lines,
+            // code on a shaded band, the rest in the fixed font so tables
+            // line up.
+            Column {
+                width: parent.width
+                visible: viewer.isDocument
+                Repeater {
+                    model: viewer.view && viewer.isDocument ? viewer.view.rich : []
+                    delegate: Item {
+                        width: content.width
+                        readonly property int level: modelData.heading
+                        height: modelData.rule ? 8 : Math.max(viewer.theme.rowHeight,
+                                                                line.implicitHeight + 2)
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: modelData.code
+                            color: viewer.theme.lineColor
+                        }
+                        Rectangle {
+                            visible: modelData.rule
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width
+                            height: 1
+                            color: viewer.theme.lineColor
+                        }
+                        Text {
+                            id: line
+                            visible: !modelData.rule
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: viewer.styledLine(modelData.spans, parent.level)
+                            textFormat: Text.StyledText
+                            font.family: viewer.theme.fixedFont.family
+                            font.pointSize: viewer.theme.fixedFont.pointSize
+                                            * (parent.level === 1 ? 1.5 : parent.level === 2 ? 1.25 : 1)
+                            color: parent.level > 0 && parent.level <= 2 ? viewer.theme.headingColor
+                                                                         : palette.text
+                        }
+                    }
+                }
             }
-            Label {
-                anchors.centerIn: parent
-                visible: viewer.showsImage && !viewer.view.image_url
-                text: "Picture (only shown for files on this computer). F4: hex"
-                color: viewer.theme.dim
+
+            // A picture, fitted to the space and then zoomed around `center`.
+            Image {
+                id: picture
+                visible: viewer.showsImage && status === Image.Ready
+                source: viewer.showsImage ? viewer.view.image_url : ""
+                asynchronous: true
+                cache: false
+                smooth: true
+                mipmap: true
+                readonly property real fit: sourceSize.width > 0
+                    ? Math.min(content.width / sourceSize.width,
+                               content.height / sourceSize.height) : 1
+                readonly property real zoom: viewer.view ? viewer.view.zoom : 1
+                width: sourceSize.width * fit * zoom
+                height: sourceSize.height * fit * zoom
+                x: content.width / 2 - (viewer.view ? viewer.view.center[0] : 0.5) * width
+                y: content.height / 2 - (viewer.view ? viewer.view.center[1] : 0.5) * height
+            }
+            // Pages get a thin frame so white paper stands out.
+            Rectangle {
+                visible: picture.visible && viewer.view.mode === "pdf"
+                x: picture.x
+                y: picture.y
+                width: picture.width
+                height: picture.height
+                color: "transparent"
+                border.color: viewer.theme.lineColor
             }
 
             Label {
                 anchors.centerIn: parent
-                visible: viewer.view !== null && (viewer.view.loading || viewer.view.error !== null)
-                text: !viewer.view ? "" : viewer.view.error !== null ? viewer.view.error
-                                                                     : "Loading…"
+                width: Math.min(implicitWidth, parent.width - 16)
+                wrapMode: Text.Wrap
+                horizontalAlignment: Text.AlignHCenter
+                visible: text !== ""
+                text: {
+                    const v = viewer.view
+                    if (!v)
+                        return ""
+                    if (v.error !== null)
+                        return v.error
+                    if (v.loading)
+                        return "Loading…"
+                    if (viewer.isPicture && !viewer.showsImage)
+                        return v.rendering ? "Drawing…" : "Picture (shown for files on this computer). F4: hex"
+                    return ""
+                }
                 color: viewer.view && viewer.view.error !== null ? viewer.theme.errorColor
                                                                  : viewer.theme.dim
             }
         }
 
-        Label {
+        // Footer: details of what is shown, and how far it goes.
+        RowLayout {
             Layout.fillWidth: true
-            color: viewer.theme.dim
-            elide: Text.ElideMiddle
-            text: !viewer.view ? "" : viewer.view.title + "    " + viewer.view.mode
-                  + "    " + viewer.view.percent + "%"
-                  + (viewer.view.truncated ? "    (start of the file only)" : "")
+            spacing: 12
+            Label {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                color: viewer.theme.dim
+                text: !viewer.view ? "" : viewer.compact ? viewer.view.info || viewer.view.title
+                                                         : viewer.view.info
+            }
+            Label {
+                color: viewer.theme.dim
+                visible: viewer.view !== null && !viewer.isPicture
+                text: !viewer.view ? "" : (viewer.view.truncated ? "start of the file only    " : "")
+                                          + (viewer.isDocument ? "" : viewer.view.mode + "  ")
+                                          + viewer.view.percent + "%"
+            }
         }
     }
 }

@@ -42,10 +42,10 @@ pub fn run(startup: Startup) -> bool {
         eprintln!("sc-gui: the window could not be loaded");
         return false;
     }
-    if !bridge::ENDED_EARLY.load(Ordering::SeqCst) {
-        if let Some(app) = app.as_mut() {
-            app.exec();
-        }
+    if !bridge::ENDED_EARLY.load(Ordering::SeqCst)
+        && let Some(app) = app.as_mut()
+    {
+        app.exec();
     }
     true
 }

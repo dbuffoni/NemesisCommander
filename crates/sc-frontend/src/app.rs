@@ -1374,7 +1374,8 @@ impl App {
         if matches!(source, crate::preview::Source::Picture(_)) && !png {
             return;
         }
-        let size = if quick { crate::preview::QUICK_RENDER_SIZE } else { crate::preview::RENDER_SIZE };
+        let size =
+            if quick { crate::preview::QUICK_RENDER_SIZE } else { crate::preview::RENDER_SIZE };
         self.spawn_task(async move {
             let result = tokio::task::spawn_blocking(move || {
                 let picture = crate::preview::render(&source, size)?;

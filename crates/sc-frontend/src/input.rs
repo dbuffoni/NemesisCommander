@@ -28,7 +28,12 @@ impl KeyPress {
     /// If `text` is not a valid chord; meant for tests and fixed tables.
     pub fn chord(text: &str) -> Self {
         let chord: KeyChord = text.parse().expect("valid key chord");
-        KeyPress { chord, text: None }
+        // A plain character key is also that character typed.
+        let text = match chord.key {
+            Key::Char(c) if !chord.ctrl && !chord.alt => Some(c),
+            _ => None,
+        };
+        KeyPress { chord, text }
     }
 
     /// A typed character.

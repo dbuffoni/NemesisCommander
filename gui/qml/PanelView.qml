@@ -23,6 +23,11 @@ Rectangle {
         font: panel.theme.fixedFont
         text: "1023.9 MiB"
     }
+    TextMetrics {
+        id: dateWidth
+        font: panel.theme.fixedFont
+        text: "2026-12-31 23:59"
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -57,6 +62,40 @@ Rectangle {
             font.bold: true
         }
 
+        // Column titles; the sorted one has an arrow.
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
+            spacing: 12
+            visible: panel.view !== null && !panel.view.quick_view
+            Label {
+                Layout.fillWidth: true
+                text: panel.view ? panel.view.headers[0] : ""
+                color: panel.theme.dim
+                font.pointSize: panel.theme.font.pointSize * 0.9
+            }
+            Label {
+                Layout.preferredWidth: sizeWidth.width
+                horizontalAlignment: Text.AlignRight
+                text: panel.view ? panel.view.headers[1] : ""
+                color: panel.theme.dim
+                font.pointSize: panel.theme.font.pointSize * 0.9
+            }
+            Label {
+                Layout.preferredWidth: dateWidth.width
+                text: panel.view ? panel.view.headers[2] : ""
+                color: panel.theme.dim
+                font.pointSize: panel.theme.font.pointSize * 0.9
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 1
+            color: panel.theme.lineColor
+            visible: panel.view !== null && !panel.view.quick_view
+        }
+
         // The listing.
         Item {
             id: list
@@ -73,14 +112,25 @@ Rectangle {
                         id: row
                         width: list.width
                         height: panel.theme.rowHeight
-                        color: modelData.cursor && panel.view.active ? palette.highlight
-                             : modelData.cursor ? palette.midlight
+                        // The cursor is a bar (strong in the active panel, faint in
+                        // the other); selected entries are tinted and bold.
+                        readonly property bool strong: modelData.cursor && panel.view.active
+                        color: strong ? palette.highlight
+                             : modelData.cursor ? panel.theme.lineColor
+                             : modelData.selected ? panel.theme.selectionTint
                              : "transparent"
                         readonly property color textColor:
-                            modelData.cursor && panel.view.active ? palette.highlightedText
-                            : modelData.selected ? panel.theme.accent
+                            strong ? palette.highlightedText
+                            : modelData.selected ? panel.theme.selectedText
                             : modelData.hidden ? panel.theme.dim
                             : palette.text
+                        // A mark at the left edge keeps selection visible under the cursor.
+                        Rectangle {
+                            visible: modelData.selected
+                            width: 3
+                            height: parent.height
+                            color: panel.theme.accent
+                        }
                         RowLayout {
                             anchors.fill: parent
                             anchors.leftMargin: 4
@@ -102,6 +152,7 @@ Rectangle {
                             }
                             Label {
                                 text: modelData.date
+                                Layout.preferredWidth: dateWidth.width
                                 color: row.textColor
                                 font: panel.theme.fixedFont
                             }
@@ -128,6 +179,7 @@ Rectangle {
             Layout.fillHeight: true
             visible: panel.view !== null && !!panel.view.quick_view
             view: panel.view ? panel.view.quick_view : null
+            compact: true
         }
 
         Label {

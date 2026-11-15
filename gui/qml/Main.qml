@@ -25,6 +25,14 @@ ApplicationWindow {
     readonly property font fixedFont: Qt.font({ family: "monospace", pointSize: font.pointSize })
     readonly property color accent: "#c8901a"
     readonly property color errorColor: "#c0392b"
+    readonly property bool dark: palette.window.hslLightness < 0.5
+    readonly property color headingColor: dark ? "#e0b050" : "#8a5a00"
+    readonly property color codeColor: dark ? "#8fd18f" : "#1d7a33"
+    readonly property color linkColor: dark ? "#7fb2ff" : "#1f5fbf"
+    readonly property color selectionTint: Qt.rgba(0.78, 0.56, 0.10, dark ? 0.22 : 0.16)
+    readonly property color selectedText: dark ? "#f0c060" : "#7a4d00"
+    readonly property color lineColor: Qt.rgba(palette.windowText.r, palette.windowText.g,
+                                               palette.windowText.b, 0.18)
     readonly property color dim: Qt.rgba(palette.windowText.r, palette.windowText.g,
                                          palette.windowText.b, 0.6)
 
@@ -37,12 +45,19 @@ ApplicationWindow {
         id: commander
         onRunningChanged: if (!running) Qt.quit()
         // Self test: save a picture of the window, then quit.
-        onScreenshotChanged: {
+        // Pictures load in the background, so give them a moment.
+        onScreenshotChanged: shotTimer.start()
+    }
+
+    Timer {
+        id: shotTimer
+        interval: 400
+        onTriggered: {
             const started = page.grabToImage((result) => {
-                result.saveToFile(screenshot)
-                quit()
+                result.saveToFile(commander.screenshot)
+                commander.quit()
             })
-            if (!started) quit()
+            if (!started) commander.quit()
         }
     }
 
@@ -50,7 +65,8 @@ ApplicationWindow {
 
     // Rows that fit: tell the application, which scrolls and pages with it.
     function reportSize() {
-        commander.resize(left.visibleRows, Math.max(1, Math.floor(body.height / rowHeight) - 4))
+        commander.resize(left.visibleRows, Math.max(1, Math.floor(body.height / rowHeight) - 4),
+                         Math.floor(body.width / fixedMetrics.averageCharacterWidth) - 4)
     }
 
     // Menus built from the command table, each item with its shortcut. The
@@ -112,6 +128,7 @@ ApplicationWindow {
             anchors.margins: 4
             spacing: 4
             onHeightChanged: window.reportSize()
+            onWidthChanged: window.reportSize()
 
             RowLayout {
                 Layout.fillWidth: true

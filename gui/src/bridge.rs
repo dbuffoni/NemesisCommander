@@ -72,6 +72,8 @@ pub struct CommanderRust {
     app: Option<App>,
     rows: usize,
     viewer_rows: usize,
+    /// Characters that fit across the viewer, for laying out documents.
+    columns: usize,
     /// The window has reported its real size.
     sized: bool,
     /// The last published screen, to skip unchanged updates.
@@ -92,6 +94,7 @@ impl Default for CommanderRust {
             app: None,
             rows: 20,
             viewer_rows: 20,
+            columns: 100,
             sized: false,
             last: String::new(),
         }
@@ -172,10 +175,11 @@ impl qobject::Commander {
         }
     }
 
-    pub(crate) fn resize(mut self: Pin<&mut Self>, rows: i32, viewer_rows: i32) {
+    pub(crate) fn resize(mut self: Pin<&mut Self>, rows: i32, viewer_rows: i32, columns: i32) {
         let mut rust = self.as_mut().rust_mut();
         rust.rows = rows.max(1) as usize;
         rust.viewer_rows = viewer_rows.max(1) as usize;
+        rust.columns = columns.max(20) as usize;
         rust.sized |= rows > 1;
         self.refresh();
     }
@@ -199,8 +203,9 @@ impl qobject::Commander {
     /// Publishes the screen, starts a requested editor and quits when asked.
     fn refresh(mut self: Pin<&mut Self>) {
         let mut rust = self.as_mut().rust_mut();
-        let (rows, viewer_rows) = (rust.rows, rust.viewer_rows);
+        let (rows, viewer_rows, columns) = (rust.rows, rust.viewer_rows, rust.columns);
         let Some(app) = rust.app.as_mut() else { return };
+        app.columns = columns;
         let running = app.is_running();
         let external = app.take_external();
         let json = serde_json::to_string(&Screen::of(app, rows, viewer_rows)).unwrap_or_default();
@@ -234,9 +239,9 @@ impl qobject::Commander {
         }
         let Some(test) = rust.test.as_mut() else { return };
         if let Some(chord) = test.keys.pop_front() {
-            match chord.parse() {
-                Ok(chord) => {
-                    let press = KeyPress { chord, text: None };
+            match chord.parse::<sc_config::KeyChord>() {
+                Ok(_) => {
+                    let press = KeyPress::chord(&chord);
                     rust.with_app(|app| app.handle_key(press));
                 }
                 Err(e) => eprintln!("sc-gui: self test: {e}"),

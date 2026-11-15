@@ -100,3 +100,28 @@ fn keys_reach_the_application() {
     assert!(run.screen["overlay"].is_null(), "Esc closed the dialog");
     assert_eq!(run.screen["panels"][1]["active"], true, "Tab switched panels");
 }
+
+#[test]
+fn every_viewer_draws_cleanly() {
+    let home = home();
+    for (name, data) in sc_preview::samples::all() {
+        std::fs::write(home.path().join("left").join(name), data).unwrap();
+    }
+    let shot = home.path().join("viewer.png");
+    // left/: .., budget.xlsx, guide.md, kickoff.pptx, notes.txt, offer.docx, report.pdf, torus.stl
+    for (downs, mode) in
+        [(1, "document"), (2, "document"), (5, "document"), (6, "pdf"), (7, "model")]
+    {
+        let keys = format!("{}F3", "Down ".repeat(downs));
+        let run = run(home.path(), &keys, Some(&shot));
+        assert_no_qml_warnings(&run);
+        let viewer = &run.screen["overlay"];
+        assert_eq!(viewer["mode"], mode, "{keys}: {viewer}");
+        if mode == "document" {
+            assert!(viewer["rich"].as_array().is_some_and(|l| !l.is_empty()), "{viewer}");
+        } else {
+            let url = viewer["image_url"].as_str().expect("a rendered picture");
+            assert!(url.starts_with("file://") && url.ends_with(".png"), "{url}");
+        }
+    }
+}

@@ -5446,6 +5446,7 @@ dependencies = [
  "sc-app",
  "sc-config",
  "sc-frontend",
+ "sc-preview",
  "sc-vfs",
  "serde_json",
  "tempfile",

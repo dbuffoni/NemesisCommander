@@ -228,7 +228,9 @@ mod tests {
     #[test]
     fn plain_files_need_no_preparation() {
         assert!(matches!(prepare("a.txt", b"hello", false), Ok(Prepared::Plain)));
-        assert!(matches!(prepare("a.md", b"# Hi", false), Ok(Prepared::Rich(blocks)) if blocks.len() == 1));
+        assert!(
+            matches!(prepare("a.md", b"# Hi", false), Ok(Prepared::Rich(blocks)) if blocks.len() == 1)
+        );
         assert!(prepare("a.pdf", b"%PDF-1.4", true).unwrap_err().contains("too large"));
         assert!(prepare("a.stl", b"nonsense", false).is_err());
     }

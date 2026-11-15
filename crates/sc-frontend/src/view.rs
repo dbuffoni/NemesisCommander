@@ -56,6 +56,8 @@ pub struct PanelView {
     pub loading: bool,
     /// The quick view, when this side shows it instead of a listing.
     pub quick_view: Option<ViewerView>,
+    /// Column titles (name, size, date), the sorted one with an arrow.
+    pub headers: [String; 3],
 }
 
 /// A tab of a panel.
@@ -224,7 +226,7 @@ pub struct ViewerView {
     /// rendered for it (PDF pages, models, remote pictures).
     pub image_url: Option<String>,
     /// Formatted lines (documents), from the scroll position.
-    pub rich: Vec<Vec<SpanView>>,
+    pub rich: Vec<RichLineView>,
     /// One line about what is shown (picture size, page, zoom).
     pub info: String,
     /// The keys of this mode, for the window's header.
@@ -247,6 +249,36 @@ pub struct SpanView {
     pub style: String,
 }
 
+/// A line of a formatted document, with what a window needs to draw it
+/// better than a terminal can.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RichLineView {
+    /// Its pieces of text.
+    pub spans: Vec<SpanView>,
+    /// Heading level 1-6, 0 for other lines.
+    pub heading: u8,
+    /// Only a line of `─` or `═` (under a heading, or a rule): a window
+    /// draws a thin line instead.
+    pub rule: bool,
+    /// A line of a code block, drawn on a shaded background.
+    pub code: bool,
+}
+
+impl RichLineView {
+    fn of(line: &sc_preview::rich::Line) -> Self {
+        let rule = !line.is_empty()
+            && line.iter().all(|s| {
+                s.style.mark && !s.text.is_empty() && s.text.chars().all(|c| c == '─' || c == '═')
+            });
+        RichLineView {
+            spans: line.iter().map(SpanView::of).collect(),
+            heading: line.iter().map(|s| s.style.heading).max().unwrap_or(0),
+            rule,
+            code: !line.is_empty() && line.iter().all(|s| s.style.code),
+        }
+    }
+}
+
 impl SpanView {
     fn of(span: &sc_preview::rich::Span) -> Self {
         let s = span.style;
@@ -254,7 +286,13 @@ impl SpanView {
         if s.heading > 0 {
             words.push(format!("h{}", s.heading));
         }
-        for (on, word) in [(s.bold, "bold"), (s.italic, "italic"), (s.code, "code"), (s.link, "link"), (s.mark, "mark")] {
+        for (on, word) in [
+            (s.bold, "bold"),
+            (s.italic, "italic"),
+            (s.code, "code"),
+            (s.link, "link"),
+            (s.mark, "mark"),
+        ] {
             if on {
                 words.push(word.to_owned());
             }
@@ -417,6 +455,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         error: panel.error().filter(|_| panel.entries().is_empty()).map(str::to_owned),
         loading: panel.is_loading(),
         quick_view: None,
+        headers: column_headers(panel.sort()),
     };
     app.scroll[index] = offset;
     view
@@ -472,8 +511,12 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
             }
         }
     };
+    let title = match app.workspace.active().current_entry() {
+        Some(entry) if entry.name != PARENT => format!("Quick view: {}", entry.name),
+        _ => "Quick view".into(),
+    };
     PanelView {
-        title: "Quick view".into(),
+        title,
         tabs: Vec::new(),
         active: false,
         rows: Vec::new(),
@@ -483,6 +526,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         error: None,
         loading: false,
         quick_view: Some(quick_view),
+        headers: Default::default(),
     }
 }
 
@@ -548,12 +592,12 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
     } else {
         None
     };
-    let rich: Vec<Vec<SpanView>> = viewer
-        .visible_rich(rows)
-        .iter()
-        .map(|line| line.iter().map(SpanView::of).collect())
-        .collect();
-    let lines = if viewer.shows_image() || !rich.is_empty() { Vec::new() } else { viewer.visible_rows(rows) };
+    let rich: Vec<RichLineView> = viewer.visible_rich(rows).iter().map(RichLineView::of).collect();
+    let lines = if viewer.shows_image() || !rich.is_empty() {
+        Vec::new()
+    } else {
+        viewer.visible_rows(rows)
+    };
     ViewerView {
         title: display_location(&viewer.path),
         mode: viewer.mode().into(),
@@ -590,6 +634,22 @@ pub fn viewer_keys(viewer: &Viewer) -> &'static str {
 }
 
 // ------------------------------------------------------ shared text helpers
+
+/// Column titles of a listing (name, size, date); the sorted column ends
+/// with ↑ (ascending) or ↓.
+pub fn column_headers(sort: sc_index::SortSpec) -> [String; 3] {
+    use sc_index::SortKey;
+    let arrow = if sort.descending { " ↓" } else { " ↑" };
+    let mark = |key: SortKey, title: &str| {
+        if sort.key == key { format!("{title}{arrow}") } else { title.to_owned() }
+    };
+    let name = if sort.key == SortKey::Extension {
+        format!("Name (by type){arrow}")
+    } else {
+        mark(SortKey::Name, "Name")
+    };
+    [name, mark(SortKey::Size, "Size"), mark(SortKey::Modified, "Modified")]
+}
 
 /// Last name of a tab's location.
 pub fn tab_title(panel: &Panel) -> String {

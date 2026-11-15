@@ -34,6 +34,7 @@ cxx-qt-build = { version = "0.10.0", features = ["link_qt_object_files"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+sc-preview.workspace = true
 
 [lints]
 workspace = true

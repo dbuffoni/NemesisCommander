@@ -46,16 +46,17 @@ impl Kind {
         }
     }
 
-    /// A short name for status lines: `markdown`, `pdf`, `document`,
-    /// `model`.
+    /// A short name for status lines, such as `Word document` or `PDF`.
     pub fn label(self) -> &'static str {
         match self {
-            Kind::Markdown => "markdown",
-            Kind::Office(office::Format::Sheet) => "spreadsheet",
-            Kind::Office(office::Format::Pptx | office::Format::Odp) => "slides",
-            Kind::Office(_) => "document",
-            Kind::Pdf => "pdf",
-            Kind::Model => "3d model",
+            Kind::Markdown => "Markdown",
+            Kind::Office(office::Format::Sheet) => "Spreadsheet",
+            Kind::Office(office::Format::Pptx) => "PowerPoint slides (text)",
+            Kind::Office(office::Format::Odp) => "OpenDocument slides (text)",
+            Kind::Office(office::Format::Docx) => "Word document",
+            Kind::Office(office::Format::Odt) => "OpenDocument text",
+            Kind::Pdf => "PDF",
+            Kind::Model => "3D model",
         }
     }
 }

@@ -221,13 +221,6 @@ Item {
                 anchors.margins: 8
                 view: dialogs.view
             }
-            Label {
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 8
-                text: "Esc: close    F4: hex    F2: wrap"
-                color: dialogs.theme.dim
-            }
         }
     }
 

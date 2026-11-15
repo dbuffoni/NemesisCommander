@@ -360,7 +360,9 @@ impl Viewer {
     /// the file is not a formatted document or shown in hex).
     pub fn visible_rich(&self, count: usize) -> Vec<Line> {
         match &self.rich {
-            Some(rich) if !self.hex => rich.lines.iter().skip(self.scroll).take(count).cloned().collect(),
+            Some(rich) if !self.hex => {
+                rich.lines.iter().skip(self.scroll).take(count).cloned().collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -389,12 +391,22 @@ impl Viewer {
         if self.hex {
             return String::new();
         }
-        let zoom = if self.zoom.factor > 1.0 { format!("  zoom {:.0}%", self.zoom.factor * 100.0) } else { String::new() };
+        let zoom = if self.zoom.factor > 1.0 {
+            format!("  zoom {:.0}%", self.zoom.factor * 100.0)
+        } else {
+            String::new()
+        };
         if let Some((_, pages, page)) = &self.pdf {
             return format!("page {} of {pages}{zoom}", page + 1);
         }
         if let Some((mesh, camera)) = &self.model {
-            return format!("{} triangles  turned {:.0}°, {:.0}°  zoom {:.0}%", mesh.triangle_count(), camera.yaw, camera.pitch, camera.zoom * 100.0);
+            return format!(
+                "{} triangles  turned {:.0}°, {:.0}°  zoom {:.0}%",
+                mesh.triangle_count(),
+                camera.yaw,
+                camera.pitch,
+                camera.zoom * 100.0
+            );
         }
         if let Some(kind) = self.kind.filter(|_| self.rich.is_some()) {
             return kind.label().to_owned();
@@ -444,7 +456,8 @@ impl Viewer {
         if self.data.is_none() {
             return;
         }
-        if self.image.is_some() || self.rich.is_some() || self.pdf.is_some() || self.model.is_some() {
+        if self.image.is_some() || self.rich.is_some() || self.pdf.is_some() || self.model.is_some()
+        {
             self.hex = !self.hex;
             self.scroll = 0;
             return;
@@ -479,7 +492,9 @@ impl Viewer {
                 ..(self.scroll + count).min(hex_rows(data.len())))
                 .map(|row| hex_row(data, row))
                 .collect(),
-            Some(_) if self.rich.is_some() => self.visible_rich(count).iter().map(line_text).collect(),
+            Some(_) if self.rich.is_some() => {
+                self.visible_rich(count).iter().map(line_text).collect()
+            }
             Some(_) => self.lines.iter().skip(self.scroll).take(count).cloned().collect(),
         }
     }

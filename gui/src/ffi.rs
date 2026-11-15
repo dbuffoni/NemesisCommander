@@ -42,7 +42,7 @@ pub mod qobject {
 
         /// How many rows fit in a panel and in the viewer.
         #[qinvokable]
-        fn resize(self: Pin<&mut Commander>, rows: i32, viewer_rows: i32);
+        fn resize(self: Pin<&mut Commander>, rows: i32, viewer_rows: i32, columns: i32);
     }
 
     impl cxx_qt::Threading for Commander {}

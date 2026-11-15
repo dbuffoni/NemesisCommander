@@ -13,8 +13,8 @@ use sc_transfer::JobState;
 
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
-    describe, entry_details, job_line, jobs_summary, panel_footer, scroll_offset, short_label,
-    size_text, tab_title,
+    column_headers, describe, entry_details, job_line, jobs_summary, panel_footer, scroll_offset,
+    short_label, size_text, tab_title,
 };
 use sc_frontend::{
     App, ChooseDialog, InputDialog, MenuState, Overlay, TextField, Viewer, display_location,
@@ -153,11 +153,12 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     } else {
         0
     });
+    let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{:<name_width$} {:>SIZE_WIDTH$}{}",
-        "Name",
-        "Size",
-        if show_date { format!(" {:<DATE_WIDTH$}", "Modified") } else { String::new() }
+        "{} {:>SIZE_WIDTH$}{}",
+        fit(&name_title, name_width),
+        size_title,
+        if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
     );
     let rows = inner.height as usize - 1;
     let index = side_index(side);

@@ -73,4 +73,12 @@ with zipfile.ZipFile('$h/Downloads/site-backup.zip', 'w', zipfile.ZIP_DEFLATED) 
     for root, _, files in os.walk('website'):
         for f in files: z.write(os.path.join(root, f))
 ")
+# Documents, a PDF and a 3D model from sc-preview's samples.
+if command -v cargo >/dev/null; then
+  root="$(cd "$(dirname "$0")/.." && pwd)"
+  (cd "$root" && cargo run -q -p sc-preview --example samples -- "$h/Documents" >/dev/null)
+  mkdir -p "$h/Projects/models"
+  mv "$h/Documents/torus.stl" "$h/Projects/models/"
+  rm "$h/Documents/guide.md"
+fi
 touch -d '2026-11-02 09:15' "$h/Documents/invoice-2026-114.txt" 2>/dev/null || true

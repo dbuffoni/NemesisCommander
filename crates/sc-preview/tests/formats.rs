@@ -243,8 +243,8 @@ fn models_are_drawn_shaded_and_centred() {
 
 #[test]
 fn kinds_of_real_names() {
-    assert_eq!(Kind::of("Q3 report.xlsx").map(Kind::label), Some("spreadsheet"));
-    assert_eq!(Kind::of("deck.pptx").map(Kind::label), Some("slides"));
+    assert_eq!(Kind::of("Q3 report.xlsx").map(Kind::label), Some("Spreadsheet"));
+    assert_eq!(Kind::of("deck.pptx").map(Kind::label), Some("PowerPoint slides (text)"));
 }
 
 #[test]
