@@ -199,11 +199,13 @@ impl Provider for LocalProvider {
 
     async fn read(&self, path: &VfsPath, offset: u64) -> Result<ReadStream> {
         let native = native(path)?;
-        let mut file =
-            tokio::fs::File::open(&native).await.map_err(|e| VfsError::from_io(path, e))?;
-        if file.metadata().await.map_err(|e| VfsError::from_io(path, e))?.is_dir() {
+        // Checked before opening: Windows refuses to open a directory with
+        // "access denied", which would hide the real problem.
+        if tokio::fs::metadata(&native).await.map_err(|e| VfsError::from_io(path, e))?.is_dir() {
             return Err(VfsError::IsADirectory(path.clone()));
         }
+        let mut file =
+            tokio::fs::File::open(&native).await.map_err(|e| VfsError::from_io(path, e))?;
         if offset > 0 {
             file.seek(SeekFrom::Start(offset)).await.map_err(|e| VfsError::from_io(path, e))?;
         }
