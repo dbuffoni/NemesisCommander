@@ -806,11 +806,8 @@ mod tests {
             self.inner.list(p).await
         }
         async fn read(&self, p: &VfsPath, offset: u64) -> Result<sc_vfs::ReadStream> {
-            if self
-                .failures
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
-                .is_ok()
-            {
+            if self.failures.load(Ordering::SeqCst) > 0 {
+                self.failures.fetch_sub(1, Ordering::SeqCst);
                 return Err(VfsError::Other("connection reset".into()));
             }
             self.inner.read(p, offset).await
