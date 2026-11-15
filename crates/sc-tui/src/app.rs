@@ -987,17 +987,11 @@ impl App {
                 if text.is_empty() || text == old || text.contains('/') {
                     return;
                 }
-                let Some(parent) = path.parent() else { return };
-                let target = parent.join(&text);
                 self.spawn_task(async move {
-                    let result = async {
-                        let provider = registry.provider_for(&path).await?;
-                        if provider.stat(&target).await.is_ok() {
-                            return Err(sc_vfs::VfsError::AlreadyExists(target.clone()));
-                        }
-                        provider.rename(&path, &target).await
-                    }
-                    .await;
+                    // Same rules as multi-rename: never replaces another
+                    // file, and case-only changes work everywhere.
+                    let result =
+                        apply_renames(&registry, &[path], std::slice::from_ref(&text)).await;
                     done(result.map(|()| String::new()), Some(text))
                 });
             }

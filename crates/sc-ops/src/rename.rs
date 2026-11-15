@@ -280,7 +280,11 @@ pub async fn apply_renames(
         .filter(|(from, to)| from != to)
         .collect();
     let sources: HashSet<&VfsPath> = moves.iter().map(|(from, _)| from).collect();
-    let needs_two_phases = moves.iter().any(|(_, to)| sources.contains(to));
+    // A change of letter case only (`a.txt` → `A.TXT`) also goes through a
+    // temporary name: on case-insensitive file systems (Windows, macOS) the
+    // new name "exists" because it is the file itself.
+    let needs_two_phases =
+        moves.iter().any(|(from, to)| sources.contains(to) || is_case_change(from, to));
 
     if !needs_two_phases {
         for (from, to) in &moves {
@@ -301,6 +305,15 @@ pub async fn apply_renames(
         rename_no_clobber(registry, &temp, to).await?;
     }
     Ok(())
+}
+
+/// `true` when `to` is `from` with only the letter case changed.
+fn is_case_change(from: &VfsPath, to: &VfsPath) -> bool {
+    from.parent() == to.parent()
+        && match (from.file_name(), to.file_name()) {
+            (Some(a), Some(b)) => a != b && a.to_lowercase() == b.to_lowercase(),
+            _ => false,
+        }
 }
 
 /// Renames, refusing to replace an existing file.
@@ -326,6 +339,15 @@ mod tests {
 
     fn paths(names: &[&str]) -> Vec<VfsPath> {
         names.iter().map(|n| VfsPath::parse(&format!("mem://m/dir/{n}")).unwrap()).collect()
+    }
+
+    #[test]
+    fn case_changes_are_detected() {
+        let p = |s: &str| VfsPath::parse(&format!("mem://m/dir/{s}")).unwrap();
+        assert!(is_case_change(&p("a.txt"), &p("A.TXT")));
+        assert!(!is_case_change(&p("a.txt"), &p("b.txt")));
+        assert!(!is_case_change(&p("a.txt"), &p("a.txt")));
+        assert!(!is_case_change(&p("a.txt"), &VfsPath::parse("mem://m/other/A.txt").unwrap()));
     }
 
     fn preview(names: &[&str], rule: RenameRule) -> Result<Vec<String>, RenameError> {
