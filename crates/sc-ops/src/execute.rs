@@ -364,7 +364,16 @@ impl Executor {
         if let Some(action) = policy.decide(&conflict, taken) {
             return Ok(Some(action));
         }
-        let resolution = resolver.resolve(&conflict).await;
+        let mut resolution = resolver.resolve(&conflict).await;
+        // A resolver may propose a name that is itself taken; pick the next
+        // free one rather than failing.
+        if let ConflictAction::RenameTo(name) = &resolution.action {
+            if taken(name) {
+                let original = conflict.destination.file_name().unwrap_or("file");
+                resolution.action =
+                    ConflictAction::RenameTo(crate::conflict::unique_name(original, taken));
+            }
+        }
         if resolution.apply_to_all {
             let standing = match &resolution.action {
                 ConflictAction::Overwrite => ConflictPolicy::Overwrite,

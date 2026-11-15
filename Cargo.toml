@@ -30,13 +30,15 @@ opt-level = 2
 # internal crates
 sc-vfs = { path = "crates/sc-vfs" }
 sc-hash = { path = "crates/sc-hash" }
-sc-providers = { path = "crates/sc-providers" }
+sc-providers = { path = "crates/sc-providers", default-features = false }
 sc-ops = { path = "crates/sc-ops" }
 sc-transfer = { path = "crates/sc-transfer" }
 sc-index = { path = "crates/sc-index" }
 sc-archive = { path = "crates/sc-archive" }
 sc-config = { path = "crates/sc-config" }
 sc-panel = { path = "crates/sc-panel" }
+sc-app = { path = "crates/sc-app", default-features = false }
+sc-tui = { path = "crates/sc-tui" }
 
 # async & utilities
 async-trait = "0.1.92"

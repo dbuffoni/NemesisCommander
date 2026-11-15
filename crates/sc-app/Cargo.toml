@@ -1,0 +1,29 @@
+[package]
+name = "sc-app"
+description = "Wires SuperCommander together: settings, providers and the transfer manager, for every front end."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+sc-vfs.workspace = true
+sc-providers.workspace = true
+sc-archive.workspace = true
+sc-config.workspace = true
+sc-ops.workspace = true
+sc-transfer.workspace = true
+
+[features]
+default = ["desktop"]
+# Everything a desktop build wants (recycle bin, ...). Server builds of
+# `sc` disable it.
+desktop = ["sc-providers/trash"]
+rar = ["sc-archive/rar"]
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true
