@@ -43,6 +43,11 @@ impl AppPaths {
         self.config_dir.join("config.toml")
     }
 
+    /// The controller's certificates for `sc serve` (`sc tls init`).
+    pub fn tls_dir(&self) -> PathBuf {
+        self.config_dir.join("tls")
+    }
+
     /// The SQLite transfer journal.
     pub fn journal_file(&self) -> PathBuf {
         self.data_dir.join("transfers.db")

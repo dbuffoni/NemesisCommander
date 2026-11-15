@@ -36,7 +36,8 @@ impl AppContext {
     pub fn load_from(paths: AppPaths) -> Result<Self, ConfigError> {
         let config = Config::load(&paths.config_file())?;
         let (keymap, warnings) = Keymap::with_overrides(&config.keys);
-        Ok(AppContext { paths, config, keymap, warnings, registry: Arc::new(build_registry()) })
+        let registry = Arc::new(build_registry_for(&paths));
+        Ok(AppContext { paths, config, keymap, warnings, registry })
     }
 
     /// Saves the settings back to the settings file.
@@ -85,8 +86,15 @@ impl AppContext {
     }
 }
 
-/// A registry with every provider compiled into this build.
+/// A registry with every provider compiled into this build, using the
+/// default locations for certificates.
 pub fn build_registry() -> ProviderRegistry {
+    build_registry_for(&AppPaths::detect())
+}
+
+/// A registry with every provider compiled into this build; `scs://` uses
+/// the certificates of `paths`.
+pub fn build_registry_for(paths: &AppPaths) -> ProviderRegistry {
     let mut registry = sc_providers::default_registry();
     sc_archive::register_archive_providers(&mut registry);
     registry.register(sc_agent::AgentFactory);
@@ -95,6 +103,7 @@ pub fn build_registry() -> ProviderRegistry {
     registry.register(sc_webdav::WebDavFactory::http());
     registry.register(sc_s3::S3Factory);
     registry.register(sc_smb::SmbFactory);
+    registry.register(sc_agent::ServeFactory::new(paths.tls_dir()));
     registry
 }
 
@@ -110,7 +119,7 @@ mod tests {
         assert!(context.warnings.is_empty());
         assert!(context.registry.schemes().contains(&"zip"));
         assert!(context.registry.schemes().contains(&"agent"));
-        for scheme in ["sftp", "dav", "davs", "s3", "smb"] {
+        for scheme in ["sftp", "dav", "davs", "s3", "smb", "scs"] {
             assert!(context.registry.schemes().contains(&scheme), "{scheme}");
         }
 

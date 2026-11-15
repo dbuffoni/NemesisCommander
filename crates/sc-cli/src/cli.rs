@@ -7,7 +7,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 /// Run without a command to start the terminal UI. Locations can be local
 /// paths or URIs such as sftp://user@host/dir, smb://host/share/dir,
 /// davs://host/dir, s3://bucket/dir,
-/// agent://host/dir or
+/// agent://host/dir, scs://host:port/dir (sc serve) or
 /// zip:///path/archive.zip!/inside.
 #[derive(Debug, Parser)]
 #[command(name = "sc", version, args_conflicts_with_subcommands = true)]
@@ -51,6 +51,11 @@ pub enum Command {
     Keys,
     /// Serve a remote controller over standard input/output (Linux only).
     Agent(AgentArgs),
+    /// Serve this machine permanently over mutual TLS (Linux only).
+    Serve(ServeArgs),
+    /// Certificates for `sc serve`: create the authority, issue server
+    /// bundles.
+    Tls(TlsArgs),
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -132,6 +137,22 @@ pub struct TransferArgs {
     /// `sc jobs run`).
     #[arg(long)]
     pub queue: bool,
+    /// Between two `sc serve` servers (scs://): how the data travels.
+    /// `auto` tries direct, then reverse, then through this machine.
+    #[arg(long, value_enum, default_value_t = RouteArg::Auto)]
+    pub route: RouteArg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum RouteArg {
+    /// Direct, then reverse, then through this machine.
+    Auto,
+    /// The destination server pulls from the source server.
+    Direct,
+    /// The source server pushes to the destination server.
+    Reverse,
+    /// Through this machine, like any other copy.
+    Controller,
 }
 
 #[derive(Debug, Args)]
@@ -342,4 +363,46 @@ pub struct AgentArgs {
     /// Refuse every modification.
     #[arg(long)]
     pub read_only: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct ServeArgs {
+    /// The server's certificate bundle (made by `sc tls server`).
+    #[arg(long, value_name = "DIR")]
+    pub tls: String,
+    /// Address and port to listen on.
+    #[arg(long, default_value = "0.0.0.0:7443")]
+    pub listen: String,
+    /// Only serve paths below these roots (repeatable). Default: everything.
+    #[arg(long = "root")]
+    pub roots: Vec<String>,
+    /// Refuse every modification.
+    #[arg(long)]
+    pub read_only: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct TlsArgs {
+    #[command(subcommand)]
+    pub action: TlsAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TlsAction {
+    /// Create this machine's certificate authority and controller
+    /// certificate (once).
+    Init,
+    /// Issue a certificate bundle for a server, to copy there and pass to
+    /// `sc serve --tls`.
+    Server {
+        /// Names the server is reached by: host names or IP addresses, as
+        /// written in scs:// locations.
+        #[arg(required = true)]
+        names: Vec<String>,
+        /// Folder to write the bundle into.
+        #[arg(long, value_name = "DIR")]
+        out: String,
+    },
+    /// Print the folder holding this machine's certificates.
+    Path,
 }

@@ -33,6 +33,11 @@ service Agent {
   rpc SetAttributes(SetAttributesRequest) returns (Empty);
   rpc Checksum(ChecksumRequest) returns (ChecksumReply);
   rpc CreateSymlink(SymlinkRequest) returns (Empty);
+
+  // Server-to-server copy (1.1, `sc serve` only, controller only): this
+  // agent connects to another `sc serve` and copies from it (pull) or to
+  // it (push), reporting progress until the copy ends.
+  rpc Transfer(TransferRequest) returns (stream TransferProgress);
 }
 
 message Empty {}
@@ -42,6 +47,10 @@ message HelloRequest {
   string protocol = 1;
   // The controller's program version, for logs.
   string client_version = 2;
+  // (1.1) Another server connecting to `sc serve` for a server-to-server
+  // copy: the transfer token the controller signed for this server. It
+  // decides every path the connection may use.
+  string token = 3;
 }
 
 message HelloReply {
@@ -143,4 +152,31 @@ message ChecksumReply {
 message SymlinkRequest {
   string path = 1;
   string target = 2;
+}
+
+message TransferRequest {
+  // The other server, as `host:port`; `host` must be one of the names in
+  // its certificate.
+  string peer = 1;
+  // Transfer token for the other server, signed by the controller.
+  string token = 2;
+  // false: copy `sources` on the peer into `destination` here (pull).
+  // true: copy `sources` here into `destination` on the peer (push).
+  bool push = 3;
+  repeated string sources = 4;
+  // The folder the sources are copied into.
+  string destination = 5;
+  // What to do when a file exists: "fail", "overwrite", "overwrite-if-newer",
+  // "overwrite-if-different-size", "skip" or "keep-both". Empty: "fail".
+  string conflict = 6;
+}
+
+message TransferProgress {
+  uint64 bytes_done = 1;
+  uint64 bytes_total = 2;
+  uint64 files_done = 3;
+  uint64 files_total = 4;
+  // The last message: the copy ended, with `failures` if any.
+  bool finished = 5;
+  repeated string failures = 6;
 }

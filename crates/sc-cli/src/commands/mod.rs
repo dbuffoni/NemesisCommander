@@ -4,6 +4,7 @@ mod archive;
 mod files;
 mod find;
 mod rename;
+mod serve;
 mod settings;
 mod transfer;
 
@@ -41,6 +42,8 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Config(args) => settings::config(context, args),
         Command::Keys => settings::keys(&context),
         Command::Agent(args) => agent(context, args).await,
+        Command::Serve(args) => serve::serve(args).await,
+        Command::Tls(args) => serve::tls(&context, args),
     }
 }
 

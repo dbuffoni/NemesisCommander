@@ -20,8 +20,9 @@ pub mod pb {
 }
 
 /// Version of the protocol in this build. The major number must match on
-/// both sides; minor versions only add fields or calls.
-pub const PROTOCOL_VERSION: &str = "1.0";
+/// both sides; minor versions only add fields or calls (1.1: transfer
+/// tokens and `Transfer`, for `sc serve`).
+pub const PROTOCOL_VERSION: &str = "1.1";
 
 /// Whether two protocol versions can talk to each other.
 pub fn compatible(ours: &str, theirs: &str) -> bool {

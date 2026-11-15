@@ -21,6 +21,7 @@ taken while implementing it.
 | 0011 | [S3 with a small signed-request client, settings from ~/.aws](0011-s3.md) | Accepted |
 | 0012 | [SMB with the pure-Rust smb2 client](0012-smb.md) | Accepted |
 | 0013 | [The Qt window draws a screen description; QML stays thin](0013-qt-gui.md) | Accepted |
+| 0014 | [`sc serve`: mutual TLS from a private authority, signed one-time tokens](0014-serve-mtls-and-tokens.md) | Accepted |
 
 Template:
 

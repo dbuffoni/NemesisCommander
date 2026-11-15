@@ -13,7 +13,7 @@ use sc_transfer::{JobId, JobKind, JobOptions, JobSpec, JobState, TokenBucket};
 use serde::Serialize;
 
 use super::CmdResult;
-use crate::cli::{ConflictArg, JobsAction, JobsArgs, TransferArgs, VerifyArg};
+use crate::cli::{ConflictArg, JobsAction, JobsArgs, RouteArg, TransferArgs, VerifyArg};
 use crate::output::{Progress, json_line};
 use crate::{location, prompt};
 
@@ -57,6 +57,17 @@ pub async fn copy_or_move(context: &AppContext, args: TransferArgs, is_move: boo
         }
         None => settings.bandwidth_limit_kib * 1024,
     };
+
+    let between_servers = sc_agent::route::ServerCopy {
+        sources: &paths,
+        destination: &destination,
+        conflict: if conflict == ConflictPolicy::Ask { ConflictPolicy::Fail } else { conflict },
+    };
+    if !is_move && !args.queue && between_servers.is_between_servers() {
+        if let Some(code) = server_to_server(context, &between_servers, args.route).await? {
+            return Ok(code);
+        }
+    }
 
     if args.queue {
         let manager = context.transfer_manager()?;
@@ -125,6 +136,56 @@ pub async fn copy_or_move(context: &AppContext, args: TransferArgs, is_move: boo
         eprintln!("sc: {} item(s) skipped", report.skipped);
     }
     Ok(if report.failed.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) })
+}
+
+/// Copies between two `sc serve` servers along `route`. Returns `None` when
+/// the copy should go through this machine instead (the normal copy).
+async fn server_to_server(
+    context: &AppContext,
+    copy: &sc_agent::route::ServerCopy<'_>,
+    route: RouteArg,
+) -> Result<Option<ExitCode>, Box<dyn std::error::Error>> {
+    use sc_agent::route::{Outcome, Route, copy_between_servers};
+    let routes = match route {
+        RouteArg::Auto => vec![Route::Direct, Route::Reverse],
+        RouteArg::Direct => vec![Route::Direct],
+        RouteArg::Reverse => vec![Route::Reverse],
+        RouteArg::Controller => {
+            eprintln!("sc: route: {}", Route::Controller);
+            return Ok(None);
+        }
+    };
+    let identity = sc_agent::ServeFactory::new(context.paths.tls_dir()).identity()?;
+    let mut progress: Option<Progress> = None;
+    let mut shown = 0u64;
+    let outcome = copy_between_servers(&identity, copy, &routes, |message| {
+        let bar = progress.get_or_insert_with(|| Progress::new(message.bytes_total));
+        bar.add(message.bytes_done.saturating_sub(shown));
+        shown = shown.max(message.bytes_done);
+    })
+    .await?;
+    if let Some(bar) = &mut progress {
+        bar.finish();
+    }
+    match outcome {
+        Outcome::Copied(route, last) => {
+            eprintln!("sc: route: {route}");
+            for failure in &last.failures {
+                eprintln!("sc: {failure}");
+            }
+            Ok(Some(if last.failures.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) }))
+        }
+        Outcome::UseController(reasons) => {
+            for reason in &reasons {
+                eprintln!("sc: route {reason}");
+            }
+            if route != RouteArg::Auto {
+                return Err("the servers cannot reach each other on the requested route".into());
+            }
+            eprintln!("sc: route: {}", Route::Controller);
+            Ok(None)
+        }
+    }
 }
 
 #[derive(Serialize)]

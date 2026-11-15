@@ -1,14 +1,17 @@
 //! The agent side: serves the local file system of the machine it runs on,
-//! within configured limits, to one controller.
+//! within configured limits, to a controller (or, under `sc serve`, to
+//! another server holding a transfer token).
 
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
 use futures::StreamExt;
 use sc_proto::convert::{entry_to_pb, error_to_status, ns_to_time};
 use sc_proto::pb::{self, agent_server::Agent, write_request::Part};
 use sc_providers::local::LocalProvider;
+use sc_tls::{Grant, ServerIdentity, TokenError};
 use sc_vfs::{Provider, SetAttributes, VfsError, VfsPath, WriteMode, WriteOptions};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -39,23 +42,78 @@ enum Use {
     Content,
 }
 
+/// Who the service is talking to.
+pub(crate) enum Session {
+    /// The controller: `sc agent --stdio` under SSH, or a connection to `sc
+    /// serve` presenting the controller's certificate. `serve` is set for
+    /// the latter, which may also start server-to-server transfers.
+    Controller {
+        /// The `sc serve` state.
+        serve: Option<Arc<ServeState>>,
+    },
+    /// Another server under `sc serve`: it must present a transfer token in
+    /// `Hello`, and every path it uses must be covered by that token.
+    Peer {
+        /// The `sc serve` state.
+        serve: Arc<ServeState>,
+        /// The token's grant, once `Hello` checked it.
+        grant: Mutex<Option<Grant>>,
+    },
+}
+
+/// What `sc serve` shares between its connections.
+pub struct ServeState {
+    /// The server's certificates and the controller's token key.
+    pub identity: ServerIdentity,
+    /// Tokens already used, by id, with their expiry: a token opens one
+    /// connection only.
+    used: Mutex<std::collections::HashMap<String, u64>>,
+}
+
+impl ServeState {
+    /// The state of a server with `identity`.
+    pub fn new(identity: ServerIdentity) -> Self {
+        ServeState { identity, used: Mutex::default() }
+    }
+
+    /// Checks `token` and marks it used.
+    fn redeem(&self, token: &str) -> Result<Grant, TokenError> {
+        let grant = self.identity.verify(token)?;
+        let mut used = self.used.lock().unwrap_or_else(|e| e.into_inner());
+        let now = sc_tls::token::now();
+        used.retain(|_, expires| *expires >= now);
+        if used.insert(grant.id.clone(), grant.expires).is_some() {
+            return Err(TokenError::Used);
+        }
+        Ok(grant)
+    }
+}
+
 /// The gRPC service of `sc agent`.
 pub struct AgentService {
     local: LocalProvider,
-    limits: Limits,
+    limits: Arc<Limits>,
+    session: Session,
 }
 
 impl AgentService {
-    /// A service enforcing `limits`. Roots are resolved now, so they must
-    /// exist.
-    pub fn new(mut limits: Limits) -> io::Result<Self> {
-        for root in &mut limits.roots {
-            *root = std::fs::canonicalize(&*root)?;
-        }
-        Ok(AgentService { local: LocalProvider::new(), limits })
+    /// A service for the controller, enforcing `limits`. Roots are resolved
+    /// now, so they must exist.
+    pub fn new(limits: Limits) -> io::Result<Self> {
+        Ok(Self::with_session(
+            Arc::new(resolve_roots(limits)?),
+            Session::Controller { serve: None },
+        ))
     }
 
-    /// Checks `path` against the limits and turns it into a local path.
+    /// A service for one connection with `session`; `limits` must come from
+    /// [`resolve_roots`].
+    pub(crate) fn with_session(limits: Arc<Limits>, session: Session) -> Self {
+        AgentService { local: LocalProvider::new(), limits, session }
+    }
+
+    /// Checks `path` against the limits (and, for another server, its
+    /// token) and turns it into a local path.
     fn check(&self, path: &str, use_: Use, modifies: bool) -> Result<VfsPath, Status> {
         if modifies && self.limits.read_only {
             return Err(Status::permission_denied(format!("{path}: the agent is read-only")));
@@ -64,6 +122,17 @@ impl AgentService {
             return Err(Status::invalid_argument(format!("{path}: paths must be absolute")));
         }
         let lexical = normalize(Path::new(path));
+        if let Session::Peer { grant, .. } = &self.session {
+            let grant = grant.lock().unwrap_or_else(|e| e.into_inner());
+            let allowed = grant
+                .as_ref()
+                .is_some_and(|grant| grant.allows(&lexical.to_string_lossy(), modifies));
+            if !allowed {
+                return Err(Status::permission_denied(format!(
+                    "{path}: not covered by the transfer token"
+                )));
+            }
+        }
         if !self.limits.roots.is_empty() {
             let resolved = resolve(&lexical, use_);
             if !self.limits.roots.iter().any(|root| resolved.starts_with(root)) {
@@ -84,6 +153,15 @@ impl AgentService {
             hash_algorithms: vec!["blake3".into(), "xxh3".into(), "sha256".into()],
         }
     }
+}
+
+/// Resolves the roots of `limits` (they must exist), so links and `..` in
+/// them do not matter later.
+pub(crate) fn resolve_roots(mut limits: Limits) -> io::Result<Limits> {
+    for root in &mut limits.roots {
+        *root = std::fs::canonicalize(&*root)?;
+    }
+    Ok(limits)
 }
 
 /// Removes `.` and resolves `..` without touching the file system.
@@ -144,7 +222,18 @@ type Reply<T> = Result<Response<T>, Status>;
 
 #[tonic::async_trait]
 impl Agent for AgentService {
-    async fn hello(&self, _: Request<pb::HelloRequest>) -> Reply<pb::HelloReply> {
+    async fn hello(&self, request: Request<pb::HelloRequest>) -> Reply<pb::HelloReply> {
+        if let Session::Peer { serve, grant } = &self.session {
+            let token = request.into_inner().token;
+            if token.is_empty() {
+                return Err(Status::permission_denied(
+                    "servers need a transfer token from the controller",
+                ));
+            }
+            let redeemed =
+                serve.redeem(&token).map_err(|e| Status::permission_denied(e.to_string()))?;
+            *grant.lock().unwrap_or_else(|e| e.into_inner()) = Some(redeemed);
+        }
         Ok(Response::new(self.hello_reply()))
     }
 
@@ -269,6 +358,32 @@ impl Agent for AgentService {
         let path = self.check(&request.path, Use::Entry, true)?;
         self.local.create_symlink(&path, &request.target).await.map_err(status)?;
         Ok(Response::new(pb::Empty {}))
+    }
+
+    type TransferStream = BoxStream<pb::TransferProgress>;
+
+    async fn transfer(&self, request: Request<pb::TransferRequest>) -> Reply<Self::TransferStream> {
+        let serve = match &self.session {
+            Session::Controller { serve: Some(serve) } => serve.clone(),
+            Session::Controller { serve: None } => {
+                return Err(Status::unimplemented(
+                    "server-to-server copies need `sc serve` on both servers",
+                ));
+            }
+            Session::Peer { .. } => {
+                return Err(Status::permission_denied("only the controller starts transfers"));
+            }
+        };
+        let request = request.into_inner();
+        // The local side is checked here; the peer checks its side against
+        // the token.
+        let local: Vec<String> =
+            if request.push { request.sources.clone() } else { vec![request.destination.clone()] };
+        for path in &local {
+            self.check(path, Use::Content, !request.push)?;
+        }
+        let progress = crate::transfer::run(serve, request).await?;
+        Ok(Response::new(progress))
     }
 }
 

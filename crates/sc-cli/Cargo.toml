@@ -23,6 +23,7 @@ sc-panel.workspace = true
 sc-app = { workspace = true, default-features = false }
 sc-tui = { workspace = true, optional = true }
 sc-agent.workspace = true
+sc-tls.workspace = true
 async-trait.workspace = true
 clap.workspace = true
 serde.workspace = true

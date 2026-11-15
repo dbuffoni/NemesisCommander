@@ -1,5 +1,5 @@
-//! The controller side: an `agent://` [`Provider`] that talks to a remote
-//! `sc agent` over any byte stream.
+//! The controller side: an `agent://` (or `scs://`) [`Provider`] that talks
+//! to a remote `sc agent` or `sc serve` over any byte stream.
 
 use std::future::Future;
 use std::io;
@@ -25,9 +25,11 @@ use tonic::transport::Channel;
 /// Size of the data messages sent by writes.
 pub const WRITE_CHUNK: usize = 256 * 1024;
 
-/// A connected agent. Paths are `agent://<authority>/<absolute path>`.
+/// A connected agent. Paths are `agent://<authority>/<absolute path>`
+/// (started over SSH) or `scs://<host>:<port>/<absolute path>` (`sc serve`).
 pub struct AgentProvider {
     client: AgentClient<Channel>,
+    scheme: &'static str,
     hello: pb::HelloReply,
     /// Keeps the transport (for example the `ssh` process) alive.
     _keep_alive: Option<Box<dyn Send + Sync>>,
@@ -39,12 +41,24 @@ impl AgentProvider {
     /// `keep_alive` is dropped together with the provider (pass the child
     /// process that carries the connection).
     pub async fn handshake(
+        client: AgentClient<Channel>,
+        keep_alive: Option<Box<dyn Send + Sync>>,
+    ) -> std::result::Result<Self, String> {
+        Self::handshake_with(client, "agent", None, keep_alive).await
+    }
+
+    /// Performs the handshake for paths of `scheme`, presenting `token` when
+    /// this is a server contacting another one for a server-to-server copy.
+    pub async fn handshake_with(
         mut client: AgentClient<Channel>,
+        scheme: &'static str,
+        token: Option<&str>,
         keep_alive: Option<Box<dyn Send + Sync>>,
     ) -> std::result::Result<Self, String> {
         let request = pb::HelloRequest {
             protocol: sc_proto::PROTOCOL_VERSION.into(),
             client_version: crate::VERSION.into(),
+            token: token.unwrap_or_default().into(),
         };
         let hello = client.hello(request).await.map_err(|s| s.message().to_owned())?.into_inner();
         if !sc_proto::compatible(sc_proto::PROTOCOL_VERSION, &hello.protocol) {
@@ -54,7 +68,13 @@ impl AgentProvider {
                 sc_proto::PROTOCOL_VERSION
             ));
         }
-        Ok(AgentProvider { client, hello, _keep_alive: keep_alive })
+        Ok(AgentProvider { client, scheme, hello, _keep_alive: keep_alive })
+    }
+
+    /// The protocol client, for calls beyond the [`Provider`] interface
+    /// (server-to-server transfers).
+    pub fn raw_client(&self) -> AgentClient<Channel> {
+        self.client.clone()
     }
 
     /// Keeps `value` (for example the process carrying the connection) alive
@@ -75,6 +95,15 @@ impl AgentProvider {
     }
 }
 
+impl std::fmt::Debug for AgentProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AgentProvider")
+            .field("scheme", &self.scheme)
+            .field("agent_version", &self.hello.agent_version)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The remote path of `path` (the agent only sees absolute paths).
 fn remote(path: &VfsPath) -> String {
     path.path().to_owned()
@@ -87,7 +116,7 @@ fn request(path: &VfsPath) -> pb::PathRequest {
 #[async_trait]
 impl Provider for AgentProvider {
     fn scheme(&self) -> &str {
-        "agent"
+        self.scheme
     }
 
     fn capabilities(&self) -> Capabilities {

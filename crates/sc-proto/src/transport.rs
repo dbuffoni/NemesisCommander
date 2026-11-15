@@ -276,6 +276,13 @@ mod tests {
         ) -> Result<Response<pb::Empty>, Status> {
             Err(Status::unimplemented(""))
         }
+        type TransferStream = tonic::codegen::BoxStream<pb::TransferProgress>;
+        async fn transfer(
+            &self,
+            _: Request<pb::TransferRequest>,
+        ) -> Result<Response<Self::TransferStream>, Status> {
+            Err(Status::unimplemented(""))
+        }
     }
 
     #[tokio::test]
@@ -284,7 +291,11 @@ mod tests {
         let server = tokio::spawn(serve(HelloOnly, server_side));
         let mut client = connect(client_side).await.unwrap();
         let reply = client
-            .hello(pb::HelloRequest { protocol: "1.0".into(), client_version: "t".into() })
+            .hello(pb::HelloRequest {
+                protocol: "1.0".into(),
+                client_version: "t".into(),
+                token: String::new(),
+            })
             .await
             .unwrap()
             .into_inner();
