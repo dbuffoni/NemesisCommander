@@ -345,6 +345,10 @@ impl Provider for WebDavProvider {
             StatusCode::METHOD_NOT_ALLOWED => Err(VfsError::AlreadyExists(path.clone())),
             // 409: the parent folder is missing.
             StatusCode::CONFLICT => Err(VfsError::NotFound(path.clone())),
+            status if status.is_success() => Ok(()),
+            // Some servers fail with a generic error when a file is in
+            // the way: report that plainly.
+            _ if self.stat(path).await.is_ok() => Err(VfsError::AlreadyExists(path.clone())),
             _ => check(response, path).map(drop),
         }
     }
