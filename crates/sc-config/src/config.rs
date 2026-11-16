@@ -139,6 +139,10 @@ pub struct Bookmark {
     pub name: String,
     /// The location, as a VFS URI.
     pub path: String,
+    /// Folders for the other panel, as VFS URIs. Opening the bookmark
+    /// shows the only one there, or asks which one when there are several.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<String>,
 }
 
 /// A saved remote location. Secrets are never stored: authentication uses
@@ -248,7 +252,11 @@ mod tests {
         let mut config = Config::default();
         config.transfers.verify = VerifyMode::Full;
         config.keys.insert("panel.copy".into(), vec!["Ctrl+C".into()]);
-        config.bookmarks.push(Bookmark { name: "logs".into(), path: "sftp://srv/var/log".into() });
+        config.bookmarks.push(Bookmark {
+            name: "logs".into(),
+            path: "sftp://srv/var/log".into(),
+            targets: vec!["/home/me/logs".into(), "s3://backup/logs".into()],
+        });
         config.connections.push(Connection {
             name: "build".into(),
             uri: "agent://build01/".into(),
@@ -263,5 +271,13 @@ mod tests {
         config.save(&path).unwrap();
         assert_eq!(Config::load(&path).unwrap(), config);
         assert!(!path.with_extension("toml.tmp").exists());
+    }
+
+    #[test]
+    fn bookmark_targets_are_optional() {
+        let old = "[[bookmarks]]\nname = \"logs\"\npath = \"/var/log\"\n";
+        let config = Config::from_toml(old, "t").unwrap();
+        assert!(config.bookmarks[0].targets.is_empty(), "files written before targets still load");
+        assert!(!config.to_toml().contains("targets"), "no targets, no key");
     }
 }

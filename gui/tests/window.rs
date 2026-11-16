@@ -82,6 +82,8 @@ fn every_dialog_draws_cleanly() {
         ("F7", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
+        // A bookmark with two targets asks which one the other panel shows.
+        ("Ctrl+Alt+D Alt+O Ctrl+Alt+D Ctrl+D Enter", "choose"),
         ("Alt+F1", "choose"),
         ("Ctrl+N", "choose"),
         ("Down F3", "viewer"),

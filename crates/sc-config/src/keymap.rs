@@ -121,6 +121,7 @@ actions! {
     Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N"];
     Bookmarks     = "nav.bookmarks",        Navigate, true,  "Bookmarks…",            ["Ctrl+D"];
     AddBookmark   = "nav.add-bookmark",     Navigate, false, "Bookmark this folder",  ["Ctrl+Shift+D"];
+    AddBookmarkTarget = "nav.add-bookmark-target", Navigate, false, "Bookmark this folder with the other panel's", ["Ctrl+Alt+D"];
     NewTab        = "nav.new-tab",          Navigate, false, "New tab",               ["Ctrl+T"];
     CloseTab      = "nav.close-tab",        Navigate, false, "Close tab",             ["Ctrl+W"];
     NextTab       = "nav.next-tab",         Navigate, false, "Next tab",              ["Ctrl+Tab", "Ctrl+PageDown"];

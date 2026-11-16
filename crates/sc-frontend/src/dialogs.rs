@@ -166,6 +166,8 @@ pub struct ConfirmDialog {
 pub enum ChoosePurpose {
     /// Open a bookmark (Delete removes it).
     Bookmarks,
+    /// Open one of a bookmark's target folders in the other panel.
+    BookmarkTarget(Vec<String>),
     /// Open a drive or saved connection, one per row (the last row asks
     /// for a new connection; Delete removes a saved one).
     Drives(Vec<crate::drives::Drive>),
