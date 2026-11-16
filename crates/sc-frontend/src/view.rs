@@ -124,8 +124,12 @@ pub enum OverlayView {
         menus: Vec<MenuView>,
         /// Open menu.
         menu: usize,
-        /// Highlighted item.
+        /// Highlighted item (among `shown`).
         item: usize,
+        /// What was typed to filter; empty when not filtering.
+        filter: String,
+        /// The commands listed: the open menu's, or those matching `filter`.
+        shown: Vec<MenuItem>,
     },
     /// A one-line question.
     Input {
@@ -235,6 +239,8 @@ pub struct MenuItem {
     pub label: String,
     /// First shortcut, empty when none.
     pub shortcut: String,
+    /// The menu it is in (`Files`).
+    pub menu: String,
 }
 
 /// The viewer or quick view.
@@ -421,16 +427,19 @@ pub fn menus(app: &App) -> Vec<MenuView> {
     (0..Category::ALL.len())
         .map(|index| MenuView {
             title: Category::ALL[index].title().to_owned(),
-            items: MenuState::items(index)
-                .into_iter()
-                .map(|action| MenuItem {
-                    id: action.id().to_owned(),
-                    label: action.label().to_owned(),
-                    shortcut: app.context().keymap.shortcut_text(action),
-                })
-                .collect(),
+            items: MenuState::items(index).into_iter().map(|a| menu_item(app, a)).collect(),
         })
         .collect()
+}
+
+/// One command as a menu shows it.
+pub fn menu_item(app: &App, action: Action) -> MenuItem {
+    MenuItem {
+        id: action.id().to_owned(),
+        label: action.label().to_owned(),
+        shortcut: app.context().keymap.shortcut_text(action),
+        menu: action.category().title().to_owned(),
+    }
 }
 
 /// The first visible row of a list of `total` rows showing `rows` rows, so
@@ -577,9 +586,13 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
                 })
                 .collect(),
         },
-        Overlay::Menu(state) => {
-            OverlayView::Menu { menus: menus(app), menu: state.menu, item: state.item }
-        }
+        Overlay::Menu(state) => OverlayView::Menu {
+            menus: menus(app),
+            menu: state.menu,
+            item: state.item,
+            filter: state.filter.clone(),
+            shown: state.shown().into_iter().map(|a| menu_item(app, a)).collect(),
+        },
         Overlay::Input(dialog) => OverlayView::Input {
             title: dialog.title.clone(),
             prompt: dialog.prompt.clone(),

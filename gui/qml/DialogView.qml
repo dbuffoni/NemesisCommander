@@ -119,10 +119,13 @@ Item {
     Component {
         id: menu
         Box {
+            readonly property bool filtering: dialogs.view.filter !== ""
             title: "Menu"
-            hint: "Left Right: menu    Up Down: command    Enter: run    Esc: close"
+            hint: filtering ? "Up Down: command    Enter: run    Backspace: erase    Esc: all menus"
+                            : "Type to find    Left Right: menu    Up Down: command    Enter: run    Esc: close"
             RowLayout {
                 spacing: 16
+                visible: !filtering
                 Repeater {
                     model: dialogs.view.menus
                     delegate: Label {
@@ -133,10 +136,24 @@ Item {
                     }
                 }
             }
+            // What was typed, while filtering.
+            Label {
+                visible: filtering
+                text: "Find: " + dialogs.view.filter + "_"
+                font.bold: true
+                color: dialogs.theme.accent
+            }
             CursorList {
                 cursor: dialogs.view.item
-                model: dialogs.view.menus[dialogs.view.menu].items.map(
-                    (item) => item.shortcut ? item.label + "    " + item.shortcut : item.label)
+                model: dialogs.view.shown.map((item) => {
+                    const label = filtering ? item.menu + ": " + item.label : item.label
+                    return item.shortcut ? label + "    " + item.shortcut : label
+                })
+            }
+            Label {
+                visible: filtering && dialogs.view.shown.length === 0
+                text: "Nothing matches"
+                color: dialogs.theme.dim
             }
         }
     }

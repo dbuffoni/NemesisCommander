@@ -68,7 +68,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if let Some(overlay) = &app.overlay {
         match overlay {
             Overlay::Help => draw_help(frame, app),
-            Overlay::Menu(menu) => draw_menu(frame, app, *menu),
+            Overlay::Menu(menu) => draw_menu(frame, app, menu),
             Overlay::Input(dialog) => draw_input(frame, dialog),
             Overlay::Confirm(dialog) => {
                 let mut lines: Vec<Line> =
@@ -351,7 +351,7 @@ fn draw_help(frame: &mut Frame, app: &App) {
     frame.render_widget(Paragraph::new(right), b);
 }
 
-fn draw_menu(frame: &mut Frame, app: &App, menu: MenuState) {
+fn draw_menu(frame: &mut Frame, app: &App, menu: &MenuState) {
     let area = frame.area();
     let bar = Rect { height: 1, ..area };
     let mut spans = Vec::new();
@@ -359,7 +359,7 @@ fn draw_menu(frame: &mut Frame, app: &App, menu: MenuState) {
     let mut x = 0u16;
     for (i, category) in Category::ALL.iter().enumerate() {
         let text = format!("  {}  ", category.title());
-        if i == menu.menu {
+        if i == menu.menu && !menu.filtering() {
             x_of_open = x;
             spans.push(Span::styled(text.clone(), highlight()));
         } else {
@@ -373,30 +373,53 @@ fn draw_menu(frame: &mut Frame, app: &App, menu: MenuState) {
         bar,
     );
 
-    let items = MenuState::items(menu.menu);
-    let rows: Vec<(String, String)> = items
+    // While filtering, the commands found come from every menu: each row
+    // says which one.
+    let rows: Vec<(String, String)> = menu
+        .shown()
         .iter()
-        .map(|&a| (a.label().to_owned(), app.context().keymap.shortcut_text(a)))
+        .map(|&a| {
+            let label = if menu.filtering() {
+                format!("{}: {}", a.category().title(), a.label())
+            } else {
+                a.label().to_owned()
+            };
+            (label, app.context().keymap.shortcut_text(a))
+        })
         .collect();
+    let title = if menu.filtering() {
+        format!(" Find: {}_ ", menu.filter)
+    } else {
+        " type to find ".to_owned()
+    };
     let label_width = rows.iter().map(|(l, _)| l.chars().count()).max().unwrap_or(0);
     let key_width = rows.iter().map(|(_, k)| k.chars().count()).max().unwrap_or(0);
-    let width = (label_width + key_width + 6) as u16;
+    let width = (label_width + key_width + 6).max(title.chars().count() + 4).max(24) as u16;
+    let lines: Vec<Line> = if rows.is_empty() {
+        vec![Line::styled(" Nothing matches", dim())]
+    } else {
+        rows.iter()
+            .enumerate()
+            .map(|(i, (label, keys))| {
+                let text = format!(" {label:<label_width$}  {keys:>key_width$} ");
+                if i == menu.item { Line::styled(text, highlight()) } else { Line::raw(text) }
+            })
+            .collect()
+    };
+    let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(1));
     let drop = Rect {
         x: x_of_open.min(area.width.saturating_sub(width)),
         y: 1,
         width: width.min(area.width),
-        height: (rows.len() as u16 + 2).min(area.height.saturating_sub(1)),
+        height,
     };
-    let lines: Vec<Line> = rows
-        .iter()
-        .enumerate()
-        .map(|(i, (label, keys))| {
-            let text = format!(" {label:<label_width$}  {keys:>key_width$} ");
-            if i == menu.item { Line::styled(text, highlight()) } else { Line::raw(text) }
-        })
-        .collect();
+    // Keep the highlighted command in sight when the list is taller than the screen.
+    let visible = height.saturating_sub(2) as usize;
+    let skip = (menu.item + 1).saturating_sub(visible);
+    let lines: Vec<Line> = lines.into_iter().skip(skip).collect();
+    let block = Block::bordered().title_bottom(Line::styled(title, dim()));
     frame.render_widget(Clear, drop);
-    frame.render_widget(Paragraph::new(lines).block(Block::bordered()), drop);
+    frame.render_widget(Paragraph::new(lines).block(block), drop);
 }
 
 /// The visible part of a text field and the cursor column within it.

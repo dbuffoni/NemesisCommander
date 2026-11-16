@@ -31,6 +31,7 @@ for size in 800x500 1024x640 1280x800 1920x1080; do
 done
 shot help 1280x800 "F1" "$left" "$right"
 shot menu 1280x800 "F9 Right" "$left" "$right"
+shot menu-find 1280x800 "F9 s e t" "$left" "$right"
 shot copy 1280x800 "Down Insert Down Insert F5" "$left" "$right"
 shot mkdir 1280x800 "F7" "$left" "$right"
 shot delete 1280x800 "Down F8" "$left" "$right"

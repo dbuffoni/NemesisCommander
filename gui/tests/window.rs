@@ -75,6 +75,9 @@ fn every_dialog_draws_cleanly() {
     for (keys, kind) in [
         ("F1", "help"),
         ("F9", "menu"),
+        // Typing in the menu finds commands.
+        ("F9 s e t", "menu"),
+        ("F9 z z z", "menu"),
         ("F7", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
@@ -88,6 +91,18 @@ fn every_dialog_draws_cleanly() {
         assert_no_qml_warnings(&run);
         assert_eq!(run.screen["overlay"]["kind"], kind, "{keys}: {}", run.screen["overlay"]);
     }
+}
+
+#[test]
+fn typing_in_the_menu_finds_commands() {
+    let home = home();
+    let found = run(home.path(), "F9 s e t t", None);
+    assert_no_qml_warnings(&found);
+    let menu = &found.screen["overlay"];
+    assert_eq!(menu["filter"], "sett");
+    assert_eq!(menu["shown"][0]["label"], "Settings…", "{menu}");
+    let ran = run(home.path(), "F9 s e t t Enter", None);
+    assert_eq!(ran.screen["overlay"]["kind"], "settings");
 }
 
 #[test]

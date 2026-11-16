@@ -321,6 +321,30 @@ async fn the_menu_runs_commands() {
 }
 
 #[tokio::test]
+async fn typing_in_the_menu_finds_commands() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("settings");
+    let screen = h.screen();
+    assert!(screen.contains("Find: settings"), "{screen}");
+    assert!(screen.contains("SuperCommander: Settings"), "the menu is named: {screen}");
+    // Backspace erases; Esc goes back to the menus, a second Esc closes.
+    h.key("Backspace");
+    assert!(h.screen().contains("Find: setting_"));
+    h.key("Esc");
+    assert!(!h.screen().contains("Find:"));
+    assert!(matches!(h.app.overlay(), Some(Overlay::Menu(_))));
+    h.type_text("zzz");
+    assert!(h.screen().contains("Nothing matches"));
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Menu(_))), "nothing to run");
+    h.key("Esc");
+    h.type_text("main short");
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Help)), "Enter runs what was found");
+}
+
+#[tokio::test]
 async fn viewer_shows_text_and_hex() {
     let mut h = Harness::new().await;
     h.focus("notes.txt");

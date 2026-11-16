@@ -444,3 +444,13 @@ on the settings screen (Ctrl+,).
 The menu bar (F9) lists every command with its shortcut:
 
 ![Menu](images/menu.png)
+
+To find a command without knowing its menu, open the menu and type part of
+its name. The menu then lists the matching commands from every menu, each
+with the menu it lives in, the best matches (names that start with what you
+typed) first. Up and Down move, Enter runs the command, Backspace erases a
+letter and Esc goes back to the plain menus (a second Esc closes them).
+Several words narrow the search, and each can match the menu name too:
+`files check` finds Checksum in the Files menu.
+
+![Finding a command in the menu](images/menu-find.png)

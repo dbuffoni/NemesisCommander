@@ -604,16 +604,24 @@ impl App {
         match overlay {
             Overlay::Help => None,
             Overlay::Menu(mut menu) => {
-                match key {
-                    Some(Key::Left) => menu.move_menu(-1),
-                    Some(Key::Right) => menu.move_menu(1),
-                    Some(Key::Up) => menu.move_item(-1),
-                    Some(Key::Down) => menu.move_item(1),
-                    Some(Key::Enter) => {
-                        self.perform(menu.selected());
+                let typed = press.text.filter(|_| !press.chord.ctrl && !press.chord.alt);
+                match (key, typed) {
+                    (Some(Key::Esc), _) if menu.filtering() => menu.clear_filter(),
+                    (Some(Key::Left), _) if !menu.filtering() => menu.move_menu(-1),
+                    (Some(Key::Right), _) if !menu.filtering() => menu.move_menu(1),
+                    (Some(Key::Up), _) => menu.move_item(-1),
+                    (Some(Key::Down), _) => menu.move_item(1),
+                    (Some(Key::Backspace), _) => menu.erase(),
+                    (Some(Key::Enter), _) => {
+                        // Nothing matching the filter: keep the menu open.
+                        let Some(action) = menu.selected() else {
+                            return Some(Overlay::Menu(menu));
+                        };
+                        self.perform(action);
                         return None;
                     }
-                    Some(Key::Esc | Key::F(9) | Key::F(10)) => return None,
+                    (Some(Key::Esc | Key::F(9) | Key::F(10)), _) => return None,
+                    (_, Some(c)) if !(c == ' ' && !menu.filtering()) => menu.type_char(c),
                     _ => {}
                 }
                 Some(Overlay::Menu(menu))
