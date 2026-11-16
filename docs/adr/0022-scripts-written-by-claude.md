@@ -44,3 +44,14 @@ writes scripts and plugins with AI, and tests them.
 - A passing test is not a review: it says the script ran on sample files
   and what it changed. The output says so, and the script is a plain file
   the user can read.
+
+## Addendum (2026-11-16): rename rules
+
+Daniele asked for AI in the multi-rename too. `sc ai rename "description"
+FILES...` asks for a `RenameRule` (structured output with the rule's
+fields), checks it with `preview_renames` on the files and sends the error
+back (3 tries), then prints the rule (as `sc rename` options, or `--json`)
+and the new names; it renames nothing. Only the file names are sent, at
+most 40 of them. F9, Files, "Multi-rename with AI…" runs it through `sc`
+and shows the explanation, the rule and the new names in the usual
+multi-rename confirmation.

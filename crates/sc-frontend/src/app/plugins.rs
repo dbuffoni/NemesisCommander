@@ -283,6 +283,57 @@ impl App {
     }
 }
 
+impl App {
+    /// Files, "Multi-rename with AI…": asks how to rename `targets`.
+    pub(super) fn ask_ai_rename(&mut self, targets: Vec<VfsPath>) {
+        if !cfg!(feature = "scripting") {
+            self.set_error("AI is not part of this build");
+            return;
+        }
+        self.ask(
+            "Multi-rename with AI",
+            "How should the names change? (Claude writes the rule)",
+            "",
+            InputPurpose::AiRename(targets),
+        );
+    }
+
+    /// Runs `sc ai rename` for `paths`; its rule is shown with the new
+    /// names before anything is renamed.
+    pub(super) fn write_rename_with_ai(&mut self, paths: Vec<VfsPath>, description: String) {
+        if description.trim().is_empty() {
+            return;
+        }
+        let config = self.context.paths.clone();
+        self.set_status("Claude is writing the rename rule…");
+        self.spawn_task(async move {
+            let printed = Arc::new(Mutex::new(String::new()));
+            let sink = printed.clone();
+            let output: Arc<dyn Fn(&str) + Send + Sync> =
+                Arc::new(move |line| sink.lock().unwrap_or_else(|e| e.into_inner()).push_str(line));
+            let mut args = vec!["ai".into(), "rename".into(), "--json".into(), description];
+            args.extend(paths.iter().map(VfsPath::to_string));
+            let result = run_sc(args, &config, None, output).await.and_then(|()| {
+                let text = printed.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                rename_answer(&text)
+            });
+            AppEvent::AiRenameDone { paths, result }
+        });
+    }
+}
+
+/// The rule and explanation in the JSON `sc ai rename --json` prints.
+fn rename_answer(text: &str) -> Result<(sc_ops::RenameRule, String), String> {
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        explanation: String,
+        rule: sc_ops::RenameRule,
+    }
+    let answer: Answer =
+        serde_json::from_str(text).map_err(|e| format!("unexpected answer from sc: {e}"))?;
+    Ok((answer.rule, answer.explanation))
+}
+
 /// A plugin's folder, name and commands (id, title, category).
 type PluginRow = (PathBuf, String, Vec<(String, String, Option<String>)>);
 
@@ -586,5 +637,21 @@ mod tests {
             sc_arguments(&command, &panel, &other, &selection)[..5],
             ["plugin", "run", "rename-all", "go", "file:///work/a.txt"]
         );
+    }
+}
+
+#[cfg(test)]
+mod rename_tests {
+    #[test]
+    fn the_rule_is_read_from_sc() {
+        let text = r#"{"explanation":"Date first.","names":["b"],"rule":{"template":"[N][X]",
+            "find":"(\\d+)","replace":"x$1","regex":true,"case":"Lower","counter_start":1,
+            "counter_step":1,"counter_width":1}}"#;
+        let (rule, explanation) = super::rename_answer(text).unwrap();
+        assert_eq!(explanation, "Date first.");
+        assert!(rule.regex);
+        assert_eq!(rule.find, "(\\d+)");
+        assert_eq!(rule.case, sc_ops::CaseChange::Lower);
+        assert!(super::rename_answer("oops").is_err());
     }
 }

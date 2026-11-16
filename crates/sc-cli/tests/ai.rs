@@ -166,3 +166,38 @@ fn plugins_are_installed_when_they_pass() {
         .stdout(contains("5 selected").and(contains("installed plugin count-selected")));
     assert!(dir.path().join("data/plugins/count-selected/plugin.json").exists());
 }
+
+/// `sc ai rename` asks for a rule, checks it on the files, sends the error
+/// back when it fails, and prints the rule and the new names.
+#[test]
+fn rename_rules_are_written_and_checked() {
+    let rule = |template: &str| {
+        json!({
+            "explanation": "Puts the year first.", "template": template,
+            "find": "^(.*)_(\\d{4})$", "replace": "${2}_$1", "regex": true, "case": "Lower",
+            "counter_start": 1, "counter_step": 1, "counter_width": 1
+        })
+    };
+    let (url, seen) = fake_api(vec![rule("[Q][X]"), rule("[N][X]")]);
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("Trip_2024.JPG"), "x").unwrap();
+    fs::write(dir.path().join("Party_2023.JPG"), "x").unwrap();
+    let output = sc(&dir, &url)
+        .args(["ai", "rename", "--json", "year first", "Trip_2024.JPG", "Party_2023.JPG"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(report["names"], json!(["trip_2024.jpg", "party_2023.jpg"]));
+    assert_eq!(report["rule"]["template"], "[N][X]");
+    assert!(dir.path().join("Trip_2024.JPG").exists(), "nothing is renamed");
+
+    let seen = seen.lock().unwrap();
+    let first = &seen[0].1;
+    assert!(first["messages"][0]["content"].as_str().unwrap().contains("Trip_2024.JPG"));
+    assert_eq!(first["output_config"]["format"]["schema"]["required"][1], "template");
+    let retry = seen[1].1["messages"][2]["content"].as_str().unwrap();
+    assert!(retry.contains("fails"), "{retry}");
+}

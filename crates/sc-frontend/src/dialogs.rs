@@ -49,6 +49,9 @@ pub enum InputPurpose {
     Rename(VfsPath),
     /// Multi-rename these files with the typed template.
     MultiRename(Vec<VfsPath>),
+    /// Have Claude write the multi-rename rule for these items from the
+    /// typed description.
+    AiRename(Vec<VfsPath>),
     /// Open the typed location.
     GoTo,
     /// A new connection: first its location...

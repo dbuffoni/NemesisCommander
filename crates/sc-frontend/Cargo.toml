@@ -22,6 +22,7 @@ async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 image.workspace = true
 directories.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
@@ -38,7 +39,6 @@ script-engine = ["scripting", "sc-script/engine"]
 [dev-dependencies]
 tempfile.workspace = true
 sc-providers.workspace = true
-serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 
 [lints]

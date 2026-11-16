@@ -85,6 +85,13 @@ pub enum AppEvent {
         /// The picture and its PNG file (windows only), or an error.
         result: Result<(Arc<image::RgbaImage>, Option<PathBuf>), String>,
     },
+    /// Claude wrote a multi-rename rule for these items (or failed).
+    AiRenameDone {
+        /// The items to rename.
+        paths: Vec<VfsPath>,
+        /// The rule and Claude's explanation, or why there is none.
+        result: Result<(RenameRule, String), String>,
+    },
     /// A plugin command or script ended.
     ScriptDone {
         /// What ran, for messages.
@@ -108,6 +115,7 @@ impl AppEvent {
                 | AppEvent::Loaded { .. }
                 | AppEvent::Rendered { .. }
                 | AppEvent::ScriptDone { .. }
+                | AppEvent::AiRenameDone { .. }
         )
     }
 }
@@ -500,6 +508,10 @@ impl App {
                     };
                 }
             }
+            AppEvent::AiRenameDone { paths, result } => match result {
+                Ok((rule, explanation)) => self.confirm_renames(paths, &rule, Some(explanation)),
+                Err(error) => self.set_error(format!("Multi-rename with AI: {error}")),
+            },
             AppEvent::ScriptDone { title, lines, error } => {
                 self.reload_panels(None);
                 match (&error, lines.len()) {
@@ -831,6 +843,8 @@ impl App {
                 "[N][X]",
                 InputPurpose::MultiRename(targets),
             ),
+            Action::AiRename if nothing => self.set_error("Nothing to rename"),
+            Action::AiRename => self.ask_ai_rename(targets),
             Action::MakeDir => self.ask("New folder", "Name:", "", InputPurpose::MakeDir),
             Action::Delete | Action::DeleteForever if nothing => {
                 self.set_error("Nothing to delete")
@@ -1102,24 +1116,9 @@ impl App {
             }
             InputPurpose::MultiRename(paths) => {
                 let rule = RenameRule { template: text, ..RenameRule::default() };
-                match preview_renames(&paths, &rule) {
-                    Ok(names) => {
-                        let mut lines = vec![format!("Rename {} items?", paths.len())];
-                        for (path, name) in paths.iter().zip(&names).take(12) {
-                            lines.push(format!("  {} → {name}", path.file_name().unwrap_or("")));
-                        }
-                        if paths.len() > 12 {
-                            lines.push(format!("  … and {} more", paths.len() - 12));
-                        }
-                        self.overlay = Some(Overlay::Confirm(ConfirmDialog {
-                            title: "Multi-rename".into(),
-                            lines,
-                            purpose: ConfirmPurpose::MultiRename { paths, names },
-                        }));
-                    }
-                    Err(e) => self.set_error(e.to_string()),
-                }
+                self.confirm_renames(paths, &rule, None);
             }
+            InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
             InputPurpose::NewConnection => match VfsPath::parse(text.trim()) {
                 Ok(location) => self.ask(
                     "New connection",
@@ -1236,6 +1235,41 @@ impl App {
             InputPurpose::FetchSettings(_) => self.fetch_settings(&text),
             InputPurpose::AiScript => self.write_script_with_ai(text),
         }
+    }
+
+    /// Shows the new names `rule` gives `paths` and asks to rename them;
+    /// `explanation` (from Claude) and the rule are shown first.
+    fn confirm_renames(
+        &mut self,
+        paths: Vec<VfsPath>,
+        rule: &RenameRule,
+        explanation: Option<String>,
+    ) {
+        let names = match preview_renames(&paths, rule) {
+            Ok(names) => names,
+            Err(e) => return self.set_error(e.to_string()),
+        };
+        let mut lines = Vec::new();
+        if let Some(explanation) = explanation {
+            lines.push(explanation);
+            lines.push(format!("Template: {}", rule.template));
+            if !rule.find.is_empty() {
+                let kind = if rule.regex { "Regex" } else { "Find" };
+                lines.push(format!("{kind}: {}  →  {}", rule.find, rule.replace));
+            }
+        }
+        lines.push(format!("Rename {} items?", paths.len()));
+        for (path, name) in paths.iter().zip(&names).take(12) {
+            lines.push(format!("  {} → {name}", path.file_name().unwrap_or("")));
+        }
+        if paths.len() > 12 {
+            lines.push(format!("  … and {} more", paths.len() - 12));
+        }
+        self.overlay = Some(Overlay::Confirm(ConfirmDialog {
+            title: "Multi-rename".into(),
+            lines,
+            purpose: ConfirmPurpose::MultiRename { paths, names },
+        }));
     }
 
     fn confirmed(&mut self, purpose: ConfirmPurpose) {

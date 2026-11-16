@@ -98,6 +98,7 @@ actions! {
     Move          = "files.move",           Files, true,  "Move",                     ["F6"];
     Rename        = "files.rename",         Files, true,  "Rename",                   ["Shift+F6", "F2"];
     MultiRename   = "files.multi-rename",   Files, false, "Multi-rename…",            ["Ctrl+M"];
+    AiRename      = "files.ai-rename",      Files, false, "Multi-rename with AI…",    [];
     MakeDir       = "files.mkdir",          Files, true,  "New folder",               ["F7"];
     Delete        = "files.delete",         Files, true,  "Delete (to trash)",        ["F8", "Delete"];
     DeleteForever = "files.delete-forever", Files, false, "Delete permanently",       ["Shift+F8", "Shift+Delete"];
