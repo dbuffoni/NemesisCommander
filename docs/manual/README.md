@@ -355,6 +355,12 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   with the `sc` program installed next to it (the AppImage has both), so
   they behave exactly as from the command line.
 
+- `sc test SCRIPT_OR_PLUGIN` tries it on sample files in a throwaway
+  folder and lists what it printed and which files it created, removed and
+  changed, so you (or an AI assistant writing it for you) can check it
+  before running it on real files. `sc run --guide` prints a guide for
+  AI assistants.
+
 See [docs/scripting.md](../scripting.md) for the API and the examples in
 `examples/`.
 

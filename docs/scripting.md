@@ -95,3 +95,40 @@ manifest requests; an update asking for more asks again.
 
 In a plugin, `sc.context` holds the command id, both panels' folders and
 the selection.
+
+## Testing, and writing with an AI assistant
+
+`sc test` tries a script or a plugin without touching your files. It makes
+a temporary folder with `panel/` (sample files, or a copy of
+`--fixture DIR`) and `other/` (empty), runs the script there, or each
+plugin command, and reports:
+
+- checks: the manifest, the syntax and, when the TypeScript compiler
+  (`tsc`) is installed, the types against `sc.d.ts`;
+- for each run: whether it passed, the error, what it printed, and the
+  files it created, removed and changed.
+
+```sh
+sc test tidy.ts                                  # sc.args = [the test panel]
+sc test tidy.ts --fixture ./samples -- '$PANEL' --dry-run
+sc test examples/plugins/sort-by-type --select photo.JPG --json
+```
+
+A script may change anything in the test folder. A plugin gets what its
+manifest asks for `$PANEL`, `$OTHER` and `$SELECTION` (filled in with the
+test folders and `--select`, default all of `panel/`); other locations are
+not granted and are listed as notes. `--json` prints the report for
+programs, `--keep` keeps the folder, and the exit status is 0 only when
+everything passed.
+
+This is what lets an AI coding assistant (Claude Code, for example) write
+scripts and plugins on its own: give it the API and the guide,
+
+```sh
+sc run --types > sc.d.ts
+sc run --guide > AGENTS.md     # or CLAUDE.md
+```
+
+ask for the script, and it writes it, runs `sc test --json`, reads what
+went wrong or what changed, and fixes it until it passes. SuperCommander
+has no AI of its own (ADR 0021).

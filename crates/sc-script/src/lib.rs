@@ -36,6 +36,10 @@ pub use permissions::{Access, Permissions};
 /// The TypeScript declarations of the `sc` API, for editors.
 pub const TYPES: &str = include_str!("../js/sc.d.ts");
 
+/// How to write and test scripts and plugins, for people and AI
+/// assistants (`sc run --guide`).
+pub const GUIDE: &str = include_str!("../js/GUIDE.md");
+
 /// Default limit of the V8 heap.
 pub const DEFAULT_HEAP_LIMIT: usize = 512 * 1024 * 1024;
 
