@@ -9,7 +9,7 @@ license.workspace = true
 
 # V8 adds about 60 MB to a program: only `sc` turns on `engine` (with its
 # `scripting` feature, which agent builds leave out); the window runs
-# scripts through `sc` (ADR 0018).
+# scripts through `sc` (ADR 0020).
 
 [dependencies]
 sc-vfs.workspace = true

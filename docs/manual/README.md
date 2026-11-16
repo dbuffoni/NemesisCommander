@@ -351,6 +351,9 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   no question, since you put it there.
 - **Alt+X** in either interface lists the plugin commands, and offers to run
   the script under the cursor, after a confirmation.
+- The window has no script engine of its own: it runs scripts and plugins
+  with the `sc` program installed next to it (the AppImage has both), so
+  they behave exactly as from the command line.
 
 See [docs/scripting.md](../scripting.md) for the API and the examples in
 `examples/`.

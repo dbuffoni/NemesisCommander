@@ -24,7 +24,10 @@ taken while implementing it.
 | 0014 | [`sc serve`: mutual TLS from a private authority, signed one-time tokens](0014-serve-mtls-and-tokens.md) | Accepted |
 | 0015 | [TypeScript scripts: deno_core, one `sc` global, no access by default](0015-typescript-scripts.md) | Accepted |
 | 0016 | [Plugins: a folder with a manifest, permissions granted once](0016-plugins.md) | Accepted |
+| 0017 | [A settings screen, and settings sent to other machines](0017-settings-screen-and-sync.md) | Accepted |
+| 0018 | [One command list for built-in commands, plugins and scripts](0018-command-list.md) | Accepted |
 | 0019 | [One drive list for local drives and remote connections](0019-one-drive-list.md) | Accepted |
+| 0020 | [Keeping the footprint small](0020-footprint.md) | Accepted |
 
 Template:
 

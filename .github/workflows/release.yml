@@ -59,7 +59,10 @@ jobs:
       - name: Build sc and sc-gui
         run: |
           echo "QMAKE=$QT_ROOT_DIR/bin/qmake" >> "$GITHUB_ENV"
-          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p sc-cli -p sc-gui --features sc-cli/rar,sc-gui/rar
+          # Two builds: built together, Cargo would unify features and give
+          # sc-gui sc's script engine (V8) as well.
+          cargo build --release --locked -p sc-cli --features rar
+          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p sc-gui --features rar
       - name: Smoke test
         run: |
           target/release/sc --version
@@ -73,10 +76,10 @@ jobs:
         run: |
           { echo "### Footprint"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
           ok=true
-          scripts/footprint.py size target/release/sc 95 || ok=false
+          scripts/footprint.py size target/release/sc 90 || ok=false
           scripts/footprint.py size target/release/sc-gui 35 || ok=false
-          scripts/footprint.py idle 25 -- target/release/sc agent --stdio || ok=false
-          scripts/footprint.py idle 100 -- target/release/sc-gui || ok=false
+          scripts/footprint.py idle 20 -- target/release/sc agent --stdio || ok=false
+          scripts/footprint.py idle 90 -- target/release/sc-gui || ok=false
           { echo; echo "### Benchmarks (sc)"; } >> "$GITHUB_STEP_SUMMARY"
           scripts/footprint.py bench target/release/sc
           $ok
@@ -146,9 +149,9 @@ jobs:
         run: |
           { echo "### Agent footprint (${{ matrix.arch }})"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
           ok=true
-          scripts/footprint.py size "sc-agent-linux-${{ matrix.arch }}" 18 || ok=false
+          scripts/footprint.py size "sc-agent-linux-${{ matrix.arch }}" 16 || ok=false
           if [ "${{ matrix.arch }}" = x86_64 ]; then
-            scripts/footprint.py idle 20 -- "./sc-agent-linux-${{ matrix.arch }}" agent --stdio || ok=false
+            scripts/footprint.py idle 12 -- "./sc-agent-linux-${{ matrix.arch }}" agent --stdio || ok=false
           fi
           $ok
       - uses: actions/upload-artifact@v4

@@ -1,4 +1,4 @@
-# 0018. Keeping the footprint small
+# 0020. Keeping the footprint small
 
 - Status: Accepted
 - Date: 2026-11-16
@@ -55,5 +55,8 @@ Small, separate changes, each with the simplest logic that works:
 - The window needs `sc` installed next to it (the AppImage has both) to
   run scripts and plugins.
 - A budget is raised only on purpose, in the commit that needs it.
+- `sc-gui` must be built on its own (`cargo build -p sc-gui`): built in the
+  same command as `sc-cli`, Cargo unifies features and links V8 into it
+  again. The first release run caught exactly that (79 MB).
 - A server `sc` built without `remote` cannot open SFTP/WebDAV/S3/SMB
   locations itself; a full `sc` can still be installed there.
