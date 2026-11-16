@@ -14,7 +14,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use sc_app::AppContext;
 use sc_archive::{ArchiveFormat, PackOptions, archive_root};
-use sc_config::{Action, Bookmark, ExportBundle, ImportMode, Key, Keymap};
+use sc_config::{Action, Bookmark, Connection, ExportBundle, ImportMode, Key, Keymap};
 use sc_index::{ContentQuery, Mask, SearchCriteria, SearchHit, SortKey, SortSpec};
 use sc_ops::{
     Conflict, ConflictAction, ConflictResolver, DeleteOptions, RenameRule, Resolution,
@@ -658,6 +658,21 @@ impl App {
                         return None;
                     }
                     Some(Key::Delete)
+                        if matches!(&dialog.purpose, ChoosePurpose::Drives(drives)
+                            if drives.get(dialog.cursor).is_some_and(|d| d.saved)) =>
+                    {
+                        if let ChoosePurpose::Drives(drives) = &mut dialog.purpose {
+                            let drive = drives.remove(dialog.cursor);
+                            self.context
+                                .config
+                                .connections
+                                .retain(|c| !(c.name == drive.name && c.uri == drive.location));
+                        }
+                        dialog.items.remove(dialog.cursor);
+                        dialog.move_cursor(0);
+                        self.save_settings();
+                    }
+                    Some(Key::Delete)
                         if matches!(dialog.purpose, ChoosePurpose::Bookmarks)
                             && dialog.cursor < self.context.config.bookmarks.len() =>
                     {
@@ -944,20 +959,13 @@ impl App {
                 self.refresh_jobs();
                 self.overlay = Some(Overlay::Jobs(JobsView::default()));
             }
-            Action::Connect => {
-                let mut items: Vec<String> = self
-                    .context
-                    .config
-                    .connections
-                    .iter()
-                    .map(|c| format!("{:<20} {}", c.name, c.uri))
-                    .collect();
-                items.push("New location…".into());
-                self.overlay = Some(Overlay::Choose(ChooseDialog::new(
-                    "Connect",
-                    items,
-                    ChoosePurpose::Connections,
-                )));
+            Action::Drives => {
+                let drives = crate::drives::drives(&self.context.config);
+                let mut items: Vec<String> = drives.iter().map(|d| d.row()).collect();
+                items.push("New connection…".into());
+                let mut dialog = ChooseDialog::new("Drives", items, ChoosePurpose::Drives(drives));
+                dialog.footer = "Enter: open in this panel   Delete: remove a connection".into();
+                self.overlay = Some(Overlay::Choose(dialog));
             }
             Action::RunScript => self.choose_plugin_command(),
             Action::Help => self.overlay = Some(Overlay::Help),
@@ -1096,6 +1104,37 @@ impl App {
                     Err(e) => self.set_error(e.to_string()),
                 }
             }
+            InputPurpose::NewConnection => match VfsPath::parse(text.trim()) {
+                Ok(location) => self.ask(
+                    "New connection",
+                    "Save it in the drive list as:",
+                    &crate::drives::suggested_name(&location),
+                    InputPurpose::NameConnection(location.to_string()),
+                ),
+                Err(e) => self.set_error(e.to_string()),
+            },
+            InputPurpose::NameConnection(uri) => {
+                let name = text.trim().to_owned();
+                if name.is_empty() {
+                    return self.set_error("no name given".to_owned());
+                }
+                self.context.config.connections.push(Connection {
+                    name: name.clone(),
+                    uri: uri.clone(),
+                    identity_file: None,
+                    options: Default::default(),
+                });
+                if self.save_settings() {
+                    self.set_status(format!("Saved {name} in the drive list"));
+                }
+                match VfsPath::parse(&uri) {
+                    Ok(path) => {
+                        let request = self.workspace.active_mut().navigate(path);
+                        self.load(request);
+                    }
+                    Err(e) => self.set_error(e.to_string()),
+                }
+            }
             InputPurpose::GoTo => match resolve_location(&text, &here) {
                 Ok(path) => {
                     let request = self.workspace.active_mut().navigate(path);
@@ -1229,19 +1268,19 @@ impl App {
                     }
                 }
             }
-            ChoosePurpose::Connections => match self.context.config.connections.get(cursor) {
-                Some(connection) => match VfsPath::parse(&connection.uri.clone()) {
+            ChoosePurpose::Drives(drives) => match drives.get(cursor) {
+                Some(drive) => match resolve_location(&drive.location, &here) {
                     Ok(path) => {
                         let request = self.workspace.active_mut().navigate(path);
                         self.load(request);
                     }
-                    Err(e) => self.set_error(e.to_string()),
+                    Err(e) => self.set_error(e),
                 },
                 None => self.ask(
-                    "Connect",
+                    "New connection",
                     "Location (sftp://user@host/path, davs://host/path, s3://bucket/path, smb://host/share, agent://host/path, …):",
                     "sftp://",
-                    InputPurpose::GoTo,
+                    InputPurpose::NewConnection,
                 ),
             },
             ChoosePurpose::SearchResults(paths) => {

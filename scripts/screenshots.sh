@@ -16,6 +16,25 @@ trap 'rm -rf "$demo"' EXIT
 "$root/scripts/demo-tree.sh" "$demo"
 export SC_CONFIG_DIR="$demo/.config" SC_DATA_DIR="$demo/.data" QT_QPA_PLATFORM=offscreen
 export HOME="$demo/home"
+# Saved connections, so the drive list shows every category.
+mkdir -p "$SC_CONFIG_DIR"
+cat > "$SC_CONFIG_DIR/config.toml" <<TOML
+[[connections]]
+name = "nas"
+uri = "sftp://me@nas.lan/srv/media"
+
+[[connections]]
+name = "photos"
+uri = "s3://family-photos/"
+
+[[connections]]
+name = "office"
+uri = "smb://fileserver/projects"
+
+[[connections]]
+name = "site backup"
+uri = "zip://$demo/home/Downloads/site-backup.zip!/"
+TOML
 
 shot() { # NAME SIZE KEYS [LEFT] [RIGHT]
   local name="$1" size="$2" keys="$3"
@@ -39,6 +58,8 @@ shot delete 1280x800 "Down F8" "$left" "$right"
 shot search 1280x800 "Alt+F7" "$left" "$right"
 shot quick-view 1280x800 "Down Down Down Ctrl+Q" "$left" "$right"
 shot viewer-text 1280x800 "End F3" "$demo/home/Projects/website" "$right"
+shot drives 1280x800 "Alt+F1" "$left" "$right"
+shot drives-new 1280x800 "Alt+F1 $(printf 'Down %.0s' {1..20})Enter" "$left" "$right"
 shot bookmarks 1280x800 "Ctrl+Shift+D Ctrl+D" "$left" "$right"
 shot jobs 1280x800 "Ctrl+J" "$left" "$right"
 shot properties 1280x800 "Down Alt+Enter" "$left" "$right"

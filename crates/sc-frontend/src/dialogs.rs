@@ -51,6 +51,10 @@ pub enum InputPurpose {
     MultiRename(Vec<VfsPath>),
     /// Open the typed location.
     GoTo,
+    /// A new connection: first its location...
+    NewConnection,
+    /// ...then the name it is saved under.
+    NameConnection(String),
     /// Select entries matching the typed mask.
     SelectMask,
     /// Unselect entries matching the typed mask.
@@ -160,8 +164,9 @@ pub struct ConfirmDialog {
 pub enum ChoosePurpose {
     /// Open a bookmark (Delete removes it).
     Bookmarks,
-    /// Open a saved connection (the last item asks for a new location).
-    Connections,
+    /// Open a drive or saved connection, one per row (the last row asks
+    /// for a new connection; Delete removes a saved one).
+    Drives(Vec<crate::drives::Drive>),
     /// Go to a search hit.
     SearchResults(Vec<VfsPath>),
     /// Replace or merge imported settings.

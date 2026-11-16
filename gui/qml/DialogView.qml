@@ -46,6 +46,8 @@ Item {
         id: list
         property int cursor: 0
         property var stateOf: (item) => ""
+        // Rows laid out in columns (drives, bookmarks) need a fixed-width font.
+        property bool fixed: false
         Layout.fillWidth: true
         Layout.preferredHeight: Math.min(contentHeight, dialogs.height * 0.6)
         implicitWidth: 480
@@ -63,6 +65,7 @@ Item {
                     x: 4
                     width: parent.width - 8
                     elide: Text.ElideRight
+                    font: list.fixed ? dialogs.theme.fixedFont : Qt.application.font
                     text: typeof modelData === "string" ? modelData : modelData.text
                     color: index === list.cursor ? palette.highlightedText
                          : list.stateOf(modelData) === "failed" ? dialogs.theme.errorColor
@@ -271,6 +274,7 @@ Item {
             title: dialogs.view.title
             hint: dialogs.view.footer
             CursorList {
+                fixed: true
                 cursor: dialogs.view.cursor
                 model: dialogs.view.items
             }
