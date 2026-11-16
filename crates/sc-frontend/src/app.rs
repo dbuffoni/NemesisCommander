@@ -72,7 +72,7 @@ pub enum AppEvent {
         /// For the quick view (otherwise the full viewer).
         quick: bool,
         /// Data, "file is longer" and its preview, or an error.
-        result: Result<(Vec<u8>, bool, crate::preview::Prepared), String>,
+        result: Result<(Arc<Vec<u8>>, bool, crate::preview::Prepared), String>,
     },
     /// A picture for the viewer or quick view was rendered.
     Rendered {
@@ -1356,6 +1356,7 @@ impl App {
             let loaded = viewer::load(&registry, &path, limit).await.map_err(|e| e.to_string());
             let result = match loaded {
                 Ok((data, truncated)) => tokio::task::spawn_blocking(move || {
+                    let data = Arc::new(data);
                     let prepared = crate::preview::prepare(&name, &data, truncated)?;
                     Ok((data, truncated, prepared))
                 })

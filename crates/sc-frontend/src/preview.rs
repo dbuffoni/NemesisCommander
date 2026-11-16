@@ -33,10 +33,8 @@ pub enum Prepared {
     Plain,
     /// A formatted document.
     Rich(Vec<Block>),
-    /// A PDF and its number of pages.
+    /// A PDF and its number of pages (the viewer keeps the file's bytes).
     Pdf {
-        /// The whole file.
-        data: Arc<Vec<u8>>,
         /// Pages in it.
         pages: usize,
     },
@@ -51,7 +49,7 @@ pub fn kind_of(name: &str) -> Option<Kind> {
 
 /// Turns the bytes of `name` into what the viewer shows. Runs in the
 /// background: Office files and models can take a moment.
-pub fn prepare(name: &str, data: &[u8], truncated: bool) -> Result<Prepared, String> {
+pub fn prepare(name: &str, data: &Arc<Vec<u8>>, truncated: bool) -> Result<Prepared, String> {
     let Some(kind) = kind_of(name) else { return Ok(Prepared::Plain) };
     if truncated {
         return Err(format!("the file is too large to preview (over {} MiB)", PREVIEW_LIMIT >> 20));
@@ -60,12 +58,11 @@ pub fn prepare(name: &str, data: &[u8], truncated: bool) -> Result<Prepared, Str
         Kind::Markdown => Prepared::Rich(markdown::parse(&String::from_utf8_lossy(data))),
         Kind::Office(format) => Prepared::Rich(office::read(format, data)?),
         Kind::Pdf => {
-            let data = Arc::new(data.to_vec());
-            let pages = pdf::page_count(&data)?;
+            let pages = pdf::page_count(data)?;
             if pages == 0 {
                 return Err("the PDF has no pages".into());
             }
-            Prepared::Pdf { data, pages }
+            Prepared::Pdf { pages }
         }
         Kind::Model => Prepared::Model(Arc::new(Mesh::load(name, data)?)),
     })
@@ -227,11 +224,12 @@ mod tests {
 
     #[test]
     fn plain_files_need_no_preparation() {
-        assert!(matches!(prepare("a.txt", b"hello", false), Ok(Prepared::Plain)));
+        let bytes = |text: &[u8]| Arc::new(text.to_vec());
+        assert!(matches!(prepare("a.txt", &bytes(b"hello"), false), Ok(Prepared::Plain)));
         assert!(
-            matches!(prepare("a.md", b"# Hi", false), Ok(Prepared::Rich(blocks)) if blocks.len() == 1)
+            matches!(prepare("a.md", &bytes(b"# Hi"), false), Ok(Prepared::Rich(blocks)) if blocks.len() == 1)
         );
-        assert!(prepare("a.pdf", b"%PDF-1.4", true).unwrap_err().contains("too large"));
-        assert!(prepare("a.stl", b"nonsense", false).is_err());
+        assert!(prepare("a.pdf", &bytes(b"%PDF-1.4"), true).unwrap_err().contains("too large"));
+        assert!(prepare("a.stl", &bytes(b"nonsense"), false).is_err());
     }
 }
