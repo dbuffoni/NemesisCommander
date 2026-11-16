@@ -15,6 +15,7 @@ sc-config.workspace = true
 sc-ops.workspace = true
 sc-transfer.workspace = true
 sc-agent.workspace = true
+sc-ssh.workspace = true
 sc-sftp = { workspace = true, optional = true }
 sc-webdav = { workspace = true, optional = true }
 sc-s3 = { workspace = true, optional = true }

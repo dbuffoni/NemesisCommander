@@ -59,7 +59,9 @@ impl SftpProvider {
             Some(command) => command,
             None => {
                 let target = sc_ssh::Target::parse(authority)?;
-                ("ssh".into(), sc_ssh::ssh_args(&target, sc_ssh::Remote::Subsystem("sftp")))
+                let args = sc_ssh::ssh_args(&target, sc_ssh::Remote::Subsystem("sftp"))
+                    .map_err(|e| format!("sftp://{authority}: {e}"))?;
+                ("ssh".into(), args)
             }
         };
         let mut child =

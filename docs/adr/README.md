@@ -32,6 +32,7 @@ taken while implementing it.
 | 0022 | [`sc ai`: scripts written by Claude, checked by `sc test`](0022-scripts-written-by-claude.md) | Accepted |
 | 0023 | [Bookmarks with target folders for the other panel](0023-bookmark-targets.md) | Accepted |
 | 0024 | [Multi-rename always previews, and refuses names that exist](0024-multi-rename-preview.md) | Accepted |
+| 0025 | [Saved connections can log in with their own private key file](0025-connection-private-key.md) | Accepted |
 
 Template:
 

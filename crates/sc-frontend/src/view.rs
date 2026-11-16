@@ -133,6 +133,8 @@ pub enum OverlayView {
         cursor: usize,
         /// Lines below the field (multi-rename: the new names).
         preview: Vec<String>,
+        /// The answer is a local file: the GUI shows a file picker.
+        browse: bool,
     },
     /// A yes/no question.
     Confirm {
@@ -649,6 +651,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             text: dialog.field.text().to_owned(),
             cursor: dialog.field.cursor(),
             preview: dialog.preview.clone(),
+            browse: dialog.browse,
         },
         Overlay::Confirm(dialog) => {
             OverlayView::Confirm { title: dialog.title.clone(), lines: dialog.lines.clone() }

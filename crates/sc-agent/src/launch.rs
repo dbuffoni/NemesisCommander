@@ -49,7 +49,9 @@ fn agent_command(authority: &str) -> std::result::Result<(String, Vec<String>), 
     }
     let target = Target::parse(authority)?;
     let script = remote_start_script(crate::VERSION);
-    Ok(("ssh".to_owned(), ssh_args(&target, Remote::Script(&script))))
+    let args = ssh_args(&target, Remote::Script(&script))
+        .map_err(|e| format!("agent on {authority}: {e}"))?;
+    Ok(("ssh".to_owned(), args))
 }
 
 /// Why starting failed.
@@ -136,7 +138,7 @@ async fn ssh_run(
 ) -> std::result::Result<String, String> {
     let mut command = Command::new("ssh");
     command
-        .args(ssh_args(target, Remote::Script(script)))
+        .args(ssh_args(target, Remote::Script(script))?)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     command.stdin(match &input {

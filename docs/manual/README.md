@@ -325,6 +325,30 @@ Passwords are never stored in SuperCommander's settings: SFTP and the agent
 use SSH (keys, agent, `~/.ssh/config`), WebDAV and SMB read `~/.netrc`, S3
 reads the usual `~/.aws` files and environment variables.
 
+### Private key files (`.pem`)
+
+An SFTP or agent connection can log in with a private key file of its own,
+such as the `.pem` key a cloud provider gives you, without touching
+`~/.ssh/config`. A new SFTP or agent connection asks for it after its name;
+for a saved one, select it in the drive list and press **F4**. Type the
+path (`~/` works) or, in the window, click **Browse…** to pick the file.
+Leave it empty to go back to the SSH agent and `~/.ssh/config`.
+
+The key is passed to `ssh` as `-i FILE -o IdentitiesOnly=yes` for every
+connection to that login (same user, host and port), so the agent's other
+keys are not tried first. The file must exist and, on Linux and macOS, be
+readable by you only: if not, connecting stops with a message that says
+so (fix it with `chmod 600 FILE`). Keys with a passphrase need the SSH
+agent (`ssh-add FILE`), since SuperCommander never asks for passwords. In
+the settings file the key is the `identity_file` of the connection:
+
+```toml
+[[connections]]
+name = "web"
+uri = "sftp://ubuntu@203.0.113.10/var/www"
+identity_file = "~/.ssh/aws-web.pem"
+```
+
 ## Servers: the agent and `sc serve`
 
 On a Linux server, the `sc` agent (a single static program, no
@@ -546,7 +570,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| Alt+F1, Ctrl+N | Drives and connections |
+| Alt+F1, Ctrl+N | Drives and connections (F4 on a connection: private key) |
 | Ctrl+D | Bookmarks |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |

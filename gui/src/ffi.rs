@@ -40,6 +40,10 @@ pub mod qobject {
         #[qinvokable]
         fn pick(self: Pin<&mut Commander>, what: &QString, index: i32);
 
+        /// The file picked for the open question (a `file:` URL).
+        #[qinvokable]
+        fn fill(self: Pin<&mut Commander>, url: &QString);
+
         /// Ends the application.
         #[qinvokable]
         fn quit(self: Pin<&mut Commander>);

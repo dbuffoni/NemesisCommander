@@ -48,5 +48,6 @@ connection meant editing the settings file.
   appears the next time, with no watcher.
 - Credentials still never go into the settings (ADR 0009 to 0012): a new
   connection stores only its name and URI.
-- Options of a connection (`identity_file`, `options`) are still edited in
-  the settings file; a form for them can come later if needed.
+- Options of a connection (`options`) are still edited in the settings
+  file. The private key file (`identity_file`) has its own question since
+  ADR 0025.

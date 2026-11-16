@@ -704,6 +704,29 @@ impl App {
                         }
                         return None;
                     }
+                    Some(Key::F(4)) => {
+                        let ChoosePurpose::Drives(drives) = &dialog.purpose else {
+                            return Some(Overlay::Choose(dialog));
+                        };
+                        let Some(drive) = drives.get(dialog.cursor).filter(|d| d.saved) else {
+                            return Some(Overlay::Choose(dialog));
+                        };
+                        if !sc_app::uses_ssh(&drive.location) {
+                            self.set_error("Only SFTP and agent connections use a private key");
+                            return None;
+                        }
+                        let current = self
+                            .context
+                            .config
+                            .connections
+                            .iter()
+                            .find(|c| c.name == drive.name && c.uri == drive.location)
+                            .and_then(|c| c.identity_file.clone())
+                            .unwrap_or_default();
+                        let (name, uri) = (drive.name.clone(), drive.location.clone());
+                        self.ask_connection_key(name, uri, false, &current);
+                        return None;
+                    }
                     Some(Key::Delete)
                         if matches!(&dialog.purpose, ChoosePurpose::Drives(drives)
                             if drives.get(dialog.cursor).is_some_and(|d| d.saved)) =>
@@ -1082,7 +1105,9 @@ impl App {
                 let mut items: Vec<String> = drives.iter().map(|d| d.row()).collect();
                 items.push("New connection…".into());
                 let mut dialog = ChooseDialog::new("Drives", items, ChoosePurpose::Drives(drives));
-                dialog.footer = "Enter: open in this panel   Delete: remove a connection".into();
+                dialog.footer =
+                    "Enter: open in this panel   F4: private key   Delete: remove a connection"
+                        .into();
                 self.overlay = Some(Overlay::Choose(dialog));
             }
             Action::RunScript => self.choose_plugin_command(),
@@ -1222,22 +1247,14 @@ impl App {
                 if name.is_empty() {
                     return self.set_error("no name given".to_owned());
                 }
-                self.context.config.connections.push(Connection {
-                    name: name.clone(),
-                    uri: uri.clone(),
-                    identity_file: None,
-                    options: Default::default(),
-                });
-                if self.save_settings() {
-                    self.set_status(format!("Saved {name} in the drive list"));
+                if sc_app::uses_ssh(&uri) {
+                    return self.ask_connection_key(name, uri, true, "");
                 }
-                match VfsPath::parse(&uri) {
-                    Ok(path) => {
-                        let request = self.workspace.active_mut().navigate(path);
-                        self.load(request);
-                    }
-                    Err(e) => self.set_error(e.to_string()),
-                }
+                self.save_connection(name, uri, None, true);
+            }
+            InputPurpose::ConnectionKey { name, uri, new } => {
+                let key = (!text.is_empty()).then_some(text);
+                self.save_connection(name, uri, key, new);
             }
             InputPurpose::GoTo => match resolve_location(&text, &here) {
                 Ok(path) => {
@@ -1689,6 +1706,67 @@ impl App {
         self.context.keymap = keymap;
         if !warnings.is_empty() {
             self.set_error(warnings.join("; "));
+        }
+    }
+
+    /// Asks for the private key file of an SFTP or agent connection.
+    fn ask_connection_key(&mut self, name: String, uri: String, new: bool, current: &str) {
+        let mut dialog = InputDialog::new(
+            "Private key",
+            &format!(
+                "Private key file for {name} (.pem or OpenSSH key; empty: SSH agent and ~/.ssh/config):"
+            ),
+            current,
+            InputPurpose::ConnectionKey { name, uri, new },
+        );
+        dialog.browse = true;
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
+    /// Saves a connection (a new one, or the key of a saved one); a new one
+    /// opens in the active panel.
+    fn save_connection(&mut self, name: String, uri: String, key: Option<String>, new: bool) {
+        let connections = &mut self.context.config.connections;
+        if new {
+            connections.push(Connection {
+                name: name.clone(),
+                uri: uri.clone(),
+                identity_file: key.clone(),
+                options: Default::default(),
+            });
+        } else if let Some(saved) = connections.iter_mut().find(|c| c.name == name && c.uri == uri)
+        {
+            saved.identity_file = key.clone();
+        }
+        if !self.save_settings() {
+            return;
+        }
+        let problem =
+            key.as_deref().and_then(|k| sc_ssh::check_identity_file(&sc_ssh::expand_home(k)).err());
+        match (problem, new) {
+            (Some(problem), _) => self.set_error(format!("Saved {name}, but: {problem}")),
+            (None, true) => self.set_status(format!("Saved {name} in the drive list")),
+            (None, false) => self.set_status(match &key {
+                Some(key) => format!("{name} now logs in with {key}"),
+                None => format!("{name} now logs in with the SSH agent and ~/.ssh/config"),
+            }),
+        }
+        if new {
+            match VfsPath::parse(&uri) {
+                Ok(path) => {
+                    let request = self.workspace.active_mut().navigate(path);
+                    self.load(request);
+                }
+                Err(e) => self.set_error(e.to_string()),
+            }
+        }
+    }
+
+    /// Replaces the text of the open one-line question (the GUI's file
+    /// picker fills it this way).
+    pub fn fill_input(&mut self, text: &str) {
+        if let Some(Overlay::Input(dialog)) = &mut self.overlay {
+            dialog.field = crate::input::TextField::new(text);
         }
     }
 

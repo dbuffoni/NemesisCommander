@@ -6,6 +6,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Item {
     id: dialogs
@@ -39,6 +40,17 @@ Item {
             default: return null
             }
         }
+    }
+
+    // Fills the open question with a picked file.
+    FileDialog {
+        id: filePicker
+        title: "Choose a file"
+        onAccepted: {
+            dialogs.theme.app.fill(selectedFile.toString())
+            dialogs.theme.focusKeys()
+        }
+        onRejected: dialogs.theme.focusKeys()
     }
 
     // A list with a highlighted row that stays in sight.
@@ -255,6 +267,14 @@ Item {
                     height: dialogs.theme.rowHeight
                     color: palette.text
                 }
+            }
+            // The answer is a local file (a private key): pick it.
+            Button {
+                visible: dialogs.view.browse === true
+                text: "Browse…"
+                // Keys stay with the application.
+                focusPolicy: Qt.NoFocus
+                onClicked: filePicker.open()
             }
             // Multi-rename: the new names, following the template.
             Lines { model: dialogs.view.preview }
