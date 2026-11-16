@@ -84,10 +84,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             Overlay::Message(dialog) => {
                 let mut lines: Vec<Line> =
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
-                if dialog.then.is_none() {
-                    lines.push(Line::raw(""));
-                    lines.push(Line::styled("Esc: close", dim()));
-                }
+                lines.push(Line::raw(""));
+                lines.push(Line::styled(dialog.hint(), dim()));
                 draw_box(frame, &dialog.title, lines);
             }
             Overlay::Viewer(viewer) => {

@@ -205,7 +205,7 @@ Item {
         id: message
         Box {
             title: dialogs.view.title
-            hint: dialogs.view.has_next ? "Enter: continue    Esc: close" : "Esc: close"
+            hint: dialogs.view.hint
             Lines { model: dialogs.view.lines }
         }
     }

@@ -182,6 +182,16 @@ pub struct MessageDialog {
     pub then: Option<InputDialog>,
 }
 
+impl MessageDialog {
+    /// The hint below the text: `Enter: <next dialog>   Esc: close`.
+    pub fn hint(&self) -> String {
+        match &self.then {
+            Some(next) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
+            None => "Esc: close".into(),
+        }
+    }
+}
+
 /// The menu bar: one menu per [`Category`], items from the action table.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MenuState {

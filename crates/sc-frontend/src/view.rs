@@ -163,6 +163,8 @@ pub enum OverlayView {
         lines: Vec<String>,
         /// Enter opens a follow-up question.
         has_next: bool,
+        /// The keys line below the text.
+        hint: String,
     },
     /// F3: the viewer.
     Viewer(ViewerView),
@@ -566,6 +568,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
             has_next: dialog.then.is_some(),
+            hint: dialog.hint(),
         },
         Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
         Overlay::Jobs(view) => OverlayView::Jobs {

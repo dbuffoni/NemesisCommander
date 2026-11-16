@@ -1585,8 +1585,6 @@ impl App {
                 sc_panel::format::permissions(mode),
                 mode & 0o7777
             ));
-            lines.push(String::new());
-            lines.push("Enter: change permissions   Esc: close".into());
             InputDialog::new(
                 "Permissions",
                 &format!("Octal mode for {}:", entry.name),
