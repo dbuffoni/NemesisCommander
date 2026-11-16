@@ -14,6 +14,7 @@ use serde::Serialize;
 
 use crate::app::{App, display_location, side_index};
 use crate::dialogs::{MenuState, Overlay};
+use crate::settings::SettingsScreen;
 use crate::viewer::Viewer;
 
 /// The whole screen.
@@ -175,6 +176,36 @@ pub enum OverlayView {
         /// Highlighted job.
         cursor: usize,
     },
+    /// Ctrl+,: options and shortcuts.
+    Settings(SettingsView),
+}
+
+/// The settings screen, cut to the rows that fit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SettingsView {
+    /// The visible rows.
+    pub rows: Vec<SettingsRowView>,
+    /// Index of the highlighted row in `rows`.
+    pub cursor: usize,
+    /// Position in the whole list, in percent.
+    pub percent: usize,
+    /// The keys of the highlighted row, or what to do while recording.
+    pub hint: String,
+    /// Waiting for a new shortcut.
+    pub recording: bool,
+}
+
+/// One row of the settings screen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SettingsRowView {
+    /// `header`, `option`, `shortcut` or `command`.
+    pub kind: String,
+    /// What the row is.
+    pub label: String,
+    /// Its value (shortcuts: the keys, `none` without any).
+    pub value: String,
+    /// Differs from the built-in value.
+    pub changed: bool,
 }
 
 /// A category of the help window.
@@ -579,7 +610,82 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
                 .collect(),
             cursor: view.cursor,
         },
+        // The window's title and hint lines take some of the rows.
+        Overlay::Settings(screen) => {
+            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(7)))
+        }
     })
+}
+
+/// Describes the settings screen with `rows` visible rows.
+pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> SettingsView {
+    use crate::settings::{FieldKind, Row, keys_of};
+    let config = &app.context().config;
+    let defaults = sc_config::Config::default();
+    let rows = rows.max(3);
+    let total = screen.rows.len();
+    // Keep the cursor away from the edges, like a list that scrolls.
+    let offset = screen.cursor.saturating_sub(rows / 2).min(total.saturating_sub(rows));
+    let row_view = |row: &Row| match *row {
+        Row::Header(title) => SettingsRowView {
+            kind: "header".into(),
+            label: title.into(),
+            value: String::new(),
+            changed: false,
+        },
+        Row::Option(field) => SettingsRowView {
+            kind: "option".into(),
+            label: field.label().into(),
+            value: field.value(config),
+            changed: field.value(config) != field.value(&defaults),
+        },
+        Row::Shortcut(action) => {
+            let keys = keys_of(config, action);
+            let value = if keys.is_empty() {
+                "none".to_owned()
+            } else {
+                keys.iter().map(ToString::to_string).collect::<Vec<_>>().join(" / ")
+            };
+            SettingsRowView {
+                kind: "shortcut".into(),
+                label: action.label().into(),
+                value,
+                changed: config.keys.contains_key(action.id()),
+            }
+        }
+        Row::Command(command) => SettingsRowView {
+            kind: "command".into(),
+            label: command.label().into(),
+            value: String::new(),
+            changed: false,
+        },
+    };
+    let hint = match (screen.recording, screen.current()) {
+        (Some(recording), _) => {
+            format!("Press the new shortcut for \"{}\"   Esc: cancel", recording.action.label())
+        }
+        (None, Row::Option(field)) => match field.kind() {
+            FieldKind::Toggle | FieldKind::Choice => {
+                "Enter / ← →: change   r: default   Esc: close"
+            }
+            FieldKind::Number(..) => {
+                "Enter: type a value   ← →: one less / more   r: default   Esc: close"
+            }
+            FieldKind::Text => "Enter: type a value   r: default   Esc: close",
+        }
+        .to_owned(),
+        (None, Row::Shortcut(_)) => {
+            "Enter: new shortcut   a: add one   Delete: none   r: default   Esc: close".to_owned()
+        }
+        (None, _) => "Enter: run   Esc: close".to_owned(),
+    };
+    SettingsView {
+        rows: screen.rows.iter().skip(offset).take(rows).map(row_view).collect(),
+        cursor: screen.cursor - offset,
+        percent: if total <= rows { 100 } else { (offset + rows) * 100 / total },
+        hint,
+        recording: screen.recording.is_some(),
+    }
 }
 
 /// Describes the viewer with `rows` visible lines.

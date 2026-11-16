@@ -35,6 +35,7 @@ Item {
             case "message": return message
             case "viewer": return viewer
             case "jobs": return jobs
+            case "settings": return settings
             default: return null
             }
         }
@@ -239,6 +240,56 @@ Item {
                 cursor: dialogs.view.cursor
                 model: dialogs.view.rows
                 stateOf: (row) => row.state
+            }
+        }
+    }
+
+    // Ctrl+,: options and shortcuts, changed in place. A dot marks values
+    // that differ from the built-in ones.
+    Component {
+        id: settings
+        Box {
+            title: "Settings    " + dialogs.view.percent + "%"
+            hint: dialogs.view.hint
+            hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
+            width: Math.min(dialogs.theme.width - 40, 860)
+            Repeater {
+                model: dialogs.view.rows
+                delegate: Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: dialogs.theme.rowHeight
+                    readonly property bool current: index === dialogs.view.cursor
+                    readonly property bool header: modelData.kind === "header"
+                    color: current ? palette.highlight : "transparent"
+                    radius: 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: header ? 0 : 12
+                        anchors.rightMargin: 6
+                        spacing: 12
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: modelData.label
+                            font.bold: header
+                            color: current ? palette.highlightedText
+                                 : header ? dialogs.theme.headingColor
+                                 : modelData.kind === "command" ? dialogs.theme.linkColor
+                                 : palette.windowText
+                        }
+                        Label {
+                            visible: !header && modelData.kind !== "command"
+                            Layout.preferredWidth: parent.width * 0.38
+                            elide: Text.ElideRight
+                            text: (modelData.changed ? "• " : "") + modelData.value
+                            font: dialogs.theme.fixedFont
+                            color: current ? palette.highlightedText
+                                 : modelData.changed ? dialogs.theme.selectedText
+                                 : modelData.value === "none" ? dialogs.theme.dim
+                                 : palette.windowText
+                        }
+                    }
+                }
             }
         }
     }

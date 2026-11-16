@@ -93,6 +93,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 app.page = page;
             }
             Overlay::Jobs(view) => draw_jobs(frame, app, view.cursor),
+            Overlay::Settings(screen) => draw_settings(frame, app, screen),
         }
     }
     if let Some(conflict) = app.pending_conflict() {
@@ -578,6 +579,53 @@ fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, zoom: Zoom, area: R
             cell.set_bg(Color::Rgb(lower[0], lower[1], lower[2]));
         }
     }
+}
+
+/// Draws the settings screen (Ctrl+,): options, shortcuts and commands.
+fn draw_settings(frame: &mut Frame, app: &App, screen: &sc_frontend::settings::SettingsScreen) {
+    let area = frame.area();
+    let rect =
+        centered(area, area.width.saturating_sub(4).min(100), area.height.saturating_sub(2).max(8));
+    frame.render_widget(Clear, rect);
+    let rows = rect.height.saturating_sub(2) as usize;
+    let view = sc_frontend::view::settings_view(app, screen, rows);
+    let hint_style = if view.recording { Style::new().fg(Color::Yellow) } else { dim() };
+    let block = Block::bordered()
+        .title(Line::styled(format!(" Settings {}% ", view.percent), bold()))
+        .title_bottom(Line::styled(format!(" {} ", view.hint), hint_style));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
+    let width = inner.width as usize;
+    let value_width = (width / 3).clamp(12, 40);
+    let label_width = width.saturating_sub(value_width + 3);
+    let lines: Vec<Line> = view
+        .rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            if row.kind == "header" {
+                return Line::styled(
+                    fit(&row.label, width),
+                    Style::new().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                );
+            }
+            let mark = if row.changed { "*" } else { " " };
+            let text = format!(
+                " {} {mark} {}",
+                fit(&row.label, label_width),
+                fit(&row.value, value_width)
+            );
+            let style = if i == view.cursor {
+                highlight()
+            } else if row.kind == "command" {
+                Style::new().fg(Color::Cyan)
+            } else {
+                Style::new()
+            };
+            Line::styled(text, style)
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {

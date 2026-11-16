@@ -10,6 +10,7 @@ use sc_vfs::VfsPath;
 use tokio::sync::oneshot;
 
 use crate::input::TextField;
+use crate::settings::{Field, SettingsScreen};
 use crate::viewer::Viewer;
 
 /// The window drawn over the panels, if any.
@@ -31,6 +32,8 @@ pub enum Overlay {
     Viewer(Viewer),
     /// Ctrl+J: the transfer queue.
     Jobs(JobsView),
+    /// Ctrl+,: options and shortcuts.
+    Settings(SettingsScreen),
 }
 
 /// What an [`InputDialog`] is for.
@@ -69,6 +72,30 @@ pub enum InputPurpose {
     ExportSettings,
     /// Read settings from the typed file.
     ImportSettings,
+    /// A typed value for an option of the settings screen, which opens
+    /// again afterwards.
+    SettingValue {
+        /// The option.
+        field: Field,
+        /// The screen to go back to.
+        screen: Box<SettingsScreen>,
+    },
+    /// Send the settings to the typed machine (from the settings screen).
+    SendSettings(Box<SettingsScreen>),
+    /// Fetch the settings of the typed machine (from the settings screen).
+    FetchSettings(Box<SettingsScreen>),
+}
+
+impl InputPurpose {
+    /// The settings screen a dialog opened from, to go back to.
+    pub fn settings_screen(&self) -> Option<&SettingsScreen> {
+        match self {
+            InputPurpose::SettingValue { screen, .. }
+            | InputPurpose::SendSettings(screen)
+            | InputPurpose::FetchSettings(screen) => Some(screen),
+            _ => None,
+        }
+    }
 }
 
 /// A one-line question.

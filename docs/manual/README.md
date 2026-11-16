@@ -310,6 +310,7 @@ jobs. Every command accepts the same locations as the panels.
 | `sc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace, `--dry-run`) |
 | `sc jobs` | Show and control the transfer queue |
 | `sc config path / show / export / import` | Locate, print, back up and restore the settings |
+| `sc config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
 | `sc keys` | Print the main shortcuts |
 | `sc run` / `sc plugin` | Scripts and plugins |
 | `sc agent --stdio`, `sc serve`, `sc tls` | The server side (Linux) |
@@ -324,25 +325,57 @@ sc rename --template "holiday-[C].[E]" --digits 3 *.jpg --dry-run
 
 ## Settings
 
-Settings are a TOML file; **Ctrl+,** opens it in your editor and
-SuperCommander reloads it when you close the editor. `sc config path` shows
-where it is. It holds:
+**Ctrl+,** opens the settings screen. It lists every option, every
+command's shortcuts, and the commands to share settings. Changes are saved
+and applied at once; values that differ from the built-in ones are marked
+with a dot.
 
-- general: confirm before deleting, use the recycle bin, the editor;
-- panels: hidden files, sort order, human-readable sizes;
-- transfers: parallel jobs and files, verification, conflict policy,
-  bandwidth limit, retries;
-- viewer: wrapping, tab width;
-- your own shortcuts for any command, bookmarks and saved connections.
+![Settings](images/settings.png)
 
-Settings move between machines by file only: **Export settings** and
-**Import settings** in the menu, or `sc config export FILE` and
-`sc config import FILE`.
+- **Options**: Enter or ← → change on/off and choice options; numbers and
+  text are typed after Enter (← → also step numbers). **r** puts the
+  default back.
+  - General: confirm before deleting, use the recycle bin, the editor.
+  - Panels: hidden files, sort order, human-readable sizes.
+  - Transfers: jobs at the same time (1 runs them one after the other, in
+    priority order), files at the same time in a job, the check after
+    copying, what to do when a file exists, the bandwidth limit, retries.
+  - Viewer: wrapping, tab width, when to open files as hex.
+- **Shortcuts**: Enter, then press the new key. **a** adds a key instead
+  of replacing them, **Delete** leaves the command without a key, **r**
+  gives back the built-in keys. A key that belonged to another command is
+  taken from it, and the status line says which.
+
+![Recording a shortcut](images/settings-shortcut.png)
+
+The same settings serve the window and the terminal interface: a shortcut
+changed in one works in the other.
+
+### Sharing settings with other machines
+
+The last rows of the screen, and `sc config`, move settings between
+machines. Nothing is synchronized in the background: settings move only
+when you send or fetch them.
+
+- **Send these settings to another machine…** (`sc config push LOCATION`)
+  writes your settings there. For a server running the agent, the machine
+  is enough (`agent://host`, `scs://host:7443`): the agent says where its
+  settings live. Anywhere else, give the settings file or its folder, for
+  example `sftp://host/home/me/.config/supercommander`. The previous file
+  is kept as `config.toml.bak`; `--merge` keeps the other machine's
+  bookmarks, connections and shortcuts.
+- **Get the settings of another machine…** (`sc config pull LOCATION`)
+  reads them, then asks whether to replace yours or merge them.
+- **Export / Import** write and read a settings file anywhere, and **Edit
+  the settings file** opens the TOML file in your editor; it is read again
+  when you close the editor.
+
+`sc config path` shows where the settings file is.
 
 ## All shortcuts
 
 F1 shows the main ones; this is the complete list. Every one can be changed
-in the settings.
+on the settings screen (Ctrl+,).
 
 ![Main shortcuts (F1)](images/help.png)
 
@@ -405,7 +438,7 @@ in the settings.
 |---|---|
 | F1 | Show main shortcuts |
 | F9 | Menu |
-| Ctrl+, | Settings |
+| Ctrl+, | Settings (options and shortcuts) |
 | F10 | Quit |
 
 The menu bar (F9) lists every command with its shortcut:

@@ -34,6 +34,7 @@ use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
 mod plugins;
+mod settings_screen;
 
 pub use plugins::PluginChoice;
 
@@ -618,15 +619,16 @@ impl App {
                 Some(Overlay::Menu(menu))
             }
             Overlay::Input(mut dialog) => {
+                let back = dialog.purpose.settings_screen().cloned().map(Overlay::Settings);
                 if is_esc {
                     if dialog.purpose == InputPurpose::QuickFilter {
                         self.workspace.active_mut().set_filter("");
                     }
-                    return None;
+                    return back;
                 }
                 if key == Some(Key::Enter) {
                     self.submit_input(dialog);
-                    return None;
+                    return back;
                 }
                 if dialog.field.handle(&press) && dialog.purpose == InputPurpose::QuickFilter {
                     self.workspace.active_mut().set_filter(dialog.field.text());
@@ -746,6 +748,7 @@ impl App {
                 view.cursor = view.cursor.min(self.jobs.len().saturating_sub(1));
                 Some(Overlay::Jobs(view))
             }
+            Overlay::Settings(screen) => self.settings_key(screen, press),
         }
     }
 
@@ -968,14 +971,7 @@ impl App {
             Action::RunScript => self.choose_plugin_command(),
             Action::Help => self.overlay = Some(Overlay::Help),
             Action::Menu => self.overlay = Some(Overlay::Menu(MenuState::default())),
-            Action::Settings => {
-                let file = self.context.paths.config_file();
-                if !file.exists() && !self.save_settings() {
-                    return;
-                }
-                self.external =
-                    Some(External { command: self.editor_command(&file), reload_settings: true });
-            }
+            Action::Settings => self.open_settings(),
             Action::ExportConfig => {
                 let suggestion = home_file("supercommander-settings.toml");
                 self.ask(
@@ -1189,6 +1185,9 @@ impl App {
                 }
                 Err(e) => self.set_error(e.to_string()),
             },
+            InputPurpose::SettingValue { field, .. } => self.setting_typed(field, &text),
+            InputPurpose::SendSettings(_) => self.send_settings(&text),
+            InputPurpose::FetchSettings(_) => self.fetch_settings(&text),
         }
     }
 
@@ -1271,7 +1270,7 @@ impl App {
             ChoosePurpose::ImportMode(bundle) => {
                 let mode = if cursor == 0 { ImportMode::Replace } else { ImportMode::Merge };
                 self.context.config = bundle.apply(&self.context.config, mode);
-                self.apply_key_overrides();
+                self.apply_settings();
                 if self.save_settings() {
                     self.set_status("Settings imported");
                 }
@@ -1483,7 +1482,7 @@ impl App {
             match sc_config::Config::load(&self.context.paths.config_file()) {
                 Ok(config) => {
                     self.context.config = config;
-                    self.apply_key_overrides();
+                    self.apply_settings();
                     if self.status.is_none() {
                         self.set_status("Settings reloaded");
                     }

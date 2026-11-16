@@ -80,6 +80,9 @@ fn every_dialog_draws_cleanly() {
         ("Ctrl+Shift+D Ctrl+D", "choose"),
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
+        ("Ctrl+,", "settings"),
+        // Recording a shortcut.
+        ("Ctrl+, End Up Up Up Up Up Up Up Up Up Enter", "settings"),
     ] {
         let run = run(home.path(), keys, None);
         assert_no_qml_warnings(&run);
@@ -128,4 +131,18 @@ fn every_viewer_draws_cleanly() {
             assert!(url.starts_with("file://") && url.ends_with(".png"), "{url}");
         }
     }
+}
+
+#[test]
+fn the_settings_screen_saves_changes() {
+    let home = home();
+    // Down to "Show hidden files" (General has three options), Enter.
+    let run = run(home.path(), "Ctrl+, Down Down Down Enter", None);
+    assert_no_qml_warnings(&run);
+    let rows = run.screen["overlay"]["rows"].as_array().unwrap();
+    let hidden = rows.iter().find(|r| r["label"] == "Show hidden files").unwrap();
+    assert_eq!(hidden["value"], "yes");
+    assert_eq!(hidden["changed"], true);
+    let saved = std::fs::read_to_string(home.path().join("config/config.toml")).unwrap();
+    assert!(saved.contains("show_hidden = true"), "{saved}");
 }

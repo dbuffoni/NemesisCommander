@@ -9,6 +9,7 @@ Rectangle {
     id: box
     property string title: ""
     property string hint: ""
+    property color hintColor: theme.dim
     default property alias content: column.data
     readonly property var theme: ApplicationWindow.window
 
@@ -37,6 +38,8 @@ Rectangle {
         x: 16
         anchors.top: header.bottom
         anchors.topMargin: 10
+        anchors.bottom: footer.visible ? footer.top : parent.bottom
+        anchors.bottomMargin: 8
         width: parent.width - 32
         spacing: 4
         clip: true
@@ -50,6 +53,6 @@ Rectangle {
         width: parent.width - 32
         text: box.hint
         visible: text !== ""
-        color: box.theme.dim
+        color: box.hintColor
     }
 }

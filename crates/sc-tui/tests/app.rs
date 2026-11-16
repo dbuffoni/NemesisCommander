@@ -839,3 +839,103 @@ async fn without_plugins_alt_x_says_how_to_add_one() {
     assert!(h.app.overlay().is_none());
     assert!(h.status().contains("plugin") || h.status().contains("Plugins"), "{}", h.status());
 }
+
+/// Moves the settings screen's cursor to the row whose label starts with
+/// `label`.
+fn settings_row(h: &mut Harness, label: &str) {
+    h.key("Home");
+    for _ in 0..200 {
+        if let Some(Overlay::Settings(screen)) = h.app.overlay() {
+            let view = sc_frontend::view::settings_view(&h.app, screen, 1000);
+            if view.rows[view.cursor].label.starts_with(label) {
+                return;
+            }
+        }
+        h.key("Down");
+    }
+    let labels: Vec<String> = match h.app.overlay() {
+        Some(Overlay::Settings(screen)) => sc_frontend::view::settings_view(&h.app, screen, 1000)
+            .rows
+            .into_iter()
+            .map(|r| r.label)
+            .collect(),
+        other => vec![format!("{other:?}")],
+    };
+    panic!("no settings row {label} in {labels:?}");
+}
+
+#[tokio::test]
+async fn the_settings_screen_changes_options_and_saves_them() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+,");
+    let screen = h.screen();
+    assert!(screen.contains("Settings") && screen.contains("Ask before deleting"), "{screen}");
+    assert!(screen.contains("General") && screen.contains("Enter / ← →: change"), "{screen}");
+
+    settings_row(&mut h, "Show hidden files");
+    h.key("Enter");
+    assert!(h.app.context().config.panels.show_hidden);
+    settings_row(&mut h, "Check after copying");
+    h.key("Right");
+    assert_eq!(h.app.context().config.transfers.verify, sc_ops::VerifyMode::Fast);
+
+    // Numbers are typed; Esc or Enter come back to the screen.
+    settings_row(&mut h, "Jobs at the same time");
+    h.key("Enter");
+    h.type_text("1");
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))), "back on the screen");
+    assert_eq!(h.app.context().config.transfers.parallel_jobs, 1);
+    let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
+    assert!(saved.contains("parallel_jobs = 1") && saved.contains("show_hidden = true"), "{saved}");
+
+    // r puts the default back.
+    h.press(KeyPress::char('r'));
+    assert_eq!(h.app.context().config.transfers.parallel_jobs, 2);
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn the_settings_screen_records_shortcuts() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Ctrl+,");
+    settings_row(&mut h, "Refresh");
+    h.key("Enter");
+    assert!(h.screen().contains("Press the new shortcut"), "{}", h.screen());
+    h.key("F5");
+    assert!(h.status().contains("taken from Copy"), "{}", h.status());
+    assert_eq!(h.app.context().config.keys["view.refresh"], ["F5"]);
+    h.key("Esc");
+    // F5 now refreshes; Copy has no key left.
+    h.key("F5");
+    assert!(h.app.overlay().is_none(), "F5 no longer opens the copy question");
+    h.key("Ctrl+,");
+    settings_row(&mut h, "Copy");
+    assert!(h.screen().contains("none"), "{}", h.screen());
+    h.press(KeyPress::char('r'));
+    h.key("Esc");
+    h.key("F5");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "F5 copies again");
+}
+
+#[tokio::test]
+async fn settings_are_sent_to_another_folder_from_the_screen() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+,");
+    settings_row(&mut h, "Send these settings");
+    h.key("Enter");
+    let target = h.path("other/config.toml").display().to_string();
+    h.type_text(&target);
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.status().starts_with("Settings sent to"), "{}", h.status());
+    assert!(h.path("other/config.toml").exists());
+    settings_row(&mut h, "Get the settings");
+    h.key("Enter");
+    h.type_text(&target);
+    h.key("Enter");
+    h.settle().await;
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "replace or merge?");
+}

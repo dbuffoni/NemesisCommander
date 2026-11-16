@@ -144,7 +144,7 @@ actions! {
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        ["F1"];
     Menu          = "app.menu",             App, true,  "Menu",                       ["F9"];
-    Settings      = "app.settings",         App, false, "Settings…",                  ["Ctrl+,"];
+    Settings      = "app.settings",         App, true,  "Settings…",                  ["Ctrl+,"];
     ExportConfig  = "app.export-config",    App, false, "Export settings to file…",   [];
     ImportConfig  = "app.import-config",    App, false, "Import settings from file…", [];
     Quit          = "app.quit",             App, true,  "Quit",                       ["F10"];

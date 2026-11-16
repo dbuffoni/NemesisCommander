@@ -20,6 +20,7 @@ mod app;
 mod dialogs;
 mod input;
 pub mod preview;
+pub mod settings;
 pub mod view;
 pub mod viewer;
 
