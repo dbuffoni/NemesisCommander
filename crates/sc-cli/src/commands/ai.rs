@@ -34,6 +34,9 @@ pub async fn ai(context: &AppContext, args: AiArgs) -> CmdResult {
             };
             engine::new(context, request).await
         }
+        AiAction::Rename { description, paths, model, json } => {
+            engine::rename(context, &description, &paths, &model, json).await
+        }
     }
 }
 
@@ -147,8 +150,8 @@ mod engine {
         let mut messages = vec![json!({ "role": "user", "content": first_message(&request) })];
         for attempt in 1..=request.tries {
             crate::out!("asking {} (try {attempt} of {})…", request.model, request.tries);
-            let content = client.ask(&system_prompt(), &messages).await?;
-            let answer = parse_answer(&content)?;
+            let content = client.ask(&system_prompt(), &messages, answer_schema()).await?;
+            let answer: Answer = parse_answer(&content)?;
             // The assistant turn goes back unchanged (thinking included).
             messages.push(json!({ "role": "assistant", "content": content }));
             let folder = draft.path().join(format!("try-{attempt}"));
@@ -251,7 +254,7 @@ mod engine {
     }
 
     /// The answer in the text blocks of `content`.
-    fn parse_answer(content: &Value) -> Result<Answer, String> {
+    fn parse_answer<T: serde::de::DeserializeOwned>(content: &Value) -> Result<T, String> {
         let text: String = content
             .as_array()
             .into_iter()
@@ -353,6 +356,150 @@ mod engine {
         Ok(())
     }
 
+    /// What Claude answers for a rename: a multi-rename rule.
+    #[derive(Deserialize)]
+    struct RenameAnswer {
+        explanation: String,
+        template: String,
+        find: String,
+        replace: String,
+        regex: bool,
+        case: sc_ops::CaseChange,
+        counter_start: u64,
+        counter_step: u64,
+        counter_width: usize,
+    }
+
+    fn rename_schema() -> Value {
+        let text = json!({ "type": "string" });
+        let number = json!({ "type": "integer" });
+        json!({
+            "type": "object",
+            "properties": {
+                "explanation": text, "template": text, "find": text, "replace": text,
+                "regex": { "type": "boolean" },
+                "case": { "type": "string", "enum": ["Unchanged", "Lower", "Upper", "Title"] },
+                "counter_start": number, "counter_step": number, "counter_width": number
+            },
+            "required": ["explanation", "template", "find", "replace", "regex", "case",
+                "counter_start", "counter_step", "counter_width"],
+            "additionalProperties": false
+        })
+    }
+
+    /// The names Claude sees: enough to show the pattern.
+    const RENAME_SAMPLES: usize = 40;
+
+    /// `sc ai rename`: Claude writes the multi-rename rule (template,
+    /// find/replace, regex, case, counter) for the description; the rule
+    /// is checked on the files and fixed when it fails. Prints the rule
+    /// and the new names; renames nothing.
+    pub async fn rename(
+        context: &AppContext,
+        description: &str,
+        paths: &[String],
+        model: &str,
+        as_json: bool,
+    ) -> CmdResult {
+        let key = api_key(context)?;
+        let client = Client::new(key, model.to_owned())?;
+        let files = crate::location::parse_all(paths)?;
+        let names: Vec<&str> =
+            files.iter().map(|path| path.file_name().unwrap_or_default()).collect();
+        let shown = names.iter().take(RENAME_SAMPLES).copied().collect::<Vec<_>>().join("\n");
+        let more = names.len().saturating_sub(RENAME_SAMPLES);
+        let mut messages = vec![json!({
+            "role": "user",
+            "content": format!(
+                "Rename these {} files: {description}\n\n<names>\n{shown}\n</names>{}",
+                names.len(),
+                if more > 0 { format!("\n(and {more} more like them)") } else { String::new() }
+            ),
+        })];
+        for _ in 0..3 {
+            let content = client.ask(RENAME_PROMPT, &messages, rename_schema()).await?;
+            let answer: RenameAnswer = parse_answer(&content)?;
+            messages.push(json!({ "role": "assistant", "content": content }));
+            let rule = sc_ops::RenameRule {
+                template: answer.template,
+                find: answer.find,
+                replace: answer.replace,
+                regex: answer.regex,
+                case: answer.case,
+                counter_start: answer.counter_start,
+                counter_step: answer.counter_step.max(1),
+                counter_width: answer.counter_width.max(1),
+            };
+            match sc_ops::preview_renames(&files, &rule) {
+                Ok(new_names) => {
+                    if as_json {
+                        let report = json!({
+                            "explanation": answer.explanation,
+                            "rule": rule,
+                            "names": new_names,
+                        });
+                        crate::out!("{report}");
+                    } else {
+                        crate::out!("{}", answer.explanation.trim());
+                        crate::out!("{}", rename_command(&rule));
+                        for (old, new) in names.iter().zip(&new_names) {
+                            if old != new {
+                                crate::out!("{old} -> {new}");
+                            }
+                        }
+                    }
+                    return Ok(ExitCode::SUCCESS);
+                }
+                Err(error) => messages.push(json!({
+                    "role": "user",
+                    "content": format!("This rule fails on these files: {error}. Fix it."),
+                })),
+            }
+        }
+        Err("Claude found no working rule; try describing it differently".into())
+    }
+
+    /// The `sc rename` options of `rule`, to see (and reuse) it.
+    fn rename_command(rule: &sc_ops::RenameRule) -> String {
+        let quote = |text: &str| format!("'{}'", text.replace('\'', "'\\''"));
+        let mut line = format!("sc rename --template {}", quote(&rule.template));
+        if !rule.find.is_empty() {
+            line += &format!(" --find {} --replace {}", quote(&rule.find), quote(&rule.replace));
+            if rule.regex {
+                line += " --regex";
+            }
+        }
+        let case = match rule.case {
+            sc_ops::CaseChange::Unchanged => "",
+            sc_ops::CaseChange::Lower => " --case lower",
+            sc_ops::CaseChange::Upper => " --case upper",
+            sc_ops::CaseChange::Title => " --case title",
+        };
+        line += case;
+        if rule.template.contains("[C]") {
+            line += &format!(
+                " --start {} --step {} --digits {}",
+                rule.counter_start, rule.counter_step, rule.counter_width
+            );
+        }
+        line
+    }
+
+    const RENAME_PROMPT: &str = "You write rules for the multi-rename of SuperCommander, a \
+        file manager. A rule renames every file the same way, in this order:\n\
+        1. `template` builds the name: [N] name without extension, [N2-5] characters 2 to 5 \
+        of it (1-based), [N3-] from character 3, [E] extension without the dot, [X] \
+        extension with the dot (or nothing), [C] counter, [P] parent folder name, [[ and ]] \
+        literal brackets; other text is kept. `[N][X]` keeps the name.\n\
+        2. `find` / `replace` (when `find` is not empty) on that result: literal text, or \
+        with `regex` true a Rust regular expression (no look-around, no backreferences in \
+        the pattern) whose `replace` may use $1, ${name}; every match is replaced.\n\
+        3. `case`: Unchanged, Lower, Upper or Title.\n\
+        The counter starts at `counter_start`, adds `counter_step` per file (in the order \
+        given) and has at least `counter_width` digits; use 1, 1, 1 when there is no [C].\n\
+        Prefer the simplest rule; keep extensions unless asked. New names must differ from \
+        each other. `explanation`: one short sentence, in the language of the request.";
+
     /// The Messages API over HTTPS (there is no official Rust SDK).
     struct Client {
         http: reqwest::Client,
@@ -378,7 +525,12 @@ mod engine {
         }
 
         /// One request; the answer's content blocks.
-        async fn ask(&self, system: &str, messages: &[Value]) -> Result<Value, String> {
+        async fn ask(
+            &self,
+            system: &str,
+            messages: &[Value],
+            schema: Value,
+        ) -> Result<Value, String> {
             let mut body = json!({
                 "model": self.model,
                 "max_tokens": 16000,
@@ -386,7 +538,7 @@ mod engine {
                 "messages": messages,
                 "output_config": {
                     "effort": "high",
-                    "format": { "type": "json_schema", "schema": answer_schema() }
+                    "format": { "type": "json_schema", "schema": schema }
                 },
             });
             let mut request = self
@@ -456,8 +608,8 @@ mod engine {
                 { "type": "thinking", "thinking": "" },
                 { "type": "text", "text": "{\"summary\":\"s\",\"files\":[]}" }
             ]);
-            assert_eq!(parse_answer(&content).unwrap().summary, "s");
-            assert!(parse_answer(&json!([])).is_err());
+            assert_eq!(parse_answer::<Answer>(&content).unwrap().summary, "s");
+            assert!(parse_answer::<Answer>(&json!([])).is_err());
         }
     }
 }

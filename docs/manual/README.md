@@ -122,6 +122,7 @@ default; the destination can be edited before you confirm.
 | F6 | Move |
 | Shift+F6 or F2 | Rename |
 | Ctrl+M | Rename many files with a template |
+| F9, Files/Multi-rename with AI… | Describe the new names; Claude writes the rule (template, regex, case, counter) and you see it with the new names before anything is renamed |
 | F7 | New folder |
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |

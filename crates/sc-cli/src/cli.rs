@@ -558,6 +558,22 @@ pub enum AiAction {
         #[arg(long)]
         force: bool,
     },
+    /// Have Claude write the multi-rename rule (template, find/replace or
+    /// regex, case, counter) for a description, and show the new names.
+    /// Renames nothing: run the printed `sc rename` to apply it.
+    Rename {
+        /// How to rename, in any language, e.g. "date first, as YYYY-MM-DD".
+        description: String,
+        /// The files (only their names are sent).
+        #[arg(required = true)]
+        paths: Vec<String>,
+        /// The Claude model.
+        #[arg(long, default_value = "claude-opus-5-5")]
+        model: String,
+        /// Print the rule and the new names as JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Save an Anthropic API key (read from standard input) for `sc ai`.
     Key,
 }
