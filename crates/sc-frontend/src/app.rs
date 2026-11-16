@@ -199,8 +199,23 @@ pub fn side_index(side: SideId) -> usize {
 /// URIs for everything else.
 pub fn display_location(path: &VfsPath) -> String {
     match path.to_local_path() {
-        Some(local) if path.scheme() == "file" => local.display().to_string(),
+        Some(local) if path.scheme() == "file" => {
+            let home = directories::UserDirs::new().map(|dirs| dirs.home_dir().to_path_buf());
+            abbreviate_home(&local, home.as_deref())
+        }
         _ => path.to_string(),
+    }
+}
+
+/// `local` with the home folder written as `~` (which
+/// [`resolve_location`] reads back).
+fn abbreviate_home(local: &std::path::Path, home: Option<&std::path::Path>) -> String {
+    let separator = std::path::MAIN_SEPARATOR;
+    match home.filter(|home| home.parent().is_some()).and_then(|home| local.strip_prefix(home).ok())
+    {
+        Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+        Some(rest) => format!("~{separator}{}", rest.display()),
+        None => local.display().to_string(),
     }
 }
 
@@ -213,11 +228,11 @@ pub fn resolve_location(text: &str, base: &VfsPath) -> Result<VfsPath, String> {
     }
     let result = if text.contains("://") {
         VfsPath::parse(text)
-    } else if text == "~" || text.starts_with("~/") {
+    } else if text == "~" || text.starts_with("~/") || text.starts_with("~\\") {
         let home = directories::UserDirs::new()
             .map(|dirs| dirs.home_dir().to_path_buf())
             .ok_or_else(|| "cannot find the home folder".to_string())?;
-        VfsPath::from_local(home.join(text.trim_start_matches('~').trim_start_matches('/')))
+        VfsPath::from_local(home.join(text.trim_start_matches('~').trim_start_matches(['/', '\\'])))
     } else if Path::new(text).is_absolute() {
         VfsPath::from_local(text)
     } else {
@@ -1862,5 +1877,25 @@ fn default_editor(graphical: bool) -> &'static str {
         "open -W -t"
     } else {
         "xdg-open"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn home_is_written_as_a_tilde() {
+        let home = Path::new("/home/ada");
+        let sep = std::path::MAIN_SEPARATOR;
+        assert_eq!(
+            abbreviate_home(&home.join("Documents"), Some(home)),
+            format!("~{sep}Documents")
+        );
+        assert_eq!(abbreviate_home(home, Some(home)), "~");
+        assert_eq!(abbreviate_home(Path::new("/home/adam/x"), Some(home)), "/home/adam/x");
+        assert_eq!(abbreviate_home(Path::new("/etc"), Some(Path::new("/"))), "/etc", "not for /");
+        assert_eq!(abbreviate_home(Path::new("/etc"), None), "/etc");
     }
 }

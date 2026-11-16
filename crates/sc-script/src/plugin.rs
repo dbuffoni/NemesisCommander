@@ -497,15 +497,16 @@ mod tests {
 
     #[test]
     fn placeholders_follow_the_panels() {
+        // An absolute path on this system (Windows paths need a drive).
+        let abs = |p: &str| if cfg!(windows) { format!("C:{p}") } else { p.to_owned() };
+        let manifest_text = r#"{"name":"x","version":"1","commands":[{"id":"a","title":"A"}],
+                    "permissions":{"read":["$SELECTION","HOSTS"],"write":["$OTHER"]}}"#
+            .replace("HOSTS", &abs("/etc/hosts"));
         let plugin = Plugin {
             dir: PathBuf::from("/plugins/x"),
-            manifest: manifest(
-                r#"{"name":"x","version":"1","commands":[{"id":"a","title":"A"}],
-                    "permissions":{"read":["$SELECTION","/etc/hosts"],"write":["$OTHER"]}}"#,
-            )
-            .unwrap(),
+            manifest: manifest(&manifest_text).unwrap(),
         };
-        let path = |p: &str| VfsPath::from_local(p).unwrap();
+        let path = |p: &str| VfsPath::from_local(abs(p)).unwrap();
         let context = Context {
             panel: Some(path("/home/me")),
             other: Some(path("/backup")),
@@ -523,7 +524,7 @@ mod tests {
             plugin.manifest.permissions.describe(),
             [
                 "read the selected files and folders",
-                "read /etc/hosts",
+                format!("read {}", abs("/etc/hosts")).as_str(),
                 "read and change the folder in the other panel"
             ]
         );

@@ -37,6 +37,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: appimage
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
       # A recent Qt from the Qt project (the system one is too old here); the
       # AppImage bundles it.
       - name: Install Qt

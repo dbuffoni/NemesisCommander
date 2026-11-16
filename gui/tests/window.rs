@@ -24,6 +24,10 @@ fn run(home: &Path, keys: &str, screenshot: Option<&Path>) -> Run {
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
         .env("XDG_DATA_HOME", home.join("data"))
+        // Windows and macOS ignore XDG: keep each test's settings and
+        // transfer journal apart, or parallel tests lock each other out.
+        .env("SC_CONFIG_DIR", home.join("config"))
+        .env("SC_DATA_DIR", home.join("data"))
         .env("XDG_RUNTIME_DIR", home);
     if let Some(path) = screenshot {
         command.arg(format!("--screenshot={}", path.display()));
