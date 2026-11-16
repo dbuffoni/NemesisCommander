@@ -16,6 +16,7 @@ pub async fn serve(args: ServeArgs) -> CmdResult {
     let limits = sc_agent::Limits {
         roots: args.roots.iter().map(std::path::PathBuf::from).collect(),
         read_only: args.read_only,
+        settings_dir: super::settings_dir(),
     };
     let listener = tokio::net::TcpListener::bind(&args.listen)
         .await

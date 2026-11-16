@@ -289,3 +289,19 @@ fn keys_lists_essential_shortcuts() {
         .success()
         .stdout(predicate::str::contains("F5").and(predicate::str::contains("Copy")));
 }
+
+#[test]
+fn config_push_and_pull_through_any_location() {
+    let sandbox = Sandbox::new();
+    fs::create_dir_all(sandbox.path("config")).unwrap();
+    fs::write(sandbox.path("config/config.toml"), "[viewer]\ntab_width = 2\n").unwrap();
+    let other = sandbox.arg("other/supercommander/config.toml");
+    sandbox.sc().args(["config", "push", &other]).assert().success();
+    assert!(read(&sandbox.path("other/supercommander/config.toml")).contains("tab_width = 2"));
+    // A folder is enough once it exists.
+    let folder = sandbox.arg("other/supercommander");
+    sandbox.sc().args(["config", "push", "--merge", &folder]).assert().success();
+    assert!(sandbox.path("other/supercommander/config.toml.bak").exists());
+    sandbox.sc().args(["config", "pull", &folder]).assert().success();
+    sandbox.sc().args(["config", "push", &sandbox.arg("missing")]).assert().failure();
+}

@@ -354,6 +354,27 @@ pub enum ConfigAction {
         #[arg(long)]
         merge: bool,
     },
+    /// Send these settings to other machines: `agent://host` or
+    /// `scs://host` (the agent knows where its settings live), or the
+    /// settings file or folder on any location (`sftp://host/home/me/.config/supercommander`).
+    /// The previous file is kept as config.toml.bak.
+    Push {
+        /// Machines or settings files to send to.
+        #[arg(required = true)]
+        locations: Vec<String>,
+        /// Keep their bookmarks, connections and shortcuts, adding these.
+        #[arg(long)]
+        merge: bool,
+    },
+    /// Replace these settings with another machine's (same locations as
+    /// `push`, or a file made by `export`).
+    Pull {
+        /// Machine or settings file to fetch from.
+        location: String,
+        /// Keep these bookmarks, connections and shortcuts, adding theirs.
+        #[arg(long)]
+        merge: bool,
+    },
 }
 
 #[derive(Debug, Args)]

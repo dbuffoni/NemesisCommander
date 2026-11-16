@@ -4,12 +4,13 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use sc_app::AppContext;
+use sc_app::sync::{self, SyncMode};
 use sc_config::{ExportBundle, ImportMode};
 
 use super::CmdResult;
 use crate::cli::{ConfigAction, ConfigArgs};
 
-pub fn config(mut context: AppContext, args: ConfigArgs) -> CmdResult {
+pub async fn config(mut context: AppContext, args: ConfigArgs) -> CmdResult {
     match args.action {
         ConfigAction::Path => {
             crate::out!("settings: {}", context.paths.config_file().display());
@@ -26,6 +27,35 @@ pub fn config(mut context: AppContext, args: ConfigArgs) -> CmdResult {
             context.config = bundle.apply(&context.config, mode);
             context.save_config()?;
             crate::out!("settings imported from {file}");
+        }
+        ConfigAction::Push { locations, merge } => {
+            let mode = if merge { SyncMode::Merge } else { SyncMode::Replace };
+            let mut failed = false;
+            for text in &locations {
+                let result = async {
+                    let location = crate::location::parse(text).map_err(|e| e.to_string())?;
+                    sync::push(&context.registry, &context.config, &location, mode).await
+                }
+                .await;
+                match result {
+                    Ok(file) => crate::out!("settings sent to {file}"),
+                    Err(e) => {
+                        eprintln!("sc: {text}: {e}");
+                        failed = true;
+                    }
+                }
+            }
+            if failed {
+                return Ok(ExitCode::FAILURE);
+            }
+        }
+        ConfigAction::Pull { location, merge } => {
+            let location = crate::location::parse(&location)?;
+            let (theirs, file) = sync::pull(&context.registry, &location).await?;
+            let mode = if merge { ImportMode::Merge } else { ImportMode::Replace };
+            context.config = ExportBundle::new(&theirs).apply(&context.config, mode);
+            context.save_config()?;
+            crate::out!("settings fetched from {file}");
         }
     }
     Ok(ExitCode::SUCCESS)

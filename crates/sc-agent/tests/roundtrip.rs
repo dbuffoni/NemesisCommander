@@ -48,11 +48,19 @@ async fn write_all(provider: &dyn Provider, path: &VfsPath, mode: WriteMode, dat
 #[tokio::test]
 async fn handshake_reports_the_limits() {
     let dir = TempDir::new().unwrap();
-    let provider = agent(Limits { roots: vec![dir.path().into()], read_only: true }).await;
+    let provider =
+        agent(Limits { roots: vec![dir.path().into()], read_only: true, ..Default::default() })
+            .await;
     assert!(provider.info().read_only);
     assert_eq!(provider.info().roots.len(), 1);
     assert_eq!(provider.info().agent_version, sc_agent::VERSION);
     assert!(!provider.capabilities().contains(Capabilities::WRITE));
+    assert_eq!(provider.settings_dir(&remote(dir.path())), None, "not told");
+
+    let settings = dir.path().join("settings");
+    let limits = Limits { settings_dir: Some(settings.clone()), ..Default::default() };
+    let provider = agent(limits).await;
+    assert_eq!(provider.settings_dir(&remote(dir.path())), Some(remote(&settings)));
 }
 
 #[tokio::test]
@@ -158,12 +166,13 @@ async fn read_only_and_roots_are_enforced() {
     fs::write(dir.path().join("outside"), "secret").unwrap();
     let root = fs::canonicalize(&root).unwrap();
 
-    let provider = agent(Limits { roots: vec![root.clone()], read_only: false }).await;
+    let provider =
+        agent(Limits { roots: vec![root.clone()], read_only: false, ..Default::default() }).await;
     let outside = remote(&root.join("../outside"));
     assert!(matches!(provider.stat(&outside).await, Err(VfsError::PermissionDenied(_))));
     provider.create_dir(&remote(&root.join("ok"))).await.unwrap();
 
-    let read_only = agent(Limits { roots: vec![], read_only: true }).await;
+    let read_only = agent(Limits { roots: vec![], read_only: true, ..Default::default() }).await;
     let result = read_only.create_dir(&remote(&root.join("nope"))).await;
     assert!(matches!(result, Err(VfsError::PermissionDenied(_))));
     assert!(read_only.stat(&remote(&root.join("ok"))).await.is_ok());

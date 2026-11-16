@@ -19,6 +19,7 @@ sc-sftp.workspace = true
 sc-webdav.workspace = true
 sc-s3.workspace = true
 sc-smb.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
 
 [features]
 default = ["desktop"]

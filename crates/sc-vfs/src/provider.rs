@@ -92,6 +92,14 @@ pub trait Provider: Send + Sync + 'static {
     /// What the provider supports natively.
     fn capabilities(&self) -> Capabilities;
 
+    /// The settings folder of the SuperCommander running at the other end
+    /// of `on` (a path of this provider), when the provider talks to one
+    /// (the agent does). Used to send settings to other machines.
+    fn settings_dir(&self, on: &VfsPath) -> Option<VfsPath> {
+        let _ = on;
+        None
+    }
+
     /// Metadata of a single path. Symlinks are *not* followed: a link is
     /// reported as [`EntryKind::Symlink`](crate::EntryKind::Symlink).
     async fn stat(&self, path: &VfsPath) -> Result<Entry>;

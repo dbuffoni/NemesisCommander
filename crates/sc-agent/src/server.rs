@@ -28,6 +28,9 @@ pub struct Limits {
     pub roots: Vec<PathBuf>,
     /// Refuse every modification.
     pub read_only: bool,
+    /// This machine's SuperCommander settings folder, told to controllers
+    /// so they can send settings here.
+    pub settings_dir: Option<PathBuf>,
 }
 
 /// How an operation uses a path; decides how symbolic links are checked
@@ -151,6 +154,12 @@ impl AgentService {
             roots: self.limits.roots.iter().map(|r| r.display().to_string()).collect(),
             read_only: self.limits.read_only,
             hash_algorithms: vec!["blake3".into(), "xxh3".into(), "sha256".into()],
+            settings_dir: self
+                .limits
+                .settings_dir
+                .as_ref()
+                .map(|dir| dir.display().to_string())
+                .unwrap_or_default(),
         }
     }
 }
@@ -413,8 +422,12 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         std::fs::write(dir.path().join("secret"), "x").unwrap();
         std::os::unix::fs::symlink(dir.path().join("secret"), root.join("link")).unwrap();
-        let service =
-            AgentService::new(Limits { roots: vec![root.clone()], read_only: false }).unwrap();
+        let service = AgentService::new(Limits {
+            roots: vec![root.clone()],
+            read_only: false,
+            ..Default::default()
+        })
+        .unwrap();
         let root_text = std::fs::canonicalize(&root).unwrap().display().to_string();
         let inside = format!("{root_text}/new-file");
         assert!(service.check(&inside, Use::Content, true).is_ok(), "missing files are fine");
@@ -428,7 +441,9 @@ mod tests {
 
     #[test]
     fn read_only_refuses_changes() {
-        let service = AgentService::new(Limits { roots: vec![], read_only: true }).unwrap();
+        let service =
+            AgentService::new(Limits { roots: vec![], read_only: true, ..Default::default() })
+                .unwrap();
         let error = service.check("/tmp/x", Use::Entry, true).unwrap_err();
         assert_eq!(error.code(), tonic::Code::PermissionDenied);
         assert!(service.check("/tmp/x", Use::Entry, false).is_ok());

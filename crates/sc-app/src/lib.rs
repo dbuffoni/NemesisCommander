@@ -5,6 +5,8 @@
 //! a [`ProviderRegistry`] with every provider this build supports, instead of
 //! assembling those pieces themselves.
 
+pub mod sync;
+
 use std::sync::Arc;
 
 use sc_config::{AppPaths, Config, ConfigError, Keymap};

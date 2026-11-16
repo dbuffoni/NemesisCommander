@@ -119,6 +119,11 @@ impl Provider for AgentProvider {
         self.scheme
     }
 
+    fn settings_dir(&self, on: &VfsPath) -> Option<VfsPath> {
+        let dir = &self.hello.settings_dir;
+        (!dir.is_empty()).then(|| on.with_path(dir))
+    }
+
     fn capabilities(&self) -> Capabilities {
         let read = Capabilities::SEEK_READ | Capabilities::SERVER_HASH | Capabilities::SYMLINKS;
         if self.hello.read_only {

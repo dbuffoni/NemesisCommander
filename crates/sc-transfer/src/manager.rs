@@ -42,7 +42,8 @@ pub struct TransferManager {
 struct Inner {
     registry: Arc<ProviderRegistry>,
     journal: Journal,
-    options: ManagerOptions,
+    /// Jobs allowed to run at once; changeable while running.
+    max_jobs: std::sync::atomic::AtomicUsize,
     resolver: Option<Arc<dyn ConflictResolver>>,
     global_throttle: Arc<TokenBucket>,
     running: Mutex<HashMap<JobId, CancellationToken>>,
@@ -64,7 +65,7 @@ impl TransferManager {
             inner: Arc::new(Inner {
                 registry,
                 journal,
-                options,
+                max_jobs: std::sync::atomic::AtomicUsize::new(options.max_concurrent_jobs),
                 resolver: None,
                 global_throttle: Arc::new(TokenBucket::new(options.global_bandwidth_limit)),
                 running: Mutex::new(HashMap::new()),
@@ -158,6 +159,13 @@ impl TransferManager {
         self.inner.global_throttle.set_rate(bytes_per_second);
     }
 
+    /// Changes how many jobs run at the same time (1 runs them one after
+    /// the other, in priority order). Running jobs are not stopped.
+    pub fn set_max_concurrent_jobs(&self, jobs: usize) {
+        self.inner.max_jobs.store(jobs.max(1), std::sync::atomic::Ordering::Relaxed);
+        self.inner.wake.notify_one();
+    }
+
     /// Removes finished jobs from the journal.
     pub fn purge_finished(&self) -> Result<usize, JournalError> {
         self.inner.journal.purge_finished()
@@ -175,7 +183,9 @@ impl TransferManager {
                 .keys()
                 .copied()
                 .collect();
-            if running.len() >= self.inner.options.max_concurrent_jobs.max(1) {
+            if running.len()
+                >= self.inner.max_jobs.load(std::sync::atomic::Ordering::Relaxed).max(1)
+            {
                 return started;
             }
             let Ok(Some(id)) = self.inner.journal.next_queued(&running) else {

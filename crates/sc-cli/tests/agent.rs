@@ -85,3 +85,39 @@ fn hash_runs_on_the_server() {
         |out: &[u8]| String::from_utf8_lossy(out).split_whitespace().next().unwrap().to_owned();
     assert_eq!(digest(&here), digest(&there));
 }
+
+#[test]
+fn settings_go_to_the_agent_machine_and_come_back() {
+    let dir = sandbox();
+    let remote_settings = dir.path().join("remote-settings");
+    // The agent is "another machine": its own settings folder.
+    let agent = format!(
+        "env SC_CONFIG_DIR={} {} agent --stdio",
+        remote_settings.display(),
+        cargo_bin("sc").display()
+    );
+    let sc = || {
+        let mut command = Command::cargo_bin("sc").unwrap();
+        command
+            .env("SC_CONFIG_DIR", dir.path().join("config"))
+            .env("SC_DATA_DIR", dir.path().join("data"))
+            .env("SC_AGENT_COMMAND", &agent);
+        command
+    };
+    fs::create_dir_all(dir.path().join("config")).unwrap();
+    fs::write(dir.path().join("config/config.toml"), "[transfers]\nparallel_jobs = 1\n").unwrap();
+    sc().args(["config", "push", "agent://server"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("remote-settings/config.toml"));
+    let sent = fs::read_to_string(remote_settings.join("config.toml")).unwrap();
+    assert!(sent.contains("parallel_jobs = 1"), "{sent}");
+
+    fs::write(remote_settings.join("config.toml"), "[viewer]\ntab_width = 8\n").unwrap();
+    sc().args(["config", "pull", "agent://server"]).assert().success();
+    let fetched = fs::read_to_string(dir.path().join("config/config.toml")).unwrap();
+    assert!(
+        fetched.contains("tab_width = 8") && !fetched.contains("parallel_jobs = 1"),
+        "{fetched}"
+    );
+}

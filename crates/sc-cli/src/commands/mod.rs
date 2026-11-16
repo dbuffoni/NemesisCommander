@@ -40,7 +40,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Pack(args) => archive::pack(&context, args).await,
         Command::Unpack(args) => archive::unpack(&context, args).await,
         Command::Rename(args) => rename::rename(&context, args).await,
-        Command::Config(args) => settings::config(context, args),
+        Command::Config(args) => settings::config(context, args).await,
         Command::Keys => settings::keys(&context),
         Command::Agent(args) => agent(context, args).await,
         Command::Serve(args) => serve::serve(args).await,
@@ -62,12 +62,20 @@ async fn start_interface(_context: AppContext, _locations: &[String]) -> CmdResu
     Err("the terminal UI is not part of this build; see `sc --help` for commands".into())
 }
 
+/// This machine's settings folder, which the agent tells controllers so
+/// they can send their settings here (`sc config push`).
+#[cfg(target_os = "linux")]
+pub(crate) fn settings_dir() -> Option<std::path::PathBuf> {
+    sc_config::AppPaths::detect().config_file().parent().map(std::path::Path::to_path_buf)
+}
+
 /// `sc agent --stdio`: serve this machine to a controller over SSH.
 #[cfg(target_os = "linux")]
 async fn agent(_context: AppContext, args: crate::cli::AgentArgs) -> CmdResult {
     let limits = sc_agent::Limits {
         roots: args.roots.iter().map(std::path::PathBuf::from).collect(),
         read_only: args.read_only,
+        settings_dir: settings_dir(),
     };
     sc_agent::serve_stdio(limits).await?;
     Ok(ExitCode::SUCCESS)

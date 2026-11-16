@@ -62,6 +62,9 @@ message HelloReply {
   bool read_only = 4;
   // Hash algorithms Checksum accepts ("blake3", "xxh3", "sha256").
   repeated string hash_algorithms = 5;
+  // Where SuperCommander on that machine keeps its settings (empty when
+  // unknown), so a controller can send its settings there.
+  string settings_dir = 6;
 }
 
 message PathRequest {

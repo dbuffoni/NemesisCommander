@@ -68,7 +68,7 @@ async fn start(
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let identity = ServerIdentity::load(&bundle).unwrap();
-    let limits = Limits { roots: vec![root.clone()], read_only: false };
+    let limits = Limits { roots: vec![root.clone()], read_only: false, ..Default::default() };
     tokio::spawn(serve(listener, identity, limits));
     Server { host, port, root, bundle }
 }
