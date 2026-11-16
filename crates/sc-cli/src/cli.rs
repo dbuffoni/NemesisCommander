@@ -462,6 +462,16 @@ pub struct RunArgs {
     /// and exit.
     #[arg(long)]
     pub types: bool,
+    /// Start the script as if from the panels: the active panel's folder,
+    /// for `sc.context` (the desktop window runs panel scripts this way).
+    #[arg(long, value_name = "LOCATION")]
+    pub panel: Option<String>,
+    /// With --panel: the other panel's folder.
+    #[arg(long, value_name = "LOCATION", requires = "panel")]
+    pub other: Option<String>,
+    /// With --panel: a selected entry (repeatable).
+    #[arg(long, value_name = "LOCATION", requires = "panel")]
+    pub selected: Vec<String>,
 }
 
 #[derive(Debug, Args)]

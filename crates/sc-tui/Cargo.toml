@@ -23,7 +23,7 @@ tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 
 [features]
 # Plugin commands and scripts (Alt+X), see sc-frontend.
-scripting = ["sc-frontend/scripting"]
+scripting = ["sc-frontend/script-engine"]
 
 [dev-dependencies]
 sc-ops.workspace = true

@@ -6,10 +6,15 @@
 //! may change only the folder it is in, after a confirmation each time.
 //! Both run on a thread of their own, so a stuck script never blocks the
 //! interface; their printed lines are shown when they end.
+//!
+//! Built without `script-engine` (the desktop window), there is no V8 here:
+//! the chosen command runs in the `sc` program installed next to this one,
+//! which has the same settings folders.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use sc_config::AppPaths;
 use sc_vfs::VfsPath;
 
 use sc_config::{Action, Category};
@@ -220,7 +225,7 @@ impl App {
         let other = self.workspace.inactive().location().clone();
         let selection = self.targets();
         let registry = self.context.registry.clone();
-        let grants = self.context.paths.plugin_grants_file();
+        let paths = self.context.paths.clone();
         self.spawn_task(async move {
             let printed = Arc::new(Mutex::new(Vec::<String>::new()));
             let sink = printed.clone();
@@ -228,7 +233,7 @@ impl App {
                 sink.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_owned())
             });
             let (title, result) =
-                run_choice(choice, panel, other, selection, registry, output, &grants).await;
+                run_choice(choice, panel, other, selection, registry, output, &paths).await;
             let lines = printed.lock().unwrap_or_else(|e| e.into_inner()).clone();
             AppEvent::ScriptDone { title, lines, error: result.err() }
         });
@@ -286,7 +291,7 @@ fn permission_question(_dir: &Path, _grants: &Path) -> Result<Option<Vec<String>
 }
 
 /// Runs a choice to its end: its title for messages, and its result.
-#[cfg(feature = "scripting")]
+#[cfg(feature = "script-engine")]
 async fn run_choice(
     choice: PluginChoice,
     panel: VfsPath,
@@ -294,7 +299,7 @@ async fn run_choice(
     selection: Vec<VfsPath>,
     registry: Arc<sc_vfs::ProviderRegistry>,
     output: sc_script::Output,
-    grants: &Path,
+    paths: &AppPaths,
 ) -> (String, Result<(), String>) {
     use sc_script::plugin::{Context, Grants, Plugin};
     use sc_script::{Invocation, Permissions, ScriptOptions};
@@ -307,7 +312,7 @@ async fn run_choice(
             };
             let title =
                 plugin.command(&command).map(|c| c.title.clone()).unwrap_or(command.clone());
-            let granted = Grants::load(grants).and_then(|mut grants| {
+            let granted = Grants::load(&paths.plugin_grants_file()).and_then(|mut grants| {
                 if !grants.is_granted(&plugin) {
                     grants.grant(&plugin)?;
                 }
@@ -350,6 +355,120 @@ async fn run_choice(
     }
 }
 
+/// Runs a choice with the `sc` program: what it prints is the output,
+/// what it reports on failure the error.
+#[cfg(all(feature = "scripting", not(feature = "script-engine")))]
+async fn run_choice(
+    choice: PluginChoice,
+    panel: VfsPath,
+    other: VfsPath,
+    selection: Vec<VfsPath>,
+    _registry: Arc<sc_vfs::ProviderRegistry>,
+    output: Arc<dyn Fn(&str) + Send + Sync>,
+    paths: &AppPaths,
+) -> (String, Result<(), String>) {
+    use sc_script::plugin::{Grants, Plugin};
+
+    let title = match &choice {
+        PluginChoice::Command { dir, command } => {
+            let plugin = match Plugin::load(dir) {
+                Ok(plugin) => plugin,
+                Err(e) => return (dir.display().to_string(), Err(e.to_string())),
+            };
+            // The user allowed it (or had already): `sc` checks the grant.
+            let granted = Grants::load(&paths.plugin_grants_file()).and_then(|mut grants| {
+                if !grants.is_granted(&plugin) {
+                    grants.grant(&plugin)?;
+                }
+                Ok(())
+            });
+            let title = plugin.command(command).map(|c| c.title.clone()).unwrap_or(command.clone());
+            if let Err(e) = granted {
+                return (title, Err(e.to_string()));
+            }
+            title
+        }
+        PluginChoice::Script(script) => {
+            script.file_name().unwrap_or_default().to_string_lossy().into_owned()
+        }
+    };
+    let mut command = std::process::Command::new(sc_program());
+    command
+        .args(sc_arguments(&choice, &panel, &other, &selection))
+        .env("SC_CONFIG_DIR", &paths.config_dir)
+        .env("SC_DATA_DIR", &paths.data_dir)
+        .stdin(std::process::Stdio::null());
+    if let (PluginChoice::Script(_), Some(dir)) = (&choice, panel.to_local_path()) {
+        command.current_dir(dir);
+    }
+    let program = sc_program();
+    let ran = tokio::task::spawn_blocking(move || command.output()).await;
+    let result = match ran {
+        Ok(Ok(finished)) => {
+            for line in String::from_utf8_lossy(&finished.stdout).lines() {
+                output(line);
+            }
+            if finished.status.success() {
+                Ok(())
+            } else {
+                let error = String::from_utf8_lossy(&finished.stderr);
+                let error = error.trim().trim_start_matches("sc: ").to_owned();
+                Err(if error.is_empty() {
+                    format!("sc ended with {}", finished.status)
+                } else {
+                    error
+                })
+            }
+        }
+        Ok(Err(e)) => Err(format!("cannot start {}: {e}", program.display())),
+        Err(e) => Err(e.to_string()),
+    };
+    (title, result)
+}
+
+/// The `sc` program: `SC_PROGRAM` if set, else the one next to this
+/// program, else the one on the `PATH`.
+#[cfg(all(feature = "scripting", not(feature = "script-engine")))]
+fn sc_program() -> PathBuf {
+    if let Some(program) = std::env::var_os("SC_PROGRAM") {
+        return program.into();
+    }
+    let name = format!("sc{}", std::env::consts::EXE_SUFFIX);
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(&name)))
+        .filter(|sibling| sibling.is_file())
+        .unwrap_or_else(|| name.into())
+}
+
+/// The command line of `sc` that runs `choice` from these panels.
+#[cfg(all(feature = "scripting", not(feature = "script-engine")))]
+fn sc_arguments(
+    choice: &PluginChoice,
+    panel: &VfsPath,
+    other: &VfsPath,
+    selection: &[VfsPath],
+) -> Vec<String> {
+    let mut args: Vec<String> = Vec::new();
+    match choice {
+        PluginChoice::Command { dir, command } => {
+            let name = dir.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            args.extend(["plugin".into(), "run".into(), name, command.clone()]);
+            args.extend(selection.iter().map(VfsPath::to_string));
+        }
+        PluginChoice::Script(script) => {
+            args.extend(["run".into(), script.display().to_string()]);
+            args.extend(["--allow-write".into(), panel.to_string()]);
+            args.extend(["--allow-read".into(), other.to_string()]);
+            for selected in selection {
+                args.extend(["--selected".into(), selected.to_string()]);
+            }
+        }
+    }
+    args.extend(["--panel".into(), panel.to_string(), "--other".into(), other.to_string()]);
+    args
+}
+
 #[cfg(not(feature = "scripting"))]
 async fn run_choice(
     _choice: PluginChoice,
@@ -358,7 +477,43 @@ async fn run_choice(
     _selection: Vec<VfsPath>,
     _registry: Arc<sc_vfs::ProviderRegistry>,
     _output: Arc<dyn Fn(&str) + Send + Sync>,
-    _grants: &Path,
+    _paths: &AppPaths,
 ) -> (String, Result<(), String>) {
     ("Plugins".into(), Err("Plugins are not part of this build".into()))
+}
+
+#[cfg(all(test, feature = "scripting", not(feature = "script-engine")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sc_gets_the_panels_on_its_command_line() {
+        let panel = VfsPath::parse("/work").unwrap();
+        let other = VfsPath::parse("sftp://host/srv").unwrap();
+        let selection = vec![panel.join("a.txt")];
+        let script = PluginChoice::Script(PathBuf::from("/work/tidy.ts"));
+        assert_eq!(
+            sc_arguments(&script, &panel, &other, &selection),
+            [
+                "run",
+                "/work/tidy.ts",
+                "--allow-write",
+                "file:///work",
+                "--allow-read",
+                "sftp://host/srv",
+                "--selected",
+                "file:///work/a.txt",
+                "--panel",
+                "file:///work",
+                "--other",
+                "sftp://host/srv"
+            ]
+        );
+        let command =
+            PluginChoice::Command { dir: PathBuf::from("/p/rename-all"), command: "go".into() };
+        assert_eq!(
+            sc_arguments(&command, &panel, &other, &selection)[..5],
+            ["plugin", "run", "rename-all", "go", "file:///work/a.txt"]
+        );
+    }
 }
