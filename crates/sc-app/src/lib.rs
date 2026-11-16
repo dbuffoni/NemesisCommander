@@ -100,12 +100,15 @@ pub fn build_registry_for(paths: &AppPaths) -> ProviderRegistry {
     let mut registry = sc_providers::default_registry();
     sc_archive::register_archive_providers(&mut registry);
     registry.register(sc_agent::AgentFactory);
-    registry.register(sc_sftp::SftpFactory);
-    registry.register(sc_webdav::WebDavFactory::https());
-    registry.register(sc_webdav::WebDavFactory::http());
-    registry.register(sc_s3::S3Factory);
-    registry.register(sc_smb::SmbFactory);
     registry.register(sc_agent::ServeFactory::new(paths.tls_dir()));
+    #[cfg(feature = "remote")]
+    {
+        registry.register(sc_sftp::SftpFactory);
+        registry.register(sc_webdav::WebDavFactory::https());
+        registry.register(sc_webdav::WebDavFactory::http());
+        registry.register(sc_s3::S3Factory);
+        registry.register(sc_smb::SmbFactory);
+    }
     registry
 }
 
@@ -121,7 +124,9 @@ mod tests {
         assert!(context.warnings.is_empty());
         assert!(context.registry.schemes().contains(&"zip"));
         assert!(context.registry.schemes().contains(&"agent"));
-        for scheme in ["sftp", "dav", "davs", "s3", "smb", "scs"] {
+        assert!(context.registry.schemes().contains(&"scs"));
+        #[cfg(feature = "remote")]
+        for scheme in ["sftp", "dav", "davs", "s3", "smb"] {
             assert!(context.registry.schemes().contains(&scheme), "{scheme}");
         }
 
