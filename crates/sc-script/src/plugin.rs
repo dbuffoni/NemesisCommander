@@ -22,12 +22,11 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use sc_vfs::VfsPath;
 use serde::{Deserialize, Serialize};
 
-use crate::{Invocation, Permissions, ScriptError, ScriptOptions};
+use crate::{Permissions, ScriptError};
 
 /// The manifest's file name in a plugin folder.
 pub const MANIFEST: &str = "plugin.json";
@@ -268,6 +267,7 @@ impl Plugin {
 
     /// Runs `command` with `context`. The caller checks the grant first
     /// ([`Grants::is_granted`]); `output` receives what the plugin prints.
+    #[cfg(feature = "engine")]
     pub async fn run(
         &self,
         command: &str,
@@ -293,15 +293,15 @@ impl Plugin {
             .or_else(|| context.home.clone())
             .unwrap_or_else(|| self.dir.clone());
         let limits = self.manifest.limits;
-        let options = ScriptOptions {
+        let options = crate::ScriptOptions {
             registry,
             base,
             permissions: self.permissions(context)?,
             args: Vec::new(),
             output,
             heap_limit: limits.memory.max(16) * 1024 * 1024,
-            time_limit: Some(Duration::from_secs(limits.timeout.max(1))),
-            invocation: Some(Invocation::new(
+            time_limit: Some(std::time::Duration::from_secs(limits.timeout.max(1))),
+            invocation: Some(crate::Invocation::new(
                 command,
                 context.panel.as_ref(),
                 context.other.as_ref(),

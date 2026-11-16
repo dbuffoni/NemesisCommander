@@ -1,5 +1,6 @@
 //! `sc run`: TypeScript scripts with the `sc` API (ADR 0015).
 
+#[cfg(feature = "scripting")]
 use std::process::ExitCode;
 
 use sc_app::AppContext;
@@ -35,6 +36,15 @@ pub async fn run(context: &AppContext, args: RunArgs) -> CmdResult {
                 .map_err(|_| format!("--timeout {seconds}: not a number of seconds"))
         })
         .transpose()?;
+    let invocation = match &args.panel {
+        Some(panel) => Some(sc_script::Invocation::new(
+            "run",
+            Some(&crate::location::parse(panel)?),
+            args.other.as_deref().map(crate::location::parse).transpose()?.as_ref(),
+            &crate::location::parse_all(&args.selected)?,
+        )),
+        None => None,
+    };
     let options = ScriptOptions {
         registry: context.registry.clone(),
         base: std::env::current_dir()?,
@@ -43,7 +53,7 @@ pub async fn run(context: &AppContext, args: RunArgs) -> CmdResult {
         output: Arc::new(|line| crate::out!("{line}")),
         heap_limit: args.memory.max(16) * 1024 * 1024,
         time_limit,
-        invocation: None,
+        invocation,
     };
     sc_script::run(&name, &source, options).await?;
     Ok(ExitCode::SUCCESS)

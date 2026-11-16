@@ -723,6 +723,13 @@ async fn pack_and_browse_the_archive() {
     h.key("Enter");
     h.settle().await;
     assert_eq!(h.names(SideId::Right), ["..", "docs"]);
+    let open = h.app.context().registry.open_count();
+
+    // Leaving the archive frees its index.
+    h.focus("..");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(h.app.context().registry.open_count(), open - 1);
 }
 
 #[tokio::test]

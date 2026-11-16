@@ -25,7 +25,7 @@ sc-app = { workspace = true, default-features = false }
 sc-tui = { workspace = true, optional = true }
 sc-agent.workspace = true
 sc-tls.workspace = true
-sc-script = { workspace = true, optional = true }
+sc-script = { workspace = true, optional = true, features = ["engine"] }
 async-trait.workspace = true
 clap.workspace = true
 serde.workspace = true
@@ -34,9 +34,12 @@ tokio = { workspace = true, features = ["full"] }
 tokio-util.workspace = true
 
 [features]
-default = ["desktop", "tui", "scripting"]
+default = ["desktop", "remote", "tui", "scripting"]
 # Desktop build: recycle bin support.
 desktop = ["sc-app/desktop"]
+# SFTP, WebDAV, S3 and SMB locations. Agent-only server builds leave
+# them out (agent:// and scs:// stay).
+remote = ["sc-app/remote"]
 # The terminal UI started by `sc` without a command. Agent-only server
 # builds leave it out.
 tui = ["dep:sc-tui"]

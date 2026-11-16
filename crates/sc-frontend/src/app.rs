@@ -72,7 +72,7 @@ pub enum AppEvent {
         /// For the quick view (otherwise the full viewer).
         quick: bool,
         /// Data, "file is longer" and its preview, or an error.
-        result: Result<(Vec<u8>, bool, crate::preview::Prepared), String>,
+        result: Result<(Arc<Vec<u8>>, bool, crate::preview::Prepared), String>,
     },
     /// A picture for the viewer or quick view was rendered.
     Rendered {
@@ -384,6 +384,20 @@ impl App {
         });
     }
 
+    /// Frees the archives no tab shows any more (a panel left them). Not
+    /// while transfers run: they may be reading from one.
+    fn release_archives(&self) {
+        if self.jobs.iter().any(|j| matches!(j.state, JobState::Queued | JobState::Running)) {
+            return;
+        }
+        let in_use: Vec<VfsPath> = [SideId::Left, SideId::Right]
+            .iter()
+            .flat_map(|&side| self.workspace.side(side).tabs().iter())
+            .map(|panel| panel.location().clone())
+            .collect();
+        self.context.registry.release_archives(&in_use);
+    }
+
     fn reload_panels(&mut self, focus: Option<&str>) {
         let active = self.workspace.active_side();
         for side in [SideId::Left, SideId::Right] {
@@ -419,6 +433,7 @@ impl App {
         match event {
             AppEvent::Listing(listing) => {
                 if self.workspace.apply(listing) {
+                    self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
                         let error = error.to_owned();
                         self.set_error(error);
@@ -1380,6 +1395,7 @@ impl App {
             let loaded = viewer::load(&registry, &path, limit).await.map_err(|e| e.to_string());
             let result = match loaded {
                 Ok((data, truncated)) => tokio::task::spawn_blocking(move || {
+                    let data = Arc::new(data);
                     let prepared = crate::preview::prepare(&name, &data, truncated)?;
                     Ok((data, truncated, prepared))
                 })

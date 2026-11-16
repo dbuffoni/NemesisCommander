@@ -29,8 +29,11 @@ tokio-util.workspace = true
 sc-script = { workspace = true, optional = true }
 
 [features]
-# Plugin commands and scripts from the panels (Alt+X); needs V8.
+# Plugin commands and scripts from the panels (Alt+X). On its own, scripts
+# run in the `sc` program next to this one (so V8 is not linked twice);
+# with `script-engine` they run in this process, on V8.
 scripting = ["dep:sc-script"]
+script-engine = ["scripting", "sc-script/engine"]
 
 [dev-dependencies]
 tempfile.workspace = true

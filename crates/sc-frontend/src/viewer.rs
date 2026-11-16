@@ -180,14 +180,17 @@ pub fn hex_rows(len: usize) -> usize {
 pub struct Viewer {
     /// The file shown.
     pub path: VfsPath,
-    /// Loaded bytes (`None` while loading).
-    pub data: Option<Vec<u8>>,
+    /// Loaded bytes (`None` while loading), shared with a PDF's pages.
+    pub data: Option<Arc<Vec<u8>>>,
     /// The file is longer than what was loaded.
     pub truncated: bool,
-    /// Text lines (computed once when loaded).
+    /// Text lines, computed only when the text is shown (not for hex
+    /// dumps, pictures and documents, where they would only take memory).
     pub lines: Vec<String>,
     /// Hex dump instead of text.
     pub hex: bool,
+    /// Columns per tab stop, for making `lines` later.
+    pub tab_width: usize,
     /// Wrap long text lines.
     pub wrap: bool,
     /// First visible row.
@@ -225,6 +228,7 @@ impl Viewer {
             truncated: false,
             lines: Vec::new(),
             hex: false,
+            tab_width: 8,
             wrap,
             scroll: 0,
             error: None,
@@ -244,7 +248,7 @@ impl Viewer {
     /// in the background, if anything.
     pub fn set_loaded(
         &mut self,
-        data: Vec<u8>,
+        data: Arc<Vec<u8>>,
         truncated: bool,
         prepared: Prepared,
         tab_width: usize,
@@ -263,10 +267,10 @@ impl Viewer {
                 self.rich = Some(RichText::new(blocks));
                 None
             }
-            Prepared::Pdf { data: pdf, pages } => {
+            Prepared::Pdf { pages } => {
                 self.set_data(data, truncated, tab_width);
                 self.hex = false;
-                self.pdf = Some((pdf, pages, 0));
+                self.pdf = Some((self.data.clone()?, pages, 0));
                 self.render_source()
             }
             Prepared::Model(mesh) => {
@@ -424,10 +428,13 @@ impl Viewer {
 
     /// Shows loaded data. Images start as a picture, other binary data in
     /// hex mode.
-    pub fn set_data(&mut self, data: Vec<u8>, truncated: bool, tab_width: usize) {
+    pub fn set_data(&mut self, data: impl Into<Arc<Vec<u8>>>, truncated: bool, tab_width: usize) {
+        let data = data.into();
         self.image = if truncated { None } else { decode_image(&data).map(Arc::new) };
         self.hex = self.image.is_none() && !looks_like_text(&data);
-        self.lines = text_lines(&data, tab_width);
+        let plain_text = self.image.is_none() && !self.hex && self.kind.is_none();
+        self.lines = if plain_text { text_lines(&data, tab_width) } else { Vec::new() };
+        self.tab_width = tab_width;
         self.data = Some(data);
         self.truncated = truncated;
         self.scroll = 0;
@@ -461,6 +468,12 @@ impl Viewer {
             self.hex = !self.hex;
             self.scroll = 0;
             return;
+        }
+        if self.hex && self.lines.is_empty() {
+            // Binary data started as a hex dump: its text is made now.
+            if let Some(data) = &self.data {
+                self.lines = text_lines(data, self.tab_width);
+            }
         }
         let offset = if self.hex {
             self.scroll * HEX_ROW
@@ -546,8 +559,11 @@ mod tests {
         // line just before.
         assert!((89..=90).contains(&viewer.scroll), "position survives a round trip");
 
-        viewer.set_data(vec![0, 1, 2], false, 4);
+        viewer.set_data(vec![0, b'a', b'\n', b'b'], false, 4);
         assert!(viewer.hex, "binary data opens as hex");
+        assert!(viewer.lines.is_empty(), "no text lines until the text is shown");
+        viewer.toggle_hex();
+        assert_eq!(viewer.lines, ["\0a", "b"]);
     }
 
     /// A 4×4 PNG: red on top, blue at the bottom, half transparent at
