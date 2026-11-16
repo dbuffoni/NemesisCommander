@@ -80,6 +80,8 @@ fn every_dialog_draws_cleanly() {
         ("F9 z z z", "commands"),
         ("F9 Right Ctrl+K", "commands"),
         ("F7", "input"),
+        // Multi-rename shows the new names below the template.
+        ("Down Ctrl+M", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
         // A bookmark with two targets asks which one the other panel shows.

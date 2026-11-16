@@ -254,14 +254,41 @@ async fn multi_rename_previews_then_renames() {
     h.type_text("*.txt");
     h.key("Enter");
     h.key("Ctrl+M");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("template dialog") };
+    assert_eq!(dialog.preview, ["  (no name changes)"]);
+    h.key("Ctrl+U");
     h.type_text("file[C][X]");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("template dialog") };
+    assert!(dialog.preview.iter().any(|l| l.contains("a.txt → file1.txt")), "{:?}", dialog.preview);
+    assert!(h.screen().contains("a.txt → file1.txt"), "the preview is drawn");
     h.key("Enter");
+    h.settle().await;
     let Some(Overlay::Confirm(dialog)) = h.app.overlay() else { panic!("preview") };
     assert!(dialog.lines.iter().any(|l| l.contains("a.txt → file1.txt")), "{:?}", dialog.lines);
     h.key("Enter");
     h.settle().await;
     assert!(h.path("left/file1.txt").exists());
     assert!(h.path("left/file2.txt").exists());
+}
+
+#[tokio::test]
+async fn multi_rename_shows_names_that_exist_and_renames_nothing() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Ctrl+M");
+    h.key("Ctrl+U");
+    // "docs" is a folder next to the file.
+    h.type_text("docs");
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Message(dialog)) = h.app.overlay() else { panic!("conflict preview") };
+    assert!(
+        dialog.lines.iter().any(|l| l.ends_with("→ docs  (already exists)")),
+        "{:?}",
+        dialog.lines
+    );
+    h.key("Esc");
+    assert!(h.path("left/a.txt").exists(), "nothing renamed");
 }
 
 #[tokio::test]

@@ -121,8 +121,8 @@ default; the destination can be edited before you confirm.
 | F5 | Copy |
 | F6 | Move |
 | Shift+F6 or F2 | Rename |
-| Ctrl+M | Rename many files with a template |
-| F9, Files/Multi-rename with AI… | Describe the new names; Claude writes the rule (template, regex, case, counter) and you see it with the new names before anything is renamed |
+| Ctrl+M | Rename many files with a template ([below](#renaming-many-files)) |
+| F9, Files/Multi-rename with AI… | Describe the new names; Claude writes the rule ([below](#renaming-many-files)) |
 | F7 | New folder |
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
@@ -144,6 +144,44 @@ Properties show the name, location, type, size, date and permissions; on
 systems with Unix permissions, Enter changes them (octal mode).
 
 ![Properties](images/properties.png)
+
+### Renaming many files
+
+**Ctrl+M** renames the selected files (or the one under the cursor) with a
+template. While you type it, the dialog previews the first new names as
+`old → new`, or says why the template cannot be used. The template is
+copied for each file, with these placeholders:
+
+| Placeholder | Becomes |
+|---|---|
+| `[N]` | the name without the extension |
+| `[N2-5]`, `[N3-]` | characters 2 to 5 of the name, or from the 3rd to the end |
+| `[E]` / `[X]` | the extension, without / with the dot |
+| `[C]` | a counter: 1, 2, 3… in the order of the panel |
+| `[P]` | the name of the folder the file is in |
+| `[[`, `]]` | a literal `[` or `]` |
+
+So `photo_[C][X]` turns `a.jpg`, `b.jpg` into `photo_1.jpg`, `photo_2.jpg`,
+and `[P] - [N][X]` puts the folder name in front.
+
+Enter shows the full preview: every name that changes (the first 12, and
+how many more) and asks for confirmation; nothing is renamed before that.
+If a new name belongs to a file that is not part of the rename, the preview
+marks it `(already exists)` and nothing is renamed at all, so a rename never
+replaces a file or stops halfway. Swapping names (`a` ↔ `b`) and changing
+only the letter case are fine.
+
+**F9, Files/Multi-rename with AI…** asks how the names should change, in
+your words ("date first, as YYYY-MM-DD"). Claude writes the rule (template,
+find and replace or regular expression, letter case, counter) from the file
+names only, using your Anthropic API key; the same preview then shows the
+rule and the new names before anything is renamed.
+
+On the command line, `sc rename` has every option of the rule (`--find`,
+`--replace`, `--regex`, `--case`, `--start`, `--step`, `--digits`);
+`--preview` (or `-n`) prints the new names without renaming. `sc ai rename
+"description" FILES...` prints the rule Claude wrote as an `sc rename`
+command, with the new names.
 
 ## Selecting files
 
@@ -402,12 +440,14 @@ jobs. Every command accepts the same locations as the panels.
 | `sc hash FILE...` | Checksums (`--algorithm blake3`, `xxh3` or `sha256`) |
 | `sc find DIR` | Search by `--name`, `--content` (`--regex`), size and age |
 | `sc pack` / `sc unpack` | Create and extract archives |
-| `sc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace, `--dry-run`) |
+| `sc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace); `--preview` shows the new names only |
 | `sc jobs` | Show and control the transfer queue |
 | `sc config path / show / export / import` | Locate, print, back up and restore the settings |
 | `sc config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
 | `sc keys` | Print the main shortcuts |
-| `sc run` / `sc plugin` | Scripts and plugins |
+| `sc run` / `sc plugin` | Scripts and plugins (`sc run --guide`: the guide for AI assistants) |
+| `sc test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
+| `sc ai new` / `sc ai rename` / `sc ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
 | `sc agent --stdio`, `sc serve`, `sc tls` | The server side (Linux) |
 
 For example:
@@ -415,7 +455,7 @@ For example:
 ```sh
 sc cp --verify full ~/Pictures/2026 sftp://nas/backup/pictures/
 sc find ~/Projects --name "*.rs" --content "TODO" --json
-sc rename --template "holiday-[C].[E]" --digits 3 *.jpg --dry-run
+sc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
 ```
 
 ## Settings
@@ -481,7 +521,8 @@ on the settings screen (Ctrl+,).
 | F5 | Copy |
 | F6 | Move |
 | Shift+F6, F2 | Rename |
-| Ctrl+M | Multi-rename |
+| Ctrl+M | Multi-rename (with a preview) |
+| (F9 only) | Multi-rename with AI |
 | F7 | New folder |
 | F8, Delete | Delete (to trash) |
 | Shift+F8, Shift+Delete | Delete permanently |
@@ -529,12 +570,14 @@ on the settings screen (Ctrl+,).
 | Alt+C | Compare files or folders |
 | Ctrl+J | Transfer queue |
 | Alt+X | Plugins and scripts |
+| (F9 only) | Write a script with AI |
 
 | SuperCommander | |
 |---|---|
 | F1 | Show main shortcuts |
 | F9 | Commands: find and run any command, give it a shortcut |
 | Ctrl+, | Settings (options and shortcuts) |
+| (F9 only) | Export / import settings to a file |
 | F10 | Quit |
 
 Every command, with all its shortcuts, is in the [command list (F9)](#commands-f9).

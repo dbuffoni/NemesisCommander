@@ -41,11 +41,13 @@ pub enum Command {
     Pack(PackArgs),
     /// Extract an archive.
     Unpack(UnpackArgs),
-    /// Rename many files with a template.
+    /// Rename many files with a template; --preview shows the new names
+    /// without renaming.
     Rename(RenameArgs),
     /// Show and control the background transfer queue.
     Jobs(JobsArgs),
-    /// Export, import and locate settings.
+    /// Locate, show, export and import settings, or send them to other
+    /// machines.
     Config(ConfigArgs),
     /// Print the main keyboard shortcuts of the user interface.
     Keys,
@@ -63,8 +65,8 @@ pub enum Command {
     /// Try a script or a plugin on sample files in a throwaway folder and
     /// report what it did (for authors and AI assistants).
     Test(TestArgs),
-    /// Have Claude write a script or a plugin, tested with `sc test` until
-    /// it passes.
+    /// Have Claude write a script or a plugin (tested with `sc test` until
+    /// it passes), or a multi-rename rule.
     Ai(AiArgs),
 }
 
@@ -280,6 +282,11 @@ pub enum CaseArg {
 }
 
 #[derive(Debug, Args)]
+#[command(after_help = "Prints each changed name as `old -> new` first. A new name that \
+    belongs to another file is marked `(already exists)`, and then nothing is renamed. \
+    With --preview (or -n) nothing is renamed at all.\n\nExamples:\n  \
+    sc rename --preview -t 'photo_[C][X]' --digits 3 *.jpg\n  \
+    sc rename --find ' ' --replace _ --case lower *")]
 pub struct RenameArgs {
     /// Files to rename, in counter order.
     #[arg(required = true)]
@@ -309,8 +316,9 @@ pub struct RenameArgs {
     /// Counter digits (zero padded).
     #[arg(long, default_value_t = 1)]
     pub digits: usize,
-    /// Show the new names without renaming.
-    #[arg(short = 'n', long)]
+    /// Preview: show the new names (and names that already exist) without
+    /// renaming.
+    #[arg(short = 'n', long, visible_alias = "preview")]
     pub dry_run: bool,
 }
 
@@ -559,8 +567,9 @@ pub enum AiAction {
         force: bool,
     },
     /// Have Claude write the multi-rename rule (template, find/replace or
-    /// regex, case, counter) for a description, and show the new names.
-    /// Renames nothing: run the printed `sc rename` to apply it.
+    /// regex, case, counter) for a description, and preview the new names
+    /// (marking those that already exist). Renames nothing: run the
+    /// printed `sc rename` to apply it.
     Rename {
         /// How to rename, in any language, e.g. "date first, as YYYY-MM-DD".
         description: String,

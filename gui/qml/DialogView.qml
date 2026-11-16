@@ -256,6 +256,8 @@ Item {
                     color: palette.text
                 }
             }
+            // Multi-rename: the new names, following the template.
+            Lines { model: dialogs.view.preview }
         }
     }
 

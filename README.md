@@ -9,6 +9,8 @@ A fast dual-pane file manager for local and remote files, written in Rust.
 - A built-in viewer for text, hex, Markdown, Word, spreadsheets, slides, PDF,
   3D models and pictures, also as a quick view beside the files.
 - Background transfers with a queue, verification and resume after crashes.
+- Multi-rename with templates and a preview of the new names, or with
+  rules written by Claude (`sc ai rename`).
 - A small static agent for Linux servers (`sc agent` over SSH, `sc serve`
   over mutual TLS) for fast remote work and server-to-server copies.
 - Plugins and scripts in TypeScript, in a sandbox, tested with `sc test`
@@ -29,8 +31,13 @@ cargo build --release -p sc-gui    # the window (needs Qt 6.8 or later)
 cargo test --workspace
 ```
 
+Build the window with its own cargo command: built together with `sc`, it
+would link the script engine it does not need (ADR 0020).
+
 Linux releases are an AppImage of the window plus static agents for x86_64
-and aarch64, built by `.github/workflows/release.yml`.
+and aarch64, built by `.github/workflows/release.yml`, which also measures
+sizes and idle memory with `scripts/footprint.py` and fails over budget
+(ADR 0020).
 
 ## License
 

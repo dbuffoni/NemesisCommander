@@ -118,6 +118,9 @@ pub struct InputDialog {
     pub field: TextField,
     /// What the answer is for.
     pub purpose: InputPurpose,
+    /// Lines shown below the field, updated while typing (the new names
+    /// of a multi-rename).
+    pub preview: Vec<String>,
 }
 
 impl InputDialog {
@@ -128,6 +131,7 @@ impl InputDialog {
             prompt: prompt.to_owned(),
             field: TextField::new(initial),
             purpose,
+            preview: Vec::new(),
         }
     }
 }

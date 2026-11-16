@@ -34,4 +34,6 @@ pub use execute::{
     ExecuteOptions, Executor, Observer, OpEvent, Report, RetryPolicy, StepOutcome, StepTracker,
 };
 pub use plan::{Plan, PlanOptions, Step, plan_copy, plan_delete, plan_move};
-pub use rename::{CaseChange, RenameError, RenameRule, apply_renames, preview_renames};
+pub use rename::{
+    CaseChange, RenameError, RenameRule, apply_renames, preview_renames, rename_conflicts, renamed,
+};

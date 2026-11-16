@@ -192,6 +192,7 @@ fn rename_rules_are_written_and_checked() {
     let report: Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(report["names"], json!(["trip_2024.jpg", "party_2023.jpg"]));
     assert_eq!(report["rule"]["template"], "[N][X]");
+    assert_eq!(report["conflicts"], json!([]));
     assert!(dir.path().join("Trip_2024.JPG").exists(), "nothing is renamed");
 
     let seen = seen.lock().unwrap();

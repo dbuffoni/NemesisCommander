@@ -230,6 +230,26 @@ fn rename_dry_run_changes_nothing() {
 }
 
 #[test]
+fn rename_preview_marks_names_that_exist_and_renames_nothing() {
+    let sandbox = Sandbox::new();
+    fs::write(sandbox.path("src/taken.txt"), "keep\n").unwrap();
+    for preview in [true, false] {
+        let mut args = vec!["rename", "-t", "taken[X]", "src/hello.txt"];
+        if preview {
+            args.insert(1, "--preview");
+        }
+        sandbox
+            .sc()
+            .args(args)
+            .assert()
+            .failure()
+            .stdout("hello.txt -> taken.txt  (already exists)\n");
+    }
+    assert!(sandbox.path("src/hello.txt").exists());
+    assert_eq!(read(&sandbox.path("src/taken.txt")), "keep\n");
+}
+
+#[test]
 fn rename_applies_templates_and_case() {
     let sandbox = Sandbox::new();
     sandbox
