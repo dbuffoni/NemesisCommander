@@ -388,7 +388,7 @@ async fn run_choice(
             }
             title
         }
-        PluginChoice::Script(script) => {
+        PluginChoice::Script(script) | PluginChoice::UserScript(script) => {
             script.file_name().unwrap_or_default().to_string_lossy().into_owned()
         }
     };
@@ -398,7 +398,8 @@ async fn run_choice(
         .env("SC_CONFIG_DIR", &paths.config_dir)
         .env("SC_DATA_DIR", &paths.data_dir)
         .stdin(std::process::Stdio::null());
-    if let (PluginChoice::Script(_), Some(dir)) = (&choice, panel.to_local_path()) {
+    let script = matches!(choice, PluginChoice::Script(_) | PluginChoice::UserScript(_));
+    if let (true, Some(dir)) = (script, panel.to_local_path()) {
         command.current_dir(dir);
     }
     let program = sc_program();
@@ -456,7 +457,7 @@ fn sc_arguments(
             args.extend(["plugin".into(), "run".into(), name, command.clone()]);
             args.extend(selection.iter().map(VfsPath::to_string));
         }
-        PluginChoice::Script(script) => {
+        PluginChoice::Script(script) | PluginChoice::UserScript(script) => {
             args.extend(["run".into(), script.display().to_string()]);
             args.extend(["--allow-write".into(), panel.to_string()]);
             args.extend(["--allow-read".into(), other.to_string()]);
