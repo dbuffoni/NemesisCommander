@@ -432,19 +432,31 @@ mod engine {
             };
             match sc_ops::preview_renames(&files, &rule) {
                 Ok(new_names) => {
+                    // Names that belong to other files: `sc rename` and
+                    // the window refuse them, so the preview shows them.
+                    let conflicts =
+                        sc_ops::rename_conflicts(&context.registry, &files, &new_names).await?;
+                    let taken: Vec<&str> =
+                        conflicts.iter().filter_map(|path| path.file_name()).collect();
                     if as_json {
                         let report = json!({
                             "explanation": answer.explanation,
                             "rule": rule,
                             "names": new_names,
+                            "conflicts": taken,
                         });
                         crate::out!("{report}");
                     } else {
                         crate::out!("{}", answer.explanation.trim());
                         crate::out!("{}", rename_command(&rule));
-                        for (old, new) in names.iter().zip(&new_names) {
+                        for ((path, old), new) in files.iter().zip(&names).zip(&new_names) {
                             if old != new {
-                                crate::out!("{old} -> {new}");
+                                let mark = if conflicts.contains(&sc_ops::renamed(path, new)) {
+                                    "  (already exists)"
+                                } else {
+                                    ""
+                                };
+                                crate::out!("{old} -> {new}{mark}");
                             }
                         }
                     }

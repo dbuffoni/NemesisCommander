@@ -18,7 +18,7 @@ use sc_config::{Action, Bookmark, Connection, ExportBundle, ImportMode, Key, Key
 use sc_index::{ContentQuery, Mask, SearchCriteria, SearchHit, SortKey, SortSpec};
 use sc_ops::{
     Conflict, ConflictAction, ConflictResolver, DeleteOptions, RenameRule, Resolution,
-    apply_renames, delete_paths, preview_renames,
+    apply_renames, delete_paths, preview_renames, rename_conflicts, renamed,
 };
 use sc_panel::{Listing, LoadRequest, Panel, SideId, Workspace};
 use sc_transfer::{JobEvent, JobId, JobInfo, JobKind, JobSpec, JobState, TransferManager};
@@ -659,8 +659,17 @@ impl App {
                     self.submit_input(dialog);
                     return back;
                 }
-                if dialog.field.handle(&press) && dialog.purpose == InputPurpose::QuickFilter {
-                    self.workspace.active_mut().set_filter(dialog.field.text());
+                if dialog.field.handle(&press) {
+                    match &dialog.purpose {
+                        InputPurpose::QuickFilter => {
+                            self.workspace.active_mut().set_filter(dialog.field.text())
+                        }
+                        // The new names follow the template as it is typed.
+                        InputPurpose::MultiRename(paths) => {
+                            dialog.preview = template_preview(paths, dialog.field.text())
+                        }
+                        _ => {}
+                    }
                 }
                 Some(Overlay::Input(dialog))
             }
@@ -922,12 +931,18 @@ impl App {
                 self.overlay = Some(Overlay::Input(dialog));
             }
             Action::MultiRename if nothing => self.set_error("Nothing to rename"),
-            Action::MultiRename => self.ask(
-                "Multi-rename",
-                "Template ([N] name, [E] extension, [X] .extension, [C] counter):",
-                "[N][X]",
-                InputPurpose::MultiRename(targets),
-            ),
+            Action::MultiRename => {
+                let template = "[N][X]";
+                let preview = template_preview(&targets, template);
+                let mut dialog = InputDialog::new(
+                    "Multi-rename",
+                    "Template ([N] name, [E] extension, [X] .extension, [C] counter, [P] folder):",
+                    template,
+                    InputPurpose::MultiRename(targets),
+                );
+                dialog.preview = preview;
+                self.overlay = Some(Overlay::Input(dialog));
+            }
             Action::AiRename if nothing => self.set_error("Nothing to rename"),
             Action::AiRename => self.ask_ai_rename(targets),
             Action::MakeDir => self.ask("New folder", "Name:", "", InputPurpose::MakeDir),
@@ -1312,7 +1327,9 @@ impl App {
     }
 
     /// Shows the new names `rule` gives `paths` and asks to rename them;
-    /// `explanation` (from Claude) and the rule are shown first.
+    /// `explanation` (from Claude) and the rule are shown first. When a new
+    /// name belongs to another file, the preview marks it and nothing can
+    /// be renamed.
     fn confirm_renames(
         &mut self,
         paths: Vec<VfsPath>,
@@ -1323,6 +1340,10 @@ impl App {
             Ok(names) => names,
             Err(e) => return self.set_error(e.to_string()),
         };
+        let changed = paths.iter().zip(&names).filter(|(p, n)| p.file_name() != Some(n)).count();
+        if changed == 0 {
+            return self.set_error("Multi-rename: no name would change");
+        }
         let mut lines = Vec::new();
         if let Some(explanation) = explanation {
             lines.push(explanation);
@@ -1332,18 +1353,33 @@ impl App {
                 lines.push(format!("{kind}: {}  →  {}", rule.find, rule.replace));
             }
         }
-        lines.push(format!("Rename {} items?", paths.len()));
-        for (path, name) in paths.iter().zip(&names).take(12) {
-            lines.push(format!("  {} → {name}", path.file_name().unwrap_or("")));
-        }
-        if paths.len() > 12 {
-            lines.push(format!("  … and {} more", paths.len() - 12));
-        }
-        self.overlay = Some(Overlay::Confirm(ConfirmDialog {
-            title: "Multi-rename".into(),
-            lines,
-            purpose: ConfirmPurpose::MultiRename { paths, names },
-        }));
+        let registry = self.context.registry.clone();
+        self.spawn_task(async move {
+            let conflicts = match rename_conflicts(&registry, &paths, &names).await {
+                Ok(conflicts) => conflicts,
+                Err(e) => return done(Err(e), None),
+            };
+            let title = "Multi-rename".to_owned();
+            if !conflicts.is_empty() {
+                lines.push(format!(
+                    "{} new names belong to other files, so nothing is renamed:",
+                    conflicts.len()
+                ));
+                lines.extend(rename_lines(&paths, &names, &conflicts, PREVIEW_ROWS));
+                return AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
+                    title,
+                    lines,
+                    then: None,
+                })));
+            }
+            lines.push(format!("Rename {changed} items?"));
+            lines.extend(rename_lines(&paths, &names, &[], PREVIEW_ROWS));
+            AppEvent::Show(Box::new(Overlay::Confirm(ConfirmDialog {
+                title,
+                lines,
+                purpose: ConfirmPurpose::MultiRename { paths, names },
+            })))
+        });
     }
 
     fn confirmed(&mut self, purpose: ConfirmPurpose) {
@@ -1904,6 +1940,49 @@ fn viewer_zoom_key(viewer: &mut Viewer, key: Option<Key>, text: Option<char>) ->
 
 /// The result of a background task as a [`AppEvent::TaskDone`] that
 /// reloads the panels.
+/// How many new names the multi-rename confirmation lists.
+const PREVIEW_ROWS: usize = 12;
+
+/// `old → new` lines for the names that change, at most `rows` of them;
+/// names that belong to another file (`conflicts`) come first, marked.
+fn rename_lines(
+    paths: &[VfsPath],
+    names: &[String],
+    conflicts: &[VfsPath],
+    rows: usize,
+) -> Vec<String> {
+    let mut changed: Vec<(bool, String)> = paths
+        .iter()
+        .zip(names)
+        .filter(|(path, name)| path.file_name() != Some(name.as_str()))
+        .map(|(path, name)| {
+            let taken = conflicts.contains(&renamed(path, name));
+            let mark = if taken { "  (already exists)" } else { "" };
+            (!taken, format!("  {} → {name}{mark}", path.file_name().unwrap_or("")))
+        })
+        .collect();
+    changed.sort_by_key(|(not_taken, _)| *not_taken);
+    let more = changed.len().saturating_sub(rows);
+    let mut lines: Vec<String> = changed.into_iter().take(rows).map(|(_, line)| line).collect();
+    if more > 0 {
+        lines.push(format!("  … and {more} more"));
+    }
+    lines
+}
+
+/// The live preview of the Ctrl+M dialog: the first new names `template`
+/// gives `paths`, or why it cannot be used.
+fn template_preview(paths: &[VfsPath], template: &str) -> Vec<String> {
+    let rule = RenameRule { template: template.to_owned(), ..RenameRule::default() };
+    match preview_renames(paths, &rule) {
+        Ok(names) => {
+            let lines = rename_lines(paths, &names, &[], 5);
+            if lines.is_empty() { vec!["  (no name changes)".into()] } else { lines }
+        }
+        Err(e) => vec![format!("  Cannot rename: {e}")],
+    }
+}
+
 fn done(result: sc_vfs::Result<String>, focus: Option<String>) -> AppEvent {
     match result {
         Ok(message) => AppEvent::TaskDone { message, error: false, reload: true, focus },

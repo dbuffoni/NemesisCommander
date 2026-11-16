@@ -418,19 +418,26 @@ pub fn field_window(field: &TextField, width: usize) -> (String, usize) {
 
 fn draw_input(frame: &mut Frame, dialog: &InputDialog) {
     let width = 72.min(frame.area().width.saturating_sub(2));
-    let area = centered(frame.area(), width, 6);
+    // The preview (multi-rename) adds a blank line and its own lines.
+    let preview_rows = if dialog.preview.is_empty() { 0 } else { dialog.preview.len() + 1 };
+    let height = (6 + preview_rows as u16).min(frame.area().height.saturating_sub(2));
+    let area = centered(frame.area(), width, height);
     frame.render_widget(Clear, area);
     let block = Block::bordered().title(Line::styled(format!(" {} ", dialog.title), bold()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let field_width = inner.width.saturating_sub(2) as usize;
     let (visible, column) = field_window(&dialog.field, field_width);
-    let lines = vec![
+    let mut lines = vec![
         Line::raw(fit(&dialog.prompt, inner.width as usize)),
         Line::styled(format!(" {visible:<field_width$} "), Style::new().bg(Color::DarkGray)),
-        Line::raw(""),
-        Line::styled("Enter: OK    Esc: cancel    Ctrl+U: clear", dim()),
     ];
+    if !dialog.preview.is_empty() {
+        lines.push(Line::raw(""));
+        lines.extend(dialog.preview.iter().map(|l| Line::raw(fit(l, inner.width as usize))));
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("Enter: OK    Esc: cancel    Ctrl+U: clear", dim()));
     frame.render_widget(Paragraph::new(lines), inner);
     frame.set_cursor_position(Position { x: inner.x + 1 + column as u16, y: inner.y + 1 });
 }

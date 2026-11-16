@@ -259,10 +259,43 @@ pub fn preview_renames(paths: &[VfsPath], rule: &RenameRule) -> Result<Vec<Strin
     Ok(names)
 }
 
+/// The path `from` gets with its new `name` (same folder).
+pub fn renamed(from: &VfsPath, name: &str) -> VfsPath {
+    from.parent().unwrap_or_else(|| from.clone()).join(name)
+}
+
+/// The new paths that already belong to a file outside the rename: renaming
+/// would replace it, so [`apply_renames`] refuses. A preview shows them.
+///
+/// Files of the selection that move away themselves (swaps, chains) and
+/// letter-case-only changes are not conflicts.
+pub async fn rename_conflicts(
+    registry: &ProviderRegistry,
+    paths: &[VfsPath],
+    names: &[String],
+) -> Result<Vec<VfsPath>> {
+    let sources: HashSet<&VfsPath> = paths.iter().collect();
+    let mut taken = Vec::new();
+    for (from, name) in paths.iter().zip(names) {
+        let to = renamed(from, name);
+        if &to == from || sources.contains(&to) || is_case_change(from, &to) {
+            continue;
+        }
+        match registry.provider_for(&to).await?.stat(&to).await {
+            Ok(_) => taken.push(to),
+            Err(e) if e.is_not_found() => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(taken)
+}
+
 /// Renames each path to the matching name from [`preview_renames`].
 ///
-/// Swaps and chains (`a→b`, `b→a`) are handled by first moving every
-/// affected file to a temporary name. Unchanged names are skipped.
+/// Nothing is renamed when a new name belongs to another file (see
+/// [`rename_conflicts`]). Swaps and chains (`a→b`, `b→a`) are handled by
+/// first moving every affected file to a temporary name. Unchanged names
+/// are skipped.
 pub async fn apply_renames(
     registry: &ProviderRegistry,
     paths: &[VfsPath],
@@ -271,12 +304,13 @@ pub async fn apply_renames(
     if paths.len() != names.len() {
         return Err(VfsError::Other("number of names does not match number of paths".into()));
     }
+    if let Some(taken) = rename_conflicts(registry, paths, names).await?.into_iter().next() {
+        return Err(VfsError::AlreadyExists(taken));
+    }
     let moves: Vec<(VfsPath, VfsPath)> = paths
         .iter()
         .zip(names)
-        .map(|(from, name)| {
-            (from.clone(), from.parent().unwrap_or_else(|| from.clone()).join(name))
-        })
+        .map(|(from, name)| (from.clone(), renamed(from, name)))
         .filter(|(from, to)| from != to)
         .collect();
     let sources: HashSet<&VfsPath> = moves.iter().map(|(from, _)| from).collect();
@@ -453,5 +487,23 @@ mod tests {
         let err = apply_renames(&registry, &paths(&["a"]), &["other".into()]).await.unwrap_err();
         assert!(matches!(err, VfsError::AlreadyExists(_)));
         assert_eq!(mem.get_file("/dir/other").unwrap(), b"O");
+    }
+
+    #[tokio::test]
+    async fn conflicts_are_found_before_anything_is_renamed() {
+        let registry = ProviderRegistry::new();
+        let mem = MemoryProvider::new();
+        for name in ["a", "b", "c", "taken"] {
+            mem.put_file(&format!("/dir/{name}"), name);
+        }
+        registry.insert(&VfsPath::parse("mem://m/").unwrap(), Arc::new(mem.clone()));
+        let files = paths(&["a", "b", "c"]);
+        // a→b and b→a are a swap; c→taken would replace another file.
+        let names = ["b".to_owned(), "a".to_owned(), "taken".to_owned()];
+        let conflicts = rename_conflicts(&registry, &files, &names).await.unwrap();
+        assert_eq!(conflicts, paths(&["taken"]));
+        assert!(apply_renames(&registry, &files, &names).await.is_err());
+        assert_eq!(mem.get_file("/dir/a").unwrap(), b"a", "nothing renamed");
+        assert_eq!(mem.get_file("/dir/taken").unwrap(), b"taken");
     }
 }

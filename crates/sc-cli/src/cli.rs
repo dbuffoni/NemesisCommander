@@ -280,6 +280,11 @@ pub enum CaseArg {
 }
 
 #[derive(Debug, Args)]
+#[command(after_help = "Prints each changed name as `old -> new` first. A new name that \
+    belongs to another file is marked `(already exists)`, and then nothing is renamed. \
+    With --preview (or -n) nothing is renamed at all.\n\nExamples:\n  \
+    sc rename --preview -t 'photo_[C][X]' --digits 3 *.jpg\n  \
+    sc rename --find ' ' --replace _ --case lower *")]
 pub struct RenameArgs {
     /// Files to rename, in counter order.
     #[arg(required = true)]
@@ -309,8 +314,9 @@ pub struct RenameArgs {
     /// Counter digits (zero padded).
     #[arg(long, default_value_t = 1)]
     pub digits: usize,
-    /// Show the new names without renaming.
-    #[arg(short = 'n', long)]
+    /// Preview: show the new names (and names that already exist) without
+    /// renaming.
+    #[arg(short = 'n', long, visible_alias = "preview")]
     pub dry_run: bool,
 }
 
