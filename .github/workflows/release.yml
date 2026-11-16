@@ -103,7 +103,7 @@ jobs:
       - name: AppImage footprint
         run: |
           { echo; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
-          scripts/footprint.py size SuperCommander-*.AppImage 130
+          scripts/footprint.py size SuperCommander-*.AppImage 90
 
   agent:
     name: Agent (${{ matrix.target }})
