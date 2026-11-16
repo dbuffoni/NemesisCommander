@@ -161,9 +161,11 @@ sc ai new --plugin "count the lines of the selected text files"
 multi-rename: Claude writes the rule (template, find/replace or regex, case,
 counter) from the description and the file names (only the names are
 sent), SuperCommander checks it on the files and sends errors back, and
-prints the rule as an `sc rename` command line with the new names. It
-renames nothing. In the interfaces, F9, **Files/Multi-rename with AI…**
-shows the rule and the new names and renames after a confirmation.
+prints the rule as an `sc rename` command line with the new names (names
+that already belong to other files are marked; `--json` lists them as
+`conflicts`). It renames nothing. In the interfaces, F9, **Files/Multi-rename
+with AI…** shows the rule and the same preview as Ctrl+M, and renames after
+a confirmation (ADR 0024).
 
 A passing test means the script ran without errors on sample files and the
 report shows what it changed; read the script before running it on files

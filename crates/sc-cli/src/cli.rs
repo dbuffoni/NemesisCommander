@@ -41,11 +41,13 @@ pub enum Command {
     Pack(PackArgs),
     /// Extract an archive.
     Unpack(UnpackArgs),
-    /// Rename many files with a template.
+    /// Rename many files with a template; --preview shows the new names
+    /// without renaming.
     Rename(RenameArgs),
     /// Show and control the background transfer queue.
     Jobs(JobsArgs),
-    /// Export, import and locate settings.
+    /// Locate, show, export and import settings, or send them to other
+    /// machines.
     Config(ConfigArgs),
     /// Print the main keyboard shortcuts of the user interface.
     Keys,
@@ -63,8 +65,8 @@ pub enum Command {
     /// Try a script or a plugin on sample files in a throwaway folder and
     /// report what it did (for authors and AI assistants).
     Test(TestArgs),
-    /// Have Claude write a script or a plugin, tested with `sc test` until
-    /// it passes.
+    /// Have Claude write a script or a plugin (tested with `sc test` until
+    /// it passes), or a multi-rename rule.
     Ai(AiArgs),
 }
 
@@ -565,8 +567,9 @@ pub enum AiAction {
         force: bool,
     },
     /// Have Claude write the multi-rename rule (template, find/replace or
-    /// regex, case, counter) for a description, and show the new names.
-    /// Renames nothing: run the printed `sc rename` to apply it.
+    /// regex, case, counter) for a description, and preview the new names
+    /// (marking those that already exist). Renames nothing: run the
+    /// printed `sc rename` to apply it.
     Rename {
         /// How to rename, in any language, e.g. "date first, as YYYY-MM-DD".
         description: String,

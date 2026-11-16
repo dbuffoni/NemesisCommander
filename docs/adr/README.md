@@ -28,6 +28,10 @@ taken while implementing it.
 | 0018 | [One command list for built-in commands, plugins and scripts](0018-command-list.md) | Accepted |
 | 0019 | [One drive list for local drives and remote connections](0019-one-drive-list.md) | Accepted |
 | 0020 | [Keeping the footprint small](0020-footprint.md) | Accepted |
+| 0021 | [`sc test` and a guide, so AI assistants can write scripts](0021-testing-scripts-for-ai.md) | Accepted |
+| 0022 | [`sc ai`: scripts written by Claude, checked by `sc test`](0022-scripts-written-by-claude.md) | Accepted |
+| 0023 | [Bookmarks with target folders for the other panel](0023-bookmark-targets.md) | Accepted |
+| 0024 | [Multi-rename always previews, and refuses names that exist](0024-multi-rename-preview.md) | Accepted |
 
 Template:
 
