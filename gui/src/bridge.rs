@@ -181,6 +181,12 @@ impl qobject::Commander {
         self.refresh();
     }
 
+    pub(crate) fn fill(mut self: Pin<&mut Self>, url: &QString) {
+        let path = local_path_of(&url.to_string());
+        self.as_mut().rust_mut().with_app(|app| app.fill_input(&path));
+        self.refresh();
+    }
+
     pub(crate) fn resize(mut self: Pin<&mut Self>, rows: i32, viewer_rows: i32, columns: i32) {
         let mut rust = self.as_mut().rust_mut();
         rust.rows = rows.max(1) as usize;
@@ -294,4 +300,45 @@ fn run_external(external: &External) -> Result<(), String> {
     let status =
         std::process::Command::new(program).args(args).status().map_err(|e| e.to_string())?;
     if status.success() { Ok(()) } else { Err(format!("exited with {status}")) }
+}
+
+/// The local path of a `file:` URL from a file picker (anything else is
+/// returned unchanged).
+fn local_path_of(url: &str) -> String {
+    let Some(rest) = url.strip_prefix("file://") else { return url.to_owned() };
+    let bytes = rest.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let hex = bytes.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok());
+        match (bytes[i], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(byte)) => {
+                decoded.push(byte);
+                i += 3;
+            }
+            (byte, _) => {
+                decoded.push(byte);
+                i += 1;
+            }
+        }
+    }
+    let path = String::from_utf8_lossy(&decoded).into_owned();
+    // file:///C:/Users/me → C:/Users/me
+    match path.as_bytes() {
+        [b'/', drive, b':', ..] if drive.is_ascii_alphabetic() => path[1..].to_owned(),
+        _ => path,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::local_path_of;
+
+    #[test]
+    fn picked_files_become_local_paths() {
+        assert_eq!(local_path_of("file:///home/me/.ssh/my%20key.pem"), "/home/me/.ssh/my key.pem");
+        assert_eq!(local_path_of("file:///C:/Users/me/k%C3%A8y.pem"), "C:/Users/me/kèy.pem");
+        assert_eq!(local_path_of("/plain/path"), "/plain/path");
+        assert_eq!(local_path_of("file:///odd%zz"), "/odd%zz");
+    }
 }

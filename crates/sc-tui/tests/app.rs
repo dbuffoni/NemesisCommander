@@ -1259,3 +1259,79 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     assert!(after.items[0].starts_with("Local    Home"));
     assert!(h.app.context().config.connections.is_empty());
 }
+
+#[tokio::test]
+async fn sftp_connections_take_a_private_key() {
+    let mut h = Harness::with_settings(|config| {
+        config.connections.push(sc_config::Connection {
+            name: "nas".into(),
+            uri: "sftp://me@nas.invalid/srv".into(),
+            identity_file: None,
+            options: Default::default(),
+        });
+    })
+    .await;
+    let key = h.path("nas.pem");
+    fs::write(&key, "key").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let key = key.display().to_string();
+    let open_nas = |h: &mut Harness| {
+        h.key("Alt+F1");
+        let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+        assert!(dialog.footer.contains("F4: private key"), "{}", dialog.footer);
+        let row = dialog.items.iter().position(|r| r.contains(" nas ")).unwrap();
+        for _ in 0..row {
+            h.key("Down");
+        }
+    };
+
+    // F4 on a saved SFTP connection asks for its key file, with a picker.
+    open_nas(&mut h);
+    h.key("F4");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no key asked") };
+    assert_eq!(dialog.title, "Private key");
+    assert!(dialog.browse && dialog.field.text().is_empty());
+    h.app.fill_input(&key);
+    h.key("Enter");
+    assert!(h.status().contains("nas now logs in with"), "{}", h.status());
+    assert_eq!(h.app.context().config.connections[0].identity_file.as_deref(), Some(key.as_str()));
+    let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
+    assert!(saved.contains("identity_file"), "{saved}");
+
+    // The key is shown again; a missing file is saved but reported.
+    open_nas(&mut h);
+    h.key("F4");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no key asked") };
+    assert_eq!(dialog.field.text(), key);
+    h.type_text("~/no-such-key.pem");
+    h.key("Enter");
+    assert!(h.status().contains("Saved nas, but: private key"), "{}", h.status());
+    assert!(h.status().contains("not found"), "{}", h.status());
+
+    // Empty: back to the SSH agent.
+    open_nas(&mut h);
+    h.key("F4");
+    h.type_text("");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.connections[0].identity_file, None);
+
+    // A new SFTP connection asks for the key after its name.
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("sftp://me@other.invalid/");
+    h.key("Enter");
+    h.type_text("other");
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no key asked") };
+    assert_eq!(dialog.title, "Private key");
+    assert!(dialog.prompt.contains("other"), "{}", dialog.prompt);
+    h.key("Esc");
+    assert_eq!(h.app.context().config.connections.len(), 1, "cancelled: not saved");
+}

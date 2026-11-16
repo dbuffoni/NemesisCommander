@@ -34,7 +34,7 @@ fn run(home: &Path, keys: &str, screenshot: Option<&Path>) -> Run {
     }
     let output = command.output().expect("sc-gui runs");
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    assert!(output.status.success(), "sc-gui failed: {stderr}");
+    assert!(output.status.success(), "sc-gui failed ({}): {stderr}", output.status);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let screen = serde_json::from_str(stdout.trim())
         .unwrap_or_else(|e| panic!("keys {keys:?}: {e}\nstdout: {stdout}\nstderr: {stderr}"));
@@ -204,4 +204,26 @@ fn drives_and_connections_are_one_list() {
     assert!(items[0].starts_with("Local    Home"), "{items:?}");
     assert!(items.iter().any(|i| i.starts_with("Remote   nas ")), "{items:?}");
     assert_eq!(*items.last().unwrap(), "New connection…");
+}
+
+#[test]
+fn a_connection_takes_a_private_key_file() {
+    let home = home();
+    std::fs::create_dir_all(home.path().join("config")).unwrap();
+    std::fs::write(
+        home.path().join("config/config.toml"),
+        "[[connections]]\nname = \"nas\"\nuri = \"sftp://me@nas.invalid/srv\"\n\
+         identity_file = \"~/.ssh/nas.pem\"\n",
+    )
+    .unwrap();
+    // The last row is "New connection…"; nas is just above it.
+    let shot = home.path().join("key.png");
+    let run = run(home.path(), "Alt+F1 End Up F4", Some(&shot));
+    assert_no_qml_warnings(&run);
+    let overlay = &run.screen["overlay"];
+    assert_eq!(overlay["kind"], "input", "{overlay}");
+    assert_eq!(overlay["title"], "Private key");
+    assert_eq!(overlay["text"], "~/.ssh/nas.pem");
+    assert_eq!(overlay["browse"], true);
+    assert!(std::fs::metadata(&shot).expect("screenshot saved").len() > 1000);
 }

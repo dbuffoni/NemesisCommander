@@ -20,6 +20,8 @@ ApplicationWindow {
     readonly property var menuList: commander.menus ? JSON.parse(commander.menus) : []
     // The application, for windows drawn in other files (clicks).
     readonly property var app: commander
+    // Gives the keyboard back to the application (after a file picker).
+    function focusKeys() { keys.forceActiveFocus() }
     readonly property int activeSide: screen && screen.panels[1].active ? 1 : 0
 
     // Shared sizes and colors.

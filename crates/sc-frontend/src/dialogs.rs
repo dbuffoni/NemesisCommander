@@ -56,8 +56,19 @@ pub enum InputPurpose {
     GoTo,
     /// A new connection: first its location...
     NewConnection,
-    /// ...then the name it is saved under.
+    /// ...then the name it is saved under...
     NameConnection(String),
+    /// ...and, for SFTP and agent connections, the private key file
+    /// (empty: the SSH agent and `~/.ssh/config`). Also F4 in the drive
+    /// list, for a saved connection.
+    ConnectionKey {
+        /// The connection's name.
+        name: String,
+        /// Its location.
+        uri: String,
+        /// Not saved yet: save it and open it.
+        new: bool,
+    },
     /// Select entries matching the typed mask.
     SelectMask,
     /// Unselect entries matching the typed mask.
@@ -121,6 +132,8 @@ pub struct InputDialog {
     /// Lines shown below the field, updated while typing (the new names
     /// of a multi-rename).
     pub preview: Vec<String>,
+    /// The answer is a local file: the window offers a file picker.
+    pub browse: bool,
 }
 
 impl InputDialog {
@@ -132,6 +145,7 @@ impl InputDialog {
             field: TextField::new(initial),
             purpose,
             preview: Vec::new(),
+            browse: false,
         }
     }
 }
