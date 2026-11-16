@@ -7,8 +7,9 @@ rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 
-# V8 adds 30-40 MB to the program: `sc` includes this crate only with its
-# `scripting` feature, which server (agent) builds leave out.
+# V8 adds about 60 MB to a program: only `sc` turns on `engine` (with its
+# `scripting` feature, which agent builds leave out); the window runs
+# scripts through `sc` (ADR 0018).
 
 [dependencies]
 sc-vfs.workspace = true

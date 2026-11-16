@@ -65,6 +65,21 @@ jobs:
           target/release/sc --version
           target/release/sc keys | grep -q "Copy"
           QT_QPA_PLATFORM=offscreen target/release/sc-gui --self-test --keys=F1 | grep -q '"help"'
+      # Sizes and idle memory must stay within budget (raise one only on
+      # purpose); the benchmark table is for reading, it never fails.
+      - name: Footprint
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          { echo "### Footprint"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          ok=true
+          scripts/footprint.py size target/release/sc 95 || ok=false
+          scripts/footprint.py size target/release/sc-gui 35 || ok=false
+          scripts/footprint.py idle 25 -- target/release/sc agent --stdio || ok=false
+          scripts/footprint.py idle 100 -- target/release/sc-gui || ok=false
+          { echo; echo "### Benchmarks (sc)"; } >> "$GITHUB_STEP_SUMMARY"
+          scripts/footprint.py bench target/release/sc
+          $ok
       - name: Package
         run: packaging/linux/build-appimage.sh target/release "${GITHUB_REF_NAME//\//-}"
       - name: Check the AppImage starts
@@ -82,6 +97,10 @@ jobs:
           name: appimage-x86_64
           path: SuperCommander-*.AppImage
           if-no-files-found: error
+      - name: AppImage footprint
+        run: |
+          { echo; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          scripts/footprint.py size SuperCommander-*.AppImage 130
 
   agent:
     name: Agent (${{ matrix.target }})
@@ -112,7 +131,8 @@ jobs:
         with:
           tool: cargo-zigbuild
       - name: Build the static agent
-        # No default features: no terminal UI, no recycle bin, no scripting.
+        # No default features: no terminal UI, no recycle bin, no scripting,
+        # no SFTP/WebDAV/S3/SMB clients.
         run: cargo zigbuild --release --locked -p sc-cli --no-default-features --target ${{ matrix.target }}
       - name: Check it is static and starts
         run: |
@@ -122,6 +142,15 @@ jobs:
           if [ "${{ matrix.arch }}" = x86_64 ]; then "$bin" --version; fi
           cp "$bin" "sc-agent-linux-${{ matrix.arch }}"
           ls -l "sc-agent-linux-${{ matrix.arch }}"
+      - name: Footprint
+        run: |
+          { echo "### Agent footprint (${{ matrix.arch }})"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          ok=true
+          scripts/footprint.py size "sc-agent-linux-${{ matrix.arch }}" 18 || ok=false
+          if [ "${{ matrix.arch }}" = x86_64 ]; then
+            scripts/footprint.py idle 20 -- "./sc-agent-linux-${{ matrix.arch }}" agent --stdio || ok=false
+          fi
+          $ok
       - uses: actions/upload-artifact@v4
         with:
           name: agent-${{ matrix.arch }}
