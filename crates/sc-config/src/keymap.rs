@@ -118,6 +118,7 @@ actions! {
     GoTo          = "nav.goto",             Navigate, true,  "Go to location…",       ["Ctrl+L"];
     Back          = "nav.back",             Navigate, false, "Back",                  ["Alt+Left"];
     Forward       = "nav.forward",          Navigate, false, "Forward",               ["Alt+Right"];
+    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N"];
     Bookmarks     = "nav.bookmarks",        Navigate, true,  "Bookmarks…",            ["Ctrl+D"];
     AddBookmark   = "nav.add-bookmark",     Navigate, false, "Bookmark this folder",  ["Ctrl+Shift+D"];
     NewTab        = "nav.new-tab",          Navigate, false, "New tab",               ["Ctrl+T"];
@@ -139,7 +140,6 @@ actions! {
     Search        = "tools.search",         Tools, true,  "Search…",                  ["Alt+F7"];
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           ["Ctrl+J"];
-    Connect       = "tools.connect",        Tools, true,  "Connect…",                 ["Ctrl+N"];
     RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Alt+X"];
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        ["F1"];
@@ -153,6 +153,8 @@ actions! {
 impl Action {
     /// Finds an action by its [`id`](Self::id).
     pub fn from_id(id: &str) -> Option<Action> {
+        // Renamed when the connection list became the drive list (ADR 0019).
+        let id = if id == "tools.connect" { "nav.drives" } else { id };
         Action::ALL.iter().copied().find(|a| a.id() == id)
     }
 }
@@ -481,6 +483,12 @@ impl Keymap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_old_connect_id_reaches_the_drive_list() {
+        assert_eq!(Action::from_id("tools.connect"), Some(Action::Drives));
+        assert_eq!(Action::from_id("nav.drives"), Some(Action::Drives));
+    }
 
     fn chord(s: &str) -> KeyChord {
         s.parse().unwrap()

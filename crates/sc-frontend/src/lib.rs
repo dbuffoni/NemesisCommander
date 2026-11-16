@@ -12,6 +12,7 @@
 //!   state out).
 //! * `commands`: the command list (F9), with plugins and scripts.
 //! * `dialogs`: the data of every overlay window.
+//! * `drives`: the drive list, local drives and connections together.
 //! * `input`: [`KeyPress`] and the one-line [`TextField`].
 //! * `viewer`: the viewer of text, hex, pictures and previews.
 //! * `preview`: documents, PDF pages and 3D models for the viewer.
@@ -20,6 +21,7 @@
 mod app;
 pub mod commands;
 mod dialogs;
+pub mod drives;
 mod input;
 pub mod preview;
 pub mod settings;

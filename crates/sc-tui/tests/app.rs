@@ -1053,3 +1053,99 @@ async fn settings_are_sent_to_another_folder_from_the_screen() {
     h.settle().await;
     assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "replace or merge?");
 }
+
+#[tokio::test]
+async fn drives_and_connections_share_one_list() {
+    // A saved connection opens like a drive: here one to a local folder.
+    let backup = TempDir::new().unwrap();
+    fs::write(backup.path().join("saved.txt"), "kept\n").unwrap();
+    let backup_uri = VfsPath::from_local(backup.path()).unwrap().to_string();
+    let mut h = Harness::with_settings(|config| {
+        for (name, uri) in [
+            ("backup", backup_uri.as_str()),
+            ("nas", "sftp://me@nas.invalid/srv"),
+            ("site", "zip:///srv/site.zip!/"),
+        ] {
+            config.connections.push(sc_config::Connection {
+                name: name.into(),
+                uri: uri.into(),
+                identity_file: None,
+                options: Default::default(),
+            });
+        }
+    })
+    .await;
+    for key in ["Alt+F1", "Ctrl+N"] {
+        h.key(key);
+        let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("{key}: no drive list") };
+        let items = dialog.items.clone();
+        assert!(items[0].starts_with("Local    Home"), "{items:?}");
+        let category = |name: &str| {
+            let row = items.iter().find(|r| r.split_whitespace().nth(1) == Some(name)).unwrap();
+            row.split_whitespace().next().unwrap().to_owned()
+        };
+        assert_eq!(category("backup"), "Local");
+        assert_eq!(category("nas"), "Remote");
+        assert_eq!(category("site"), "Archive");
+        assert_eq!(items.last().unwrap(), "New connection…");
+        let screen = h.screen();
+        assert!(screen.contains("Drives") && screen.contains("Remote   nas"), "{screen}");
+        h.key("Esc");
+    }
+    h.key("Alt+F1");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+    let row = dialog.items.iter().position(|r| r.contains(" backup ")).unwrap();
+    for _ in 0..row {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.overlay().is_none());
+    assert_eq!(h.names(SideId::Left), ["..", "saved.txt"]);
+}
+
+#[tokio::test]
+async fn a_new_connection_is_saved_in_the_drive_list() {
+    let backup = TempDir::new().unwrap();
+    fs::write(backup.path().join("saved.txt"), "kept\n").unwrap();
+    let uri = VfsPath::from_local(backup.path()).unwrap().to_string();
+    let mut h = Harness::new().await;
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))));
+    h.type_text(&uri);
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no name asked") };
+    assert_eq!(dialog.title, "New connection");
+    for _ in 0..40 {
+        h.key("Backspace");
+    }
+    h.type_text("backup");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "saved.txt"]);
+    assert!(h.status().contains("Saved backup"), "{}", h.status());
+    let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
+    assert!(saved.contains("name = \"backup\""), "{saved}");
+
+    // Delete takes it out of the list and the settings again.
+    h.key("Alt+F1");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+    let row = dialog.items.iter().position(|r| r.contains(" backup ")).unwrap();
+    for _ in 0..row {
+        h.key("Down");
+    }
+    h.key("Delete");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("list closed") };
+    assert!(!dialog.items.iter().any(|r| r.contains(" backup ")));
+    // Local drives cannot be removed.
+    h.key("Home");
+    h.key("Up");
+    h.key("Delete");
+    let Some(Overlay::Choose(after)) = h.app.overlay() else { panic!("list closed") };
+    assert!(after.items[0].starts_with("Local    Home"));
+    assert!(h.app.context().config.connections.is_empty());
+}

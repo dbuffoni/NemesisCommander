@@ -256,7 +256,32 @@ Every command works the same on remote locations, written as URIs:
 | A server running `sc serve` | `scs://host:7443/dir` |
 | Inside an archive | `zip:///home/me/site.zip!/css` |
 
-**Ctrl+N** lists the saved connections of your settings and opens one.
+### One list for drives and connections
+
+**Alt+F1** (or **Ctrl+N**) opens the drive list: the drives of this computer
+and your saved connections together, grouped by a category column:
+
+- **Local**: your home folder, the root and the disks and network shares
+  mounted on this computer (drive letters on Windows, `/Volumes` on macOS).
+- **Remote**: saved SFTP, SMB, WebDAV, S3, agent and `sc serve` connections.
+- **Archive**: a saved location inside an archive file.
+
+Enter opens the highlighted row in the active panel, the same way for every
+category: a server then behaves like a local drive, with the same keys,
+copy and move between any two panels, the viewer, search and the transfer
+queue.
+
+![The drive list](images/drives.png)
+
+The last row, **New connection…**, asks for a location (for example
+`sftp://me@nas/srv`), then for the name to save it under (the host is
+suggested), opens it and keeps it in the list. **Delete** removes a saved
+connection; the drives of this computer stay. Connections are also kept in
+`[[connections]]` in the settings file, so they travel with exported and
+shared settings.
+
+![A new connection](images/drives-new.png)
+
 Passwords are never stored in SuperCommander's settings: SFTP and the agent
 use SSH (keys, agent, `~/.ssh/config`), WebDAV and SMB read `~/.netrc`, S3
 reads the usual `~/.aws` files and environment variables.
@@ -449,6 +474,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
+| Alt+F1, Ctrl+N | Drives and connections |
 | Ctrl+D | Bookmarks |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+T, Ctrl+W | New tab, close tab |
@@ -470,7 +496,6 @@ on the settings screen (Ctrl+,).
 | Alt+F7 | Search |
 | Alt+C | Compare files or folders |
 | Ctrl+J | Transfer queue |
-| Ctrl+N | Connect |
 | Alt+X | Plugins and scripts |
 
 | SuperCommander | |

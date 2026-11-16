@@ -82,6 +82,8 @@ fn every_dialog_draws_cleanly() {
         ("F7", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
+        ("Alt+F1", "choose"),
+        ("Ctrl+N", "choose"),
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
         ("Ctrl+,", "settings"),
@@ -178,4 +180,24 @@ fn the_settings_screen_saves_changes() {
     assert_eq!(hidden["changed"], true);
     let saved = std::fs::read_to_string(home.path().join("config/config.toml")).unwrap();
     assert!(saved.contains("show_hidden = true"), "{saved}");
+}
+
+#[test]
+fn drives_and_connections_are_one_list() {
+    let home = home();
+    std::fs::create_dir_all(home.path().join("config")).unwrap();
+    std::fs::write(
+        home.path().join("config/config.toml"),
+        "[[connections]]\nname = \"nas\"\nuri = \"sftp://me@nas.invalid/srv\"\n",
+    )
+    .unwrap();
+    let run = run(home.path(), "Alt+F1", None);
+    assert_no_qml_warnings(&run);
+    let overlay = &run.screen["overlay"];
+    assert_eq!(overlay["title"], "Drives", "{overlay}");
+    let items: Vec<&str> =
+        overlay["items"].as_array().unwrap().iter().map(|i| i.as_str().unwrap()).collect();
+    assert!(items[0].starts_with("Local    Home"), "{items:?}");
+    assert!(items.iter().any(|i| i.starts_with("Remote   nas ")), "{items:?}");
+    assert_eq!(*items.last().unwrap(), "New connection…");
 }
