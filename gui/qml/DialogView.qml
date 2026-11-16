@@ -268,13 +268,26 @@ Item {
                     color: palette.text
                 }
             }
-            // The answer is a local file (a private key): pick it.
-            Button {
+            // The answer is a local file (a private key): pick it. Drawn
+            // like the command list's buttons (a MouseArea, so the keyboard
+            // stays with the window, and no native style to draw).
+            Rectangle {
                 visible: dialogs.view.browse === true
-                text: "Browse…"
-                // Keys stay with the application.
-                focusPolicy: Qt.NoFocus
-                onClicked: filePicker.open()
+                implicitWidth: browseLabel.implicitWidth + 20
+                implicitHeight: browseLabel.implicitHeight + 8
+                radius: 3
+                color: "transparent"
+                border.color: dialogs.theme.lineColor
+                Label {
+                    id: browseLabel
+                    anchors.centerIn: parent
+                    text: "Browse…"
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: filePicker.open()
+                }
             }
             // Multi-rename: the new names, following the template.
             Lines { model: dialogs.view.preview }
