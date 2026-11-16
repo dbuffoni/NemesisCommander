@@ -15,7 +15,6 @@ use std::time::Duration;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use sc_app::AppContext;
-use sc_config::Action;
 use sc_frontend::view::{Screen, menus};
 use sc_frontend::{App, AppEvent, External, KeyPress, resolve_location};
 use sc_vfs::VfsPath;
@@ -169,10 +168,17 @@ impl qobject::Commander {
     }
 
     pub(crate) fn perform(mut self: Pin<&mut Self>, id: &QString) {
-        if let Some(action) = Action::from_id(&id.to_string()) {
-            self.as_mut().rust_mut().with_app(|app| app.perform(action));
-            self.refresh();
-        }
+        let id = id.to_string();
+        self.as_mut().rust_mut().with_app(|app| {
+            app.run_command(&id);
+        });
+        self.refresh();
+    }
+
+    pub(crate) fn pick(mut self: Pin<&mut Self>, what: &QString, index: i32) {
+        let what = what.to_string();
+        self.as_mut().rust_mut().with_app(|app| app.pick(&what, index.max(0) as usize));
+        self.refresh();
     }
 
     pub(crate) fn resize(mut self: Pin<&mut Self>, rows: i32, viewer_rows: i32, columns: i32) {

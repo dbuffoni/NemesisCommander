@@ -9,8 +9,8 @@ comes as:
 
 Both interfaces work the same way and share every shortcut, so what you learn
 in one works in the other. There are no toolbars or icons: every command is
-in the menu bar (F9) and on the keyboard, and **F1 shows the main
-shortcuts** at any time.
+in the command list (**F9**), where you find it by typing or by category,
+and on the keyboard. **F1 shows the main shortcuts** at any time.
 
 The pictures in this manual come from `scripts/screenshots.sh`, which drives
 the real window on a demo folder.
@@ -18,21 +18,22 @@ the real window on a demo folder.
 ## Contents
 
 1. [Getting started](#getting-started)
-2. [The panels](#the-panels)
-3. [Working with files](#working-with-files)
-4. [Selecting files](#selecting-files)
-5. [The viewer](#the-viewer)
-6. [Quick view](#quick-view)
-7. [Searching and comparing](#searching-and-comparing)
-8. [Archives](#archives)
-9. [Remote locations](#remote-locations)
-10. [Servers: the agent and `sc serve`](#servers-the-agent-and-sc-serve)
-11. [The transfer queue](#the-transfer-queue)
-12. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
-13. [Plugins and scripts](#plugins-and-scripts)
-14. [The command line](#the-command-line)
-15. [Settings](#settings)
-16. [All shortcuts](#all-shortcuts)
+2. [Commands (F9)](#commands-f9)
+3. [The panels](#the-panels)
+4. [Working with files](#working-with-files)
+5. [Selecting files](#selecting-files)
+6. [The viewer](#the-viewer)
+7. [Quick view](#quick-view)
+8. [Searching and comparing](#searching-and-comparing)
+9. [Archives](#archives)
+10. [Remote locations](#remote-locations)
+11. [Servers: the agent and `sc serve`](#servers-the-agent-and-sc-serve)
+12. [The transfer queue](#the-transfer-queue)
+13. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
+14. [Plugins and scripts](#plugins-and-scripts)
+15. [The command line](#the-command-line)
+16. [Settings](#settings)
+17. [All shortcuts](#all-shortcuts)
 
 ## Getting started
 
@@ -54,6 +55,36 @@ The window adapts to its size; here it is at 800 × 500 and at 1920 × 1080:
 | 800 × 500 | 1920 × 1080 |
 |---|---|
 | ![Small window](images/panels-800x500.png) | ![Large window](images/panels-1920x1080.png) |
+
+## Commands (F9)
+
+**F9** opens the command list: every command of SuperCommander, of your
+plugins and of your scripts, one per row as `Category/Command`, with its
+shortcuts on the right.
+
+![The command list](images/commands.png)
+
+- **Type** to find a command: the list keeps the rows that contain every
+  word you typed, in the command or in its category (`files check` finds
+  Files/Checksum), the names starting with what you typed first.
+  Backspace erases a letter, Ctrl+U or Esc empties the filter.
+- **Categories**: the buttons on top (All, Files, Select, Navigate, View,
+  Tools, SuperCommander, and Plugins and Scripts when you have some) show
+  one category only. Left and Right (or Tab) move between them; in the
+  window you can also click them.
+- **Up/Down**, Page Up/Down, Home/End move; **Enter** (or a click in the
+  window) runs the command.
+- **Ctrl+K** gives the highlighted command a shortcut: press the new key
+  (Esc cancels). If another command had that key, it loses it and the status
+  line says which one. **Delete** removes the command's shortcuts. The
+  change is saved at once, as on the settings screen.
+- **Esc** empties the filter, or closes the list.
+
+![One category](images/commands-category.png)
+
+![Finding a command](images/commands-find.png)
+
+In the window the menu bar has the same commands, one menu per category.
 
 ## The panels
 
@@ -285,8 +316,16 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   permissions they need (for example `$SELECTION` or `$OTHER`). Install one
   with `sc plugin install DIR`; the first run asks you to allow its
   permissions.
-- **Alt+X** in either interface lists the plugin commands and runs one on
-  the current panel and selection.
+- Plugin commands are in the command list (F9) as `Category/Command`: in
+  the category their manifest names (`"category": "Files"`), or in
+  **Plugins**. Each can have a shortcut (Ctrl+K in the list).
+- Your own scripts go in the `scripts` folder of the data folder
+  (`~/.local/share/supercommander/scripts` on Linux). Each `.ts` or `.js`
+  file there is a command in the **Scripts** category, which can have a
+  shortcut too. It runs on the active panel like a script from a panel, with
+  no question, since you put it there.
+- **Alt+X** in either interface lists the plugin commands, and offers to run
+  the script under the cursor, after a confirmation.
 
 See [docs/scripting.md](../scripting.md) for the API and the examples in
 `examples/`.
@@ -437,20 +476,8 @@ on the settings screen (Ctrl+,).
 | SuperCommander | |
 |---|---|
 | F1 | Show main shortcuts |
-| F9 | Menu |
+| F9 | Commands: find and run any command, give it a shortcut |
 | Ctrl+, | Settings (options and shortcuts) |
 | F10 | Quit |
 
-The menu bar (F9) lists every command with its shortcut:
-
-![Menu](images/menu.png)
-
-To find a command without knowing its menu, open the menu and type part of
-its name. The menu then lists the matching commands from every menu, each
-with the menu it lives in, the best matches (names that start with what you
-typed) first. Up and Down move, Enter runs the command, Backspace erases a
-letter and Esc goes back to the plain menus (a second Esc closes them).
-Several words narrow the search, and each can match the menu name too:
-`files check` finds Checksum in the Files menu.
-
-![Finding a command in the menu](images/menu-find.png)
+Every command, with all its shortcuts, is in the [command list (F9)](#commands-f9).

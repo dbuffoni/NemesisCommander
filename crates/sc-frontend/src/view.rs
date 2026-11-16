@@ -5,7 +5,7 @@
 //! dialog. The desktop interface sends it to QML as JSON; the text helpers
 //! are shared with the terminal interface, so both read the same.
 
-use sc_config::{Action, Category, Key, KeyChord};
+use sc_config::{Action, Key, KeyChord};
 use sc_panel::format::{human_size, local_time, permissions};
 use sc_panel::{PARENT, Panel, SideId};
 use sc_transfer::{JobInfo, JobState};
@@ -13,7 +13,8 @@ use sc_vfs::Entry;
 use serde::Serialize;
 
 use crate::app::{App, display_location, side_index};
-use crate::dialogs::{MenuState, Overlay};
+use crate::commands::{ALL, CommandPalette};
+use crate::dialogs::Overlay;
 use crate::settings::SettingsScreen;
 use crate::viewer::Viewer;
 
@@ -118,19 +119,8 @@ pub enum OverlayView {
         /// Groups of `(keys, label)` rows.
         groups: Vec<HelpGroup>,
     },
-    /// F9: the menus, with the open menu and item.
-    Menu {
-        /// Every menu.
-        menus: Vec<MenuView>,
-        /// Open menu.
-        menu: usize,
-        /// Highlighted item (among `shown`).
-        item: usize,
-        /// What was typed to filter; empty when not filtering.
-        filter: String,
-        /// The commands listed: the open menu's, or those matching `filter`.
-        shown: Vec<MenuItem>,
-    },
+    /// F9: the command list.
+    Commands(CommandsView),
     /// A one-line question.
     Input {
         /// Window title.
@@ -233,14 +223,42 @@ pub struct MenuView {
 /// A command in a menu.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MenuItem {
-    /// Action id, for [`App::perform`] through [`Action::from_id`].
+    /// Command id, for [`App::run_command`].
     pub id: String,
     /// Label.
     pub label: String,
     /// First shortcut, empty when none.
     pub shortcut: String,
-    /// The menu it is in (`Files`).
-    pub menu: String,
+}
+
+/// The command list (F9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CommandsView {
+    /// Category buttons, `All` first.
+    pub categories: Vec<String>,
+    /// The chosen button.
+    pub category: usize,
+    /// What was typed.
+    pub filter: String,
+    /// The commands listed.
+    pub rows: Vec<CommandRow>,
+    /// Highlighted row.
+    pub item: usize,
+    /// While waiting for a key to give: the command's name.
+    pub recording: Option<String>,
+    /// The keys of the moment.
+    pub hint: String,
+}
+
+/// A row of the command list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CommandRow {
+    /// Command id; empty when it cannot have shortcuts.
+    pub id: String,
+    /// `Category/Command`.
+    pub name: String,
+    /// Its shortcuts (`Ctrl+K / F5`), empty when none.
+    pub keys: String,
 }
 
 /// The viewer or quick view.
@@ -422,23 +440,59 @@ impl Screen {
     }
 }
 
-/// Every menu of the menu bar, from the action table.
+/// The menus of the GUI's menu bar: one per category of the command list
+/// (built-in, plugins, scripts), each command with its first shortcut.
 pub fn menus(app: &App) -> Vec<MenuView> {
-    (0..Category::ALL.len())
-        .map(|index| MenuView {
-            title: Category::ALL[index].title().to_owned(),
-            items: MenuState::items(index).into_iter().map(|a| menu_item(app, a)).collect(),
+    let palette = CommandPalette::new(app.commands());
+    palette
+        .categories
+        .iter()
+        .filter(|c| *c != ALL)
+        .map(|category| MenuView {
+            title: category.clone(),
+            items: palette
+                .entries
+                .iter()
+                .filter(|e| e.category == *category && e.can_have_keys())
+                .map(|e| MenuItem {
+                    id: e.id.clone(),
+                    label: e.label.clone(),
+                    shortcut: app
+                        .context()
+                        .keymap
+                        .chords_for_id(&e.id)
+                        .first()
+                        .map(ToString::to_string)
+                        .unwrap_or_default(),
+                })
+                .collect(),
         })
         .collect()
 }
 
-/// One command as a menu shows it.
-pub fn menu_item(app: &App, action: Action) -> MenuItem {
-    MenuItem {
-        id: action.id().to_owned(),
-        label: action.label().to_owned(),
-        shortcut: app.context().keymap.shortcut_text(action),
-        menu: action.category().title().to_owned(),
+/// Describes the command list.
+pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
+    let keymap = &app.context().keymap;
+    let recording = palette.recording.then(|| palette.selected().map(|e| e.name())).flatten();
+    let hint = if let Some(name) = &recording {
+        format!("Press the new shortcut for {name}    Esc: cancel")
+    } else {
+        "Type to find    Left Right: category    Enter: run    Ctrl+K: set shortcut    \
+         Del: remove shortcut    Esc: close"
+            .to_owned()
+    };
+    CommandsView {
+        categories: palette.categories.clone(),
+        category: palette.category,
+        filter: palette.filter.clone(),
+        rows: palette
+            .shown()
+            .into_iter()
+            .map(|e| CommandRow { id: e.id.clone(), name: e.name(), keys: keymap.keys_text(&e.id) })
+            .collect(),
+        item: palette.item,
+        recording,
+        hint,
     }
 }
 
@@ -586,13 +640,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
                 })
                 .collect(),
         },
-        Overlay::Menu(state) => OverlayView::Menu {
-            menus: menus(app),
-            menu: state.menu,
-            item: state.item,
-            filter: state.filter.clone(),
-            shown: state.shown().into_iter().map(|a| menu_item(app, a)).collect(),
-        },
+        Overlay::Commands(palette) => OverlayView::Commands(commands_view(app, palette)),
         Overlay::Input(dialog) => OverlayView::Input {
             title: dialog.title.clone(),
             prompt: dialog.prompt.clone(),
@@ -854,7 +902,7 @@ pub fn short_label(action: Action) -> &'static str {
         Action::Move => "Move",
         Action::MakeDir => "Mkdir",
         Action::Delete => "Delete",
-        Action::Menu => "Menu",
+        Action::Menu => "Commands",
         Action::Quit => "Quit",
         other => other.label().split_whitespace().next().unwrap_or("").trim_end_matches('…'),
     }

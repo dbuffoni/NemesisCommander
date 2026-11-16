@@ -3,7 +3,7 @@
 A fast dual-pane file manager for local and remote files, written in Rust.
 
 - A desktop window (Qt 6) and a terminal interface that work the same way,
-  driven by the keyboard and a menu bar: no toolbars, F1 shows the shortcuts.
+  driven by the keyboard: no toolbars; F9 finds any command, F1 shows the shortcuts.
 - Local folders, SFTP, SMB, WebDAV, S3 and archives (ZIP, 7-Zip, tar, RAR)
   with the same commands.
 - A built-in viewer for text, hex, Markdown, Word, spreadsheets, slides, PDF,

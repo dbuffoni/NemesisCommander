@@ -53,6 +53,11 @@ impl AppPaths {
         self.data_dir.join("plugins")
     }
 
+    /// The user's own scripts (`.ts`, `.js`), listed in the command list.
+    pub fn scripts_dir(&self) -> PathBuf {
+        self.data_dir.join("scripts")
+    }
+
     /// The permissions the user granted to plugins.
     pub fn plugin_grants_file(&self) -> PathBuf {
         self.config_dir.join("plugin-grants.json")

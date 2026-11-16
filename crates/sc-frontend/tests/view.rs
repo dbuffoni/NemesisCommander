@@ -86,7 +86,11 @@ async fn dialogs_are_described() {
     app.handle_key(KeyPress::key(Key::Esc));
     app.handle_key(KeyPress::key(Key::F(9)));
     let json = serde_json::to_value(Screen::of(&mut app, 10, 20)).unwrap();
-    assert_eq!(json["overlay"]["kind"], "menu");
+    assert_eq!(json["overlay"]["kind"], "commands");
+    assert_eq!(json["overlay"]["categories"][0], "All");
+    let copy = json["overlay"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "files.copy");
+    assert_eq!(copy.unwrap()["name"], "Files/Copy");
+    assert_eq!(copy.unwrap()["keys"], "F5");
     assert_eq!(json["panels"][0]["rows"][0]["size"], "UP");
 }
 

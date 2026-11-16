@@ -11,14 +11,14 @@ use sc_panel::format::local_time;
 use sc_panel::{PARENT, SideId};
 use sc_transfer::JobState;
 
+use sc_frontend::commands::CommandPalette;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
-    column_headers, describe, entry_details, job_line, jobs_summary, panel_footer, scroll_offset,
-    short_label, size_text, tab_title,
+    column_headers, commands_view, describe, entry_details, job_line, jobs_summary, panel_footer,
+    scroll_offset, short_label, size_text, tab_title,
 };
 use sc_frontend::{
-    App, ChooseDialog, InputDialog, MenuState, Overlay, TextField, Viewer, display_location,
-    side_index,
+    App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
 };
 
 const SIZE_WIDTH: usize = 9;
@@ -68,7 +68,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if let Some(overlay) = &app.overlay {
         match overlay {
             Overlay::Help => draw_help(frame, app),
-            Overlay::Menu(menu) => draw_menu(frame, app, menu),
+            Overlay::Commands(palette) => draw_commands(frame, app, palette),
             Overlay::Input(dialog) => draw_input(frame, dialog),
             Overlay::Confirm(dialog) => {
                 let mut lines: Vec<Line> =
@@ -271,6 +271,11 @@ fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
             .action_for(&KeyChord::plain(Key::F(n)))
             .map(short_label)
             .unwrap_or("");
+        // Ten labels of six letters fit 80 columns.
+        let label = match label {
+            "Commands" if area.width < 90 => "Cmds",
+            other => other,
+        };
         spans.push(Span::raw(format!("{n}")));
         spans.push(Span::styled(
             format!("{label:<6}"),
@@ -351,75 +356,55 @@ fn draw_help(frame: &mut Frame, app: &App) {
     frame.render_widget(Paragraph::new(right), b);
 }
 
-fn draw_menu(frame: &mut Frame, app: &App, menu: &MenuState) {
+/// The command list: category buttons, what was typed, then the commands
+/// as `Category/Command` with their shortcuts on the right.
+fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
+    let view = commands_view(app, palette);
     let area = frame.area();
-    let bar = Rect { height: 1, ..area };
-    let mut spans = Vec::new();
-    let mut x_of_open = 0u16;
-    let mut x = 0u16;
-    for (i, category) in Category::ALL.iter().enumerate() {
-        let text = format!("  {}  ", category.title());
-        if i == menu.menu && !menu.filtering() {
-            x_of_open = x;
-            spans.push(Span::styled(text.clone(), highlight()));
-        } else {
-            spans.push(Span::raw(text.clone()));
-        }
-        x += text.chars().count() as u16;
-    }
-    frame.render_widget(Clear, bar);
-    frame.render_widget(
-        Paragraph::new(Line::from(spans)).style(Style::new().bg(Color::DarkGray)),
-        bar,
-    );
+    let width = 96.min(area.width.saturating_sub(4)).max(20);
+    let height = (view.rows.len() as u16 + 6).clamp(8, area.height.saturating_sub(2).max(8));
+    let rect = Rect { y: area.y + 1, ..centered(area, width, height) };
+    frame.render_widget(Clear, rect);
+    let block = Block::bordered()
+        .title(Line::styled(" Commands ", bold()))
+        .title_bottom(Line::styled(format!(" {} ", view.hint), dim()));
+    let inner = block.inner(rect);
+    frame.render_widget(block, rect);
 
-    // While filtering, the commands found come from every menu: each row
-    // says which one.
-    let rows: Vec<(String, String)> = menu
-        .shown()
-        .iter()
-        .map(|&a| {
-            let label = if menu.filtering() {
-                format!("{}: {}", a.category().title(), a.label())
-            } else {
-                a.label().to_owned()
-            };
-            (label, app.context().keymap.shortcut_text(a))
-        })
-        .collect();
-    let title = if menu.filtering() {
-        format!(" Find: {}_ ", menu.filter)
-    } else {
-        " type to find ".to_owned()
+    let mut buttons = Vec::new();
+    for (i, name) in view.categories.iter().enumerate() {
+        let text = format!(" {name} ");
+        buttons.push(if i == view.category {
+            Span::styled(text, highlight())
+        } else {
+            Span::raw(text)
+        });
+        buttons.push(Span::raw(" "));
+    }
+    let typed = match &view.recording {
+        Some(name) => Line::styled(format!("Press the new shortcut for {name}"), bold()),
+        None => Line::from(vec![Span::styled("> ", dim()), Span::raw(format!("{}_", view.filter))]),
     };
-    let label_width = rows.iter().map(|(l, _)| l.chars().count()).max().unwrap_or(0);
-    let key_width = rows.iter().map(|(_, k)| k.chars().count()).max().unwrap_or(0);
-    let width = (label_width + key_width + 6).max(title.chars().count() + 4).max(24) as u16;
-    let lines: Vec<Line> = if rows.is_empty() {
-        vec![Line::styled(" Nothing matches", dim())]
-    } else {
-        rows.iter()
-            .enumerate()
-            .map(|(i, (label, keys))| {
-                let text = format!(" {label:<label_width$}  {keys:>key_width$} ");
-                if i == menu.item { Line::styled(text, highlight()) } else { Line::raw(text) }
-            })
-            .collect()
-    };
-    let height = (lines.len() as u16 + 2).min(area.height.saturating_sub(1));
-    let drop = Rect {
-        x: x_of_open.min(area.width.saturating_sub(width)),
-        y: 1,
-        width: width.min(area.width),
-        height,
-    };
-    // Keep the highlighted command in sight when the list is taller than the screen.
-    let visible = height.saturating_sub(2) as usize;
-    let skip = (menu.item + 1).saturating_sub(visible);
-    let lines: Vec<Line> = lines.into_iter().skip(skip).collect();
-    let block = Block::bordered().title_bottom(Line::styled(title, dim()));
-    frame.render_widget(Clear, drop);
-    frame.render_widget(Paragraph::new(lines).block(block), drop);
+    let width = inner.width as usize;
+    let visible = inner.height.saturating_sub(3) as usize;
+    let skip = (view.item + 1).saturating_sub(visible);
+    let mut lines = vec![Line::from(buttons), typed, Line::raw("")];
+    if view.rows.is_empty() {
+        lines.push(Line::styled(" Nothing matches", dim()));
+    }
+    for (i, row) in view.rows.iter().enumerate().skip(skip).take(visible) {
+        let keys_width = row.keys.chars().count();
+        let name = fit(&row.name, width.saturating_sub(keys_width + 3));
+        let gap = width.saturating_sub(name.chars().count() + keys_width + 2);
+        let selected = i == view.item;
+        let text_style = if selected { highlight() } else { Style::new() };
+        let keys_style = if selected { highlight() } else { Style::new().fg(Color::Cyan) };
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {name}{}", " ".repeat(gap)), text_style),
+            Span::styled(format!("{} ", row.keys), keys_style),
+        ]));
+    }
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// The visible part of a text field and the cursor column within it.

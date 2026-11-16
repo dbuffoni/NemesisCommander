@@ -151,7 +151,7 @@ impl App {
                 let losers = reset_keys(&mut self.context.config, action);
                 let mut message = format!("{}: built-in shortcut again", action.label());
                 for other in losers {
-                    message.push_str(&format!("; taken from {}", other.label()));
+                    message.push_str(&format!("; taken from {}", self.command_label(&other)));
                 }
                 self.settings_changed(message);
             }
@@ -164,7 +164,7 @@ impl App {
         let previous = assign_key(&mut self.context.config, recording.action, chord, recording.add);
         let mut message = format!("{}: {chord}", recording.action.label());
         if let Some(other) = previous {
-            message.push_str(&format!(" (taken from {})", other.label()));
+            message.push_str(&format!(" (taken from {})", self.command_label(&other)));
         }
         self.settings_changed(message);
     }
@@ -181,7 +181,7 @@ impl App {
     }
 
     /// Saves and applies the settings after a change, showing `message`.
-    fn settings_changed(&mut self, message: String) {
+    pub(super) fn settings_changed(&mut self, message: String) {
         if !self.save_settings() {
             return;
         }

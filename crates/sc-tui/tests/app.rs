@@ -309,39 +309,129 @@ async fn f1_shows_the_main_shortcuts() {
 }
 
 #[tokio::test]
-async fn the_menu_runs_commands() {
+async fn the_command_list_runs_commands() {
     let mut h = Harness::new().await;
     h.key("F9");
     let screen = h.screen();
-    assert!(screen.contains("Files") && screen.contains("Navigate") && screen.contains("Tools"));
-    // The last menu ("App") starts with "Show main shortcuts".
+    assert!(screen.contains("Commands"), "{screen}");
+    assert!(
+        screen.contains(" All ") && screen.contains(" Navigate ") && screen.contains(" Tools ")
+    );
+    assert!(screen.contains("Files/Copy") && screen.contains("F5"), "shortcuts are listed");
+    // Left from All: the last category (SuperCommander), whose first command is Help.
     h.key("Left");
+    assert!(!h.screen().contains("Files/Copy"));
     h.key("Enter");
     assert!(matches!(h.app.overlay(), Some(Overlay::Help)));
+
+    // Clicks (the desktop window): a category button, then a row.
+    h.key("Esc");
+    h.key("F9");
+    h.app.pick("category", 1);
+    let screen = h.screen();
+    assert!(screen.contains("Files/Copy") && !screen.contains("View/"), "{screen}");
+    h.app.pick("category", 6);
+    assert!(h.screen().contains("SuperCommander/Show main shortcuts"));
+    h.app.pick("command", 0);
+    assert!(matches!(h.app.overlay(), Some(Overlay::Help)), "a click runs the row");
 }
 
 #[tokio::test]
-async fn typing_in_the_menu_finds_commands() {
+async fn typing_in_the_command_list_finds_commands() {
     let mut h = Harness::new().await;
     h.key("F9");
     h.type_text("settings");
     let screen = h.screen();
-    assert!(screen.contains("Find: settings"), "{screen}");
-    assert!(screen.contains("SuperCommander: Settings"), "the menu is named: {screen}");
-    // Backspace erases; Esc goes back to the menus, a second Esc closes.
+    assert!(screen.contains("> settings_"), "{screen}");
+    assert!(screen.contains("SuperCommander/Settings"), "{screen}");
+    assert!(!screen.contains("Files/Copy"));
+    // Backspace erases; Esc empties the filter, a second Esc closes.
     h.key("Backspace");
-    assert!(h.screen().contains("Find: setting_"));
+    assert!(h.screen().contains("> setting_"));
     h.key("Esc");
-    assert!(!h.screen().contains("Find:"));
-    assert!(matches!(h.app.overlay(), Some(Overlay::Menu(_))));
+    assert!(h.screen().contains("Files/Copy"));
+    assert!(matches!(h.app.overlay(), Some(Overlay::Commands(_))));
     h.type_text("zzz");
     assert!(h.screen().contains("Nothing matches"));
     h.key("Enter");
-    assert!(matches!(h.app.overlay(), Some(Overlay::Menu(_))), "nothing to run");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Commands(_))), "nothing to run");
     h.key("Esc");
     h.type_text("main short");
     h.key("Enter");
     assert!(matches!(h.app.overlay(), Some(Overlay::Help)), "Enter runs what was found");
+}
+
+#[tokio::test]
+async fn shortcuts_are_given_from_the_command_list() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+K");
+    assert!(h.screen().contains("Press the new shortcut"));
+    h.key("Alt+R");
+    let screen = h.screen();
+    assert!(screen.contains("Alt+R"), "{screen}");
+    assert_eq!(h.app.context().config.keys["view.refresh"], ["Alt+R"]);
+    // Delete takes it away again; Esc closes and the new key works.
+    h.key("Delete");
+    assert_eq!(h.app.context().config.keys["view.refresh"], Vec::<String>::new());
+    h.key("Ctrl+K");
+    h.key("Alt+R");
+    h.key("Esc");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+    assert_eq!(
+        h.app.context().keymap.action_for(&"Alt+R".parse().unwrap()),
+        Some(sc_config::Action::Refresh)
+    );
+}
+
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn scripts_and_plugin_commands_are_listed_and_take_keys() {
+    let mut h = Harness::new().await;
+    let scripts = h.app.context().paths.scripts_dir();
+    fs::create_dir_all(&scripts).unwrap();
+    fs::write(scripts.join("hello.ts"), "sc.print('hello from a script');").unwrap();
+    let plugin = h.app.context().paths.plugins_dir().join("tidy");
+    fs::create_dir_all(&plugin).unwrap();
+    let manifest = r#"{
+        "name": "tidy",
+        "version": "1.0.0",
+        "commands": [
+            { "id": "run", "title": "Tidy this folder", "category": "files" },
+            { "id": "stats", "title": "Folder statistics" }
+        ]
+    }"#;
+    fs::write(plugin.join("plugin.json"), manifest).unwrap();
+    fs::write(plugin.join("main.ts"), "sc.print(sc.context!.command);").unwrap();
+
+    h.key("F9");
+    let screen = h.screen();
+    assert!(screen.contains(" Plugins ") && screen.contains(" Scripts "), "{screen}");
+    h.type_text("tidy");
+    assert!(h.screen().contains("Files/Tidy this folder"), "the manifest's category");
+    h.type_text("statistics");
+    assert!(h.screen().contains("Plugins/Folder statistics"));
+    h.type_text("hello");
+    assert!(h.screen().contains("Scripts/hello.ts"));
+    h.key("Ctrl+K");
+    h.key("Alt+H");
+    assert_eq!(h.app.context().config.keys["script.hello.ts"], ["Alt+H"]);
+    assert!(h.screen().contains("Alt+H"), "the new key is listed");
+    h.key("Esc");
+    h.key("Esc");
+    // The key runs the script, with no question: the user put it there.
+    h.key("Alt+H");
+    h.settle().await;
+    assert!(h.status().contains("hello from a script"), "{}", h.status());
+
+    // A plugin command takes a key the same way.
+    h.key("F9");
+    h.type_text("statistics");
+    h.key("Ctrl+K");
+    h.key("Alt+S");
+    assert_eq!(h.app.context().config.keys["plugin.tidy.stats"], ["Alt+S"]);
 }
 
 #[tokio::test]
@@ -929,7 +1019,7 @@ async fn the_settings_screen_records_shortcuts() {
     h.key("Enter");
     assert!(h.screen().contains("Press the new shortcut"), "{}", h.screen());
     h.key("F5");
-    assert!(h.status().contains("taken from Copy"), "{}", h.status());
+    assert!(h.status().contains("taken from Files/Copy"), "{}", h.status());
     assert_eq!(h.app.context().config.keys["view.refresh"], ["F5"]);
     h.key("Esc");
     // F5 now refreshes; Copy has no key left.

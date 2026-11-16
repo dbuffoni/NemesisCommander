@@ -32,9 +32,13 @@ pub mod qobject {
         #[qinvokable]
         fn key(self: Pin<&mut Commander>, key: i32, text: &QString, modifiers: i32);
 
-        /// A menu command, by action id.
+        /// A menu command, by command id.
         #[qinvokable]
         fn perform(self: Pin<&mut Commander>, id: &QString);
+
+        /// A click in the command list: a category button or a command row.
+        #[qinvokable]
+        fn pick(self: Pin<&mut Commander>, what: &QString, index: i32);
 
         /// Ends the application.
         #[qinvokable]

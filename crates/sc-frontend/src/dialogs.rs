@@ -19,7 +19,7 @@ pub enum Overlay {
     /// F1: the main shortcuts.
     Help,
     /// F9: the menu bar.
-    Menu(MenuState),
+    Commands(crate::commands::CommandPalette),
     /// A one-line question.
     Input(InputDialog),
     /// A yes/no question.
@@ -219,90 +219,10 @@ impl MessageDialog {
     }
 }
 
-/// The menu bar: one menu per [`Category`], items from the action table.
-///
-/// Typing filters: the menu then lists the commands of every menu whose
-/// name matches what was typed, and Enter runs the highlighted one.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct MenuState {
-    /// Open menu (index into [`Category::ALL`]).
-    pub menu: usize,
-    /// Highlighted item (among [`MenuState::shown`]).
-    pub item: usize,
-    /// What was typed; empty when not filtering.
-    pub filter: String,
-}
-
-impl MenuState {
-    /// The actions of menu `index`, in table order.
-    pub fn items(index: usize) -> Vec<Action> {
-        let category = Category::ALL[index];
-        Action::ALL.iter().copied().filter(|a| a.category() == category).collect()
-    }
-
-    /// Whether the menu is filtering.
-    pub fn filtering(&self) -> bool {
-        !self.filter.is_empty()
-    }
-
-    /// The commands listed: the open menu's, or while filtering, those of
-    /// every menu that match, the ones whose name starts with the filter first.
-    pub fn shown(&self) -> Vec<Action> {
-        if !self.filtering() {
-            return Self::items(self.menu);
-        }
-        let mut found: Vec<Action> =
-            Action::ALL.iter().copied().filter(|&a| matches_filter(a, &self.filter)).collect();
-        let query = self.filter.trim().to_lowercase();
-        found.sort_by_key(|a| !a.label().to_lowercase().starts_with(&query));
-        found
-    }
-
-    /// Opens the previous or next menu.
-    pub fn move_menu(&mut self, delta: isize) {
-        let count = Category::ALL.len() as isize;
-        self.menu = (self.menu as isize + delta).rem_euclid(count) as usize;
-        self.item = 0;
-    }
-
-    /// Moves within the listed commands, wrapping around.
-    pub fn move_item(&mut self, delta: isize) {
-        let count = self.shown().len() as isize;
-        if count > 0 {
-            self.item = (self.item as isize + delta).rem_euclid(count) as usize;
-        }
-    }
-
-    /// Adds a typed character to the filter.
-    pub fn type_char(&mut self, c: char) {
-        self.filter.push(c);
-        self.item = 0;
-    }
-
-    /// Removes the last character of the filter.
-    pub fn erase(&mut self) {
-        self.filter.pop();
-        self.item = 0;
-    }
-
-    /// Stops filtering.
-    pub fn clear_filter(&mut self) {
-        self.filter.clear();
-        self.item = 0;
-    }
-
-    /// The highlighted action; `None` when nothing matches the filter.
-    pub fn selected(&self) -> Option<Action> {
-        self.shown().get(self.item).copied()
-    }
-}
-
-/// Whether every word of `filter` is in the action's label, its menu's
-/// name or its id, ignoring case (`cop` finds Copy, `files ren` Rename).
-pub fn matches_filter(action: Action, filter: &str) -> bool {
-    let haystack =
-        format!("{} {} {}", action.category().title(), action.label(), action.id()).to_lowercase();
-    filter.to_lowercase().split_whitespace().all(|word| haystack.contains(word))
+/// The built-in commands of menu `category`, in table order (the GUI's
+/// menu bar).
+pub fn menu_actions(category: Category) -> Vec<Action> {
+    Action::ALL.iter().copied().filter(|a| a.category() == category).collect()
 }
 
 /// The transfer queue window.
@@ -327,43 +247,8 @@ mod tests {
 
     #[test]
     fn menus_cover_every_action() {
-        let total: usize = (0..Category::ALL.len()).map(|i| MenuState::items(i).len()).sum();
+        let total: usize = Category::ALL.iter().map(|&c| menu_actions(c).len()).sum();
         assert_eq!(total, Action::ALL.len());
-    }
-
-    #[test]
-    fn menu_navigation_wraps() {
-        let mut menu = MenuState::default();
-        menu.move_menu(-1);
-        assert_eq!(menu.menu, Category::ALL.len() - 1);
-        menu.move_item(-1);
-        assert_eq!(menu.selected(), MenuState::items(menu.menu).last().copied());
-    }
-
-    #[test]
-    fn typing_filters_every_menu() {
-        let mut menu = MenuState::default();
-        for c in "settings".chars() {
-            menu.type_char(c);
-        }
-        assert_eq!(menu.selected(), Some(Action::Settings));
-        assert!(menu.shown().iter().all(|&a| matches_filter(a, "settings")));
-        menu.clear_filter();
-        assert_eq!(menu.shown(), MenuState::items(0));
-        menu.type_char('x');
-        menu.type_char('q');
-        menu.type_char('z');
-        assert_eq!(menu.selected(), None);
-        menu.move_item(1);
-        assert_eq!(menu.item, 0);
-    }
-
-    #[test]
-    fn filter_words_match_menu_names_too() {
-        assert!(matches_filter(Action::Settings, "SETT"));
-        assert!(!matches_filter(Action::Settings, "copy"));
-        let copy = Action::ALL.iter().find(|a| a.id() == "files.copy").copied().unwrap();
-        assert!(matches_filter(copy, &format!("{} cop", copy.category().title())));
     }
 
     #[test]

@@ -54,7 +54,9 @@ A plugin is a folder with a `plugin.json` and a script. See
   "version": "1.0.0",
   "description": "Moves the selected files into folders named after their extension",
   "main": "main.ts",
-  "commands": [{ "id": "sort", "title": "Sort selected files into folders by type" }],
+  "commands": [
+    { "id": "sort", "title": "Sort selected files into folders by type", "category": "Files" }
+  ],
   "permissions": { "write": ["$PANEL"] },
   "limits": { "memory": 64, "timeout": 120 }
 }
@@ -71,6 +73,19 @@ sc plugin list
 sc plugin allow sort-by-type      # or answer the question at first use
 sc plugin run sort-by-type sort --panel ~/Downloads ~/Downloads/*.jpg
 ```
+
+Each command is in the command list (F9) as `Category/Title`. `category`
+is optional: one of the built-in categories (`Files`, `Select`, `Navigate`,
+`View`, `Tools`, `SuperCommander`) puts it among those commands; without it,
+or with another name, it goes under `Plugins`. Any command can get a
+shortcut there (Ctrl+K); it is saved in `[keys]` as
+`"plugin.NAME.COMMAND" = ["Alt+T"]`.
+
+Scripts you put in the `scripts` folder of the data folder
+(`~/.local/share/supercommander/scripts` on Linux, or `$SC_DATA_DIR/scripts`)
+are commands of the `Scripts` category, with shortcuts stored as
+`"script.FILE" = [...]`. They run like a script from a panel: they may change
+the active panel's folder and read the other one.
 
 In the terminal UI and the window, **Alt+X** (Tools, "Plugins and
 scripts…") lists the plugin commands, and offers to run the `.ts` or `.js`

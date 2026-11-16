@@ -7,7 +7,7 @@
 //!   "version": "1.0.0",
 //!   "description": "Moves old downloads away",
 //!   "main": "main.ts",
-//!   "commands": [{ "id": "tidy", "title": "Tidy this folder" }],
+//!   "commands": [{ "id": "tidy", "title": "Tidy this folder", "category": "Files" }],
 //!   "permissions": { "read": ["$SELECTION"], "write": ["$PANEL"] },
 //!   "limits": { "memory": 256, "timeout": 60 }
 //! }
@@ -114,8 +114,13 @@ fn default_main() -> String {
 pub struct CommandSpec {
     /// Passed to the script as `sc.context.command`.
     pub id: String,
-    /// Shown in menus.
+    /// Shown in the command list as `CATEGORY/TITLE`.
     pub title: String,
+    /// The command list category: a built-in one (`Files`, `Select`,
+    /// `Navigate`, `View`, `Tools`, `SuperCommander`); missing or another
+    /// name puts the command under `Plugins`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
 }
 
 /// Permissions a manifest asks for. Network and process access do not

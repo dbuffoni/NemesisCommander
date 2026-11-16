@@ -28,11 +28,12 @@ use tokio_util::sync::CancellationToken;
 
 use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
-    JobsView, MenuState, MessageDialog, Overlay, PendingConflict,
+    JobsView, MessageDialog, Overlay, PendingConflict,
 };
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
+mod palette;
 mod plugins;
 mod settings_screen;
 
@@ -570,6 +571,10 @@ impl App {
         }
         if let Some(action) = self.context.keymap.action_for(&press.chord) {
             self.perform(action);
+        } else if let Some(id) = self.context.keymap.extra_for(&press.chord).map(str::to_owned)
+            && !self.run_command(&id)
+        {
+            self.set_error(format!("{id}: no such plugin command or script"));
         }
     }
 
@@ -603,29 +608,7 @@ impl App {
         let is_esc = key == Some(Key::Esc);
         match overlay {
             Overlay::Help => None,
-            Overlay::Menu(mut menu) => {
-                let typed = press.text.filter(|_| !press.chord.ctrl && !press.chord.alt);
-                match (key, typed) {
-                    (Some(Key::Esc), _) if menu.filtering() => menu.clear_filter(),
-                    (Some(Key::Left), _) if !menu.filtering() => menu.move_menu(-1),
-                    (Some(Key::Right), _) if !menu.filtering() => menu.move_menu(1),
-                    (Some(Key::Up), _) => menu.move_item(-1),
-                    (Some(Key::Down), _) => menu.move_item(1),
-                    (Some(Key::Backspace), _) => menu.erase(),
-                    (Some(Key::Enter), _) => {
-                        // Nothing matching the filter: keep the menu open.
-                        let Some(action) = menu.selected() else {
-                            return Some(Overlay::Menu(menu));
-                        };
-                        self.perform(action);
-                        return None;
-                    }
-                    (Some(Key::Esc | Key::F(9) | Key::F(10)), _) => return None,
-                    (_, Some(c)) if !(c == ' ' && !menu.filtering()) => menu.type_char(c),
-                    _ => {}
-                }
-                Some(Overlay::Menu(menu))
-            }
+            Overlay::Commands(palette) => self.palette_key(palette, press),
             Overlay::Input(mut dialog) => {
                 let back = dialog.purpose.settings_screen().cloned().map(Overlay::Settings);
                 if is_esc {
@@ -978,7 +961,7 @@ impl App {
             }
             Action::RunScript => self.choose_plugin_command(),
             Action::Help => self.overlay = Some(Overlay::Help),
-            Action::Menu => self.overlay = Some(Overlay::Menu(MenuState::default())),
+            Action::Menu => self.open_commands(),
             Action::Settings => self.open_settings(),
             Action::ExportConfig => {
                 let suggestion = home_file("supercommander-settings.toml");

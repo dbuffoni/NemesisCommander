@@ -10,6 +10,7 @@
 //!
 //! * `app`: the [`App`] state machine (keys and background results in,
 //!   state out).
+//! * `commands`: the command list (F9), with plugins and scripts.
 //! * `dialogs`: the data of every overlay window.
 //! * `input`: [`KeyPress`] and the one-line [`TextField`].
 //! * `viewer`: the viewer of text, hex, pictures and previews.
@@ -17,6 +18,7 @@
 //! * `view`: what the screen shows, as plain data (and shared text helpers).
 
 mod app;
+pub mod commands;
 mod dialogs;
 mod input;
 pub mod preview;
@@ -27,7 +29,7 @@ pub mod viewer;
 pub use app::{App, AppEvent, External, Status, display_location, resolve_location, side_index};
 pub use dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
-    JobsView, MenuState, MessageDialog, Overlay, PendingConflict,
+    JobsView, MessageDialog, Overlay, PendingConflict, menu_actions,
 };
 pub use input::{KeyPress, TextField};
 pub use viewer::Viewer;

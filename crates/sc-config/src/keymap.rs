@@ -143,7 +143,7 @@ actions! {
     RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Alt+X"];
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        ["F1"];
-    Menu          = "app.menu",             App, true,  "Menu",                       ["F9"];
+    Menu          = "app.commands",         App, true,  "Commands",                   ["F9"];
     Settings      = "app.settings",         App, true,  "Settings…",                  ["Ctrl+,"];
     ExportConfig  = "app.export-config",    App, false, "Export settings to file…",   [];
     ImportConfig  = "app.import-config",    App, false, "Import settings from file…", [];
@@ -329,11 +329,24 @@ impl fmt::Display for KeyChord {
     }
 }
 
+/// Ids in `[keys]` that name commands of plugins (`plugin.NAME.COMMAND`)
+/// or user scripts (`script.NAME`) rather than built-in actions. They
+/// have no built-in keys.
+pub const EXTRA_PREFIXES: [&str; 2] = ["plugin.", "script."];
+
+/// Whether `id` names a plugin or script command (see [`EXTRA_PREFIXES`]).
+pub fn is_extra_command(id: &str) -> bool {
+    EXTRA_PREFIXES.iter().any(|prefix| id.starts_with(prefix))
+}
+
 /// The effective key bindings: defaults plus user overrides.
 #[derive(Debug, Clone)]
 pub struct Keymap {
     by_chord: HashMap<KeyChord, Action>,
     by_action: BTreeMap<Action, Vec<KeyChord>>,
+    /// Plugin and script commands, by id.
+    extra_by_chord: HashMap<KeyChord, String>,
+    by_extra: BTreeMap<String, Vec<KeyChord>>,
 }
 
 impl Default for Keymap {
@@ -357,11 +370,13 @@ impl Keymap {
             });
             by_action.insert(action, chords.collect());
         }
+        let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
         for (id, keys) in overrides {
-            let Some(action) = Action::from_id(id) else {
+            let action = Action::from_id(id);
+            if action.is_none() && !is_extra_command(id) {
                 warnings.push(format!("unknown action {id:?} in [keys]"));
                 continue;
-            };
+            }
             let mut chords = Vec::new();
             for key in keys {
                 match key.parse::<KeyChord>() {
@@ -369,11 +384,23 @@ impl Keymap {
                     Err(e) => warnings.push(format!("{e} for {id}")),
                 }
             }
-            for other in by_action.values_mut() {
+            for other in by_action.values_mut().chain(by_extra.values_mut()) {
                 other.retain(|c| !chords.contains(c));
             }
-            by_action.insert(action, chords);
+            match action {
+                Some(action) => {
+                    by_action.insert(action, chords);
+                }
+                None => {
+                    by_extra.insert(id.clone(), chords);
+                }
+            }
         }
+        by_extra.retain(|_, chords| !chords.is_empty());
+        let extra_by_chord = by_extra
+            .iter()
+            .flat_map(|(id, chords)| chords.iter().map(move |&chord| (chord, id.clone())))
+            .collect();
         let mut by_chord = HashMap::new();
         for (&action, chords) in &by_action {
             for &chord in chords {
@@ -386,7 +413,33 @@ impl Keymap {
                 }
             }
         }
-        (Keymap { by_chord, by_action }, warnings)
+        (Keymap { by_chord, by_action, extra_by_chord, by_extra }, warnings)
+    }
+
+    /// The plugin or script command bound to `chord`, if any.
+    pub fn extra_for(&self, chord: &KeyChord) -> Option<&str> {
+        self.extra_by_chord.get(chord).map(String::as_str)
+    }
+
+    /// The command (built-in action id, or plugin or script id) bound to
+    /// `chord`, if any.
+    pub fn command_for(&self, chord: &KeyChord) -> Option<String> {
+        self.action_for(chord)
+            .map(|a| a.id().to_owned())
+            .or_else(|| self.extra_for(chord).map(str::to_owned))
+    }
+
+    /// The chords of the command `id` (an action id, or a plugin or script id).
+    pub fn chords_for_id(&self, id: &str) -> &[KeyChord] {
+        match Action::from_id(id) {
+            Some(action) => self.chords_for(action),
+            None => self.by_extra.get(id).map(Vec::as_slice).unwrap_or(&[]),
+        }
+    }
+
+    /// The chords of command `id` as text (`Ctrl+K / F5`), or an empty string.
+    pub fn keys_text(&self, id: &str) -> String {
+        self.chords_for_id(id).iter().map(ToString::to_string).collect::<Vec<_>>().join(" / ")
     }
 
     /// The action bound to `chord`, if any.
@@ -431,6 +484,22 @@ mod tests {
 
     fn chord(s: &str) -> KeyChord {
         s.parse().unwrap()
+    }
+
+    #[test]
+    fn plugin_and_script_commands_can_have_keys() {
+        let mut overrides = BTreeMap::new();
+        overrides.insert("plugin.tidy.run".to_owned(), vec!["Ctrl+K".to_owned()]);
+        overrides.insert("script.backup".to_owned(), vec!["Alt+B".to_owned()]);
+        overrides.insert("bogus.thing".to_owned(), vec!["Alt+Q".to_owned()]);
+        let (keymap, warnings) = Keymap::with_overrides(&overrides);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        let ctrl_k: KeyChord = "Ctrl+K".parse().unwrap();
+        assert_eq!(keymap.extra_for(&ctrl_k), Some("plugin.tidy.run"));
+        assert_eq!(keymap.action_for(&ctrl_k), None, "taken from Checksum");
+        assert_eq!(keymap.command_for(&"Alt+B".parse().unwrap()).unwrap(), "script.backup");
+        assert_eq!(keymap.keys_text("plugin.tidy.run"), "Ctrl+K");
+        assert_eq!(keymap.keys_text("files.copy"), "F5");
     }
 
     #[test]

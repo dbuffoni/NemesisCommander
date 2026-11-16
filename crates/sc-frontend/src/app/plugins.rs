@@ -12,7 +12,10 @@ use std::sync::{Arc, Mutex};
 
 use sc_vfs::VfsPath;
 
+use sc_config::{Action, Category};
+
 use super::{App, AppEvent};
+use crate::commands::{CommandEntry, SCRIPTS, Target, plugin_category};
 use crate::dialogs::{ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, Overlay};
 
 /// One row of the Alt+X list.
@@ -27,16 +30,116 @@ pub enum PluginChoice {
     },
     /// The script file under the cursor.
     Script(PathBuf),
+    /// A script of the user's scripts folder: it runs like a script from a
+    /// panel, without the question, since the user put it there.
+    UserScript(PathBuf),
 }
+
+/// Script file name endings.
+const SCRIPT_EXTENSIONS: [&str; 4] = [".ts", ".mts", ".js", ".mjs"];
 
 /// Whether `path` is a script the panels can run.
 fn is_script(path: &VfsPath) -> bool {
     let local = path.scheme() == "file" && path.container().is_none();
     let name = path.file_name().unwrap_or("");
-    local && [".ts", ".mts", ".js", ".mjs"].iter().any(|ext| name.ends_with(ext))
+    local && SCRIPT_EXTENSIONS.iter().any(|ext| name.ends_with(ext))
+}
+
+/// The scripts in `dir`, sorted by name.
+fn user_scripts(dir: &Path) -> Vec<PathBuf> {
+    let Ok(read) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut scripts: Vec<PathBuf> = read
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            SCRIPT_EXTENSIONS.iter().any(|ext| name.ends_with(ext))
+        })
+        .collect();
+    scripts.sort();
+    scripts
 }
 
 impl App {
+    /// Every command for the command list (F9): the built-in ones, the
+    /// commands of the installed plugins, the user's scripts and the script
+    /// under the cursor.
+    pub fn commands(&self) -> Vec<CommandEntry> {
+        let mut entries: Vec<CommandEntry> =
+            Action::ALL.iter().map(|&a| CommandEntry::action(a)).collect();
+        if !cfg!(feature = "scripting") {
+            return entries;
+        }
+        let (plugins, _) = list_plugins(&self.context.paths.plugins_dir());
+        for (dir, name, commands) in plugins {
+            for (id, title, category) in commands {
+                entries.push(CommandEntry {
+                    id: format!("plugin.{name}.{id}"),
+                    category: plugin_category(category.as_deref()),
+                    label: title,
+                    target: Target::Plugin(PluginChoice::Command { dir: dir.clone(), command: id }),
+                });
+            }
+        }
+        for script in user_scripts(&self.context.paths.scripts_dir()) {
+            let name = script.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            entries.push(CommandEntry {
+                id: format!("script.{name}"),
+                category: SCRIPTS.to_owned(),
+                label: name,
+                target: Target::Plugin(PluginChoice::UserScript(script)),
+            });
+        }
+        if let Some(current) = self.workspace.active().current_path().filter(is_script) {
+            entries.push(CommandEntry {
+                id: String::new(),
+                category: SCRIPTS.to_owned(),
+                label: format!("Run {}", current.file_name().unwrap_or("")),
+                target: Target::Plugin(PluginChoice::Script(
+                    current.to_local_path().unwrap_or_default(),
+                )),
+            });
+        }
+        // Plugin commands join the built-in ones of their category.
+        let order = |category: &str| {
+            Category::ALL.iter().position(|c| c.title() == category).unwrap_or(Category::ALL.len())
+        };
+        entries.sort_by_key(|e| (order(&e.category), e.category == SCRIPTS));
+        entries
+    }
+
+    /// The name of command `id` for messages (`Files/Copy`).
+    pub fn command_label(&self, id: &str) -> String {
+        if let Some(action) = Action::from_id(id) {
+            return CommandEntry::action(action).name();
+        }
+        self.commands().into_iter().find(|e| e.id == id).map(|e| e.name()).unwrap_or(id.to_owned())
+    }
+
+    /// Runs the command `id` (built-in, plugin or script); `false` when
+    /// there is no such command.
+    pub fn run_command(&mut self, id: &str) -> bool {
+        if let Some(action) = Action::from_id(id) {
+            self.perform(action);
+            return true;
+        }
+        match self.commands().into_iter().find(|e| e.id == id) {
+            Some(entry) => {
+                self.run_entry(entry.target);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Runs a row of the command list.
+    pub(super) fn run_entry(&mut self, target: Target) {
+        match target {
+            Target::Action(action) => self.perform(action),
+            Target::Plugin(choice) => self.plugin_chosen(choice),
+        }
+    }
+
     /// Alt+X: choose a plugin command (or the script under the cursor).
     pub(super) fn choose_plugin_command(&mut self) {
         if !cfg!(feature = "scripting") {
@@ -51,7 +154,7 @@ impl App {
         }
         let (plugins, problems) = list_plugins(&self.context.paths.plugins_dir());
         for (dir, name, commands) in plugins {
-            for (id, title) in commands {
+            for (id, title, _) in commands {
                 items.push(format!("{name}: {title}"));
                 choices.push(PluginChoice::Command { dir: dir.clone(), command: id });
             }
@@ -75,6 +178,12 @@ impl App {
     pub(super) fn plugin_chosen(&mut self, choice: PluginChoice) {
         let folder = self.workspace.active().location().clone();
         let (title, lines) = match &choice {
+            PluginChoice::UserScript(_)
+                if folder.scheme() != "file" || folder.container().is_some() =>
+            {
+                return self.set_error("Scripts run from local folders only");
+            }
+            PluginChoice::UserScript(_) => return self.run_plugin_choice(choice),
             PluginChoice::Script(script) => {
                 if folder.scheme() != "file" || folder.container().is_some() {
                     self.set_error("Scripts run from local folders only");
@@ -126,18 +235,23 @@ impl App {
     }
 }
 
-/// A plugin's folder, name and commands (id, title).
-type PluginRow = (PathBuf, String, Vec<(String, String)>);
+/// A plugin's folder, name and commands (id, title, category).
+type PluginRow = (PathBuf, String, Vec<(String, String, Option<String>)>);
 
-/// Installed plugins as (folder, name, [(command id, title)]), and problems.
+/// Installed plugins as (folder, name, [(command id, title, category)]),
+/// and problems.
 #[cfg(feature = "scripting")]
 fn list_plugins(dir: &Path) -> (Vec<PluginRow>, Vec<String>) {
     let (plugins, problems) = sc_script::plugin::discover(dir);
     let rows = plugins
         .into_iter()
         .map(|plugin| {
-            let commands =
-                plugin.manifest.commands.iter().map(|c| (c.id.clone(), c.title.clone())).collect();
+            let commands = plugin
+                .manifest
+                .commands
+                .iter()
+                .map(|c| (c.id.clone(), c.title.clone(), c.category.clone()))
+                .collect();
             (plugin.dir.clone(), plugin.manifest.name.clone(), commands)
         })
         .collect();
@@ -212,7 +326,7 @@ async fn run_choice(
             let result = plugin.run(&command, &context, registry, output).await;
             (title, result.map_err(|e| e.to_string()))
         }
-        PluginChoice::Script(script) => {
+        PluginChoice::Script(script) | PluginChoice::UserScript(script) => {
             let name = script.file_name().unwrap_or_default().to_string_lossy().into_owned();
             let source = match std::fs::read_to_string(&script) {
                 Ok(source) => source,

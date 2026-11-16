@@ -74,10 +74,11 @@ fn every_dialog_draws_cleanly() {
     let home = home();
     for (keys, kind) in [
         ("F1", "help"),
-        ("F9", "menu"),
-        // Typing in the menu finds commands.
-        ("F9 s e t", "menu"),
-        ("F9 z z z", "menu"),
+        ("F9", "commands"),
+        // Typing in the command list finds commands.
+        ("F9 s e t", "commands"),
+        ("F9 z z z", "commands"),
+        ("F9 Right Ctrl+K", "commands"),
         ("F7", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
@@ -94,15 +95,32 @@ fn every_dialog_draws_cleanly() {
 }
 
 #[test]
-fn typing_in_the_menu_finds_commands() {
+fn the_command_list_finds_commands_and_takes_shortcuts() {
     let home = home();
     let found = run(home.path(), "F9 s e t t", None);
     assert_no_qml_warnings(&found);
-    let menu = &found.screen["overlay"];
-    assert_eq!(menu["filter"], "sett");
-    assert_eq!(menu["shown"][0]["label"], "Settings…", "{menu}");
+    let list = &found.screen["overlay"];
+    assert_eq!(list["filter"], "sett");
+    assert_eq!(list["categories"][0], "All");
+    assert_eq!(list["rows"][0]["name"], "SuperCommander/Settings…", "{list}");
+    assert_eq!(list["rows"][0]["keys"], "Ctrl+,");
     let ran = run(home.path(), "F9 s e t t Enter", None);
     assert_eq!(ran.screen["overlay"]["kind"], "settings");
+    // Files is the second category button; the shortcut is saved.
+    let given = run(home.path(), "F9 Right Down Ctrl+K Alt+Z", None);
+    assert_no_qml_warnings(&given);
+    let list = &given.screen["overlay"];
+    assert!(
+        list["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["name"].as_str().unwrap().starts_with("Files/"))
+    );
+    assert_eq!(list["rows"][1]["keys"], "Alt+Z", "{list}");
+    let config =
+        std::fs::read_to_string(home.path().join("config/config.toml")).unwrap_or_default();
+    assert!(config.contains("Alt+Z"), "{config}");
 }
 
 #[test]

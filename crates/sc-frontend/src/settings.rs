@@ -408,65 +408,75 @@ pub fn keys_of(config: &Config, action: Action) -> Vec<KeyChord> {
 }
 
 /// Gives `chord` to `action` (replacing its keys, or added with `add`).
-/// Another command that had the chord loses it; its name is returned.
+/// Another command that had the chord loses it; its id is returned.
 pub fn assign_key(
     config: &mut Config,
     action: Action,
     chord: KeyChord,
     add: bool,
-) -> Option<Action> {
+) -> Option<String> {
+    assign_key_to(config, action.id(), chord, add)
+}
+
+/// Like [`assign_key`] for any command id: a built-in action, or a plugin
+/// or script command (`plugin.NAME.COMMAND`, `script.NAME`).
+pub fn assign_key_to(config: &mut Config, id: &str, chord: KeyChord, add: bool) -> Option<String> {
     let (keymap, _) = Keymap::with_overrides(&config.keys);
-    let previous = keymap.action_for(&chord).filter(|a| *a != action);
-    if let Some(other) = previous {
+    let previous = keymap.command_for(&chord).filter(|other| other != id);
+    if let Some(other) = &previous {
         let remaining: Vec<KeyChord> =
-            keymap.chords_for(other).iter().copied().filter(|c| *c != chord).collect();
+            keymap.chords_for_id(other).iter().copied().filter(|c| *c != chord).collect();
         set_keys(config, other, &remaining);
     }
-    let mut keys = if add { keymap.chords_for(action).to_vec() } else { Vec::new() };
+    let mut keys = if add { keymap.chords_for_id(id).to_vec() } else { Vec::new() };
     if !keys.contains(&chord) {
         keys.push(chord);
     }
-    set_keys(config, action, &keys);
+    set_keys(config, id, &keys);
     previous
 }
 
 /// Removes every key of `action`.
 pub fn clear_keys(config: &mut Config, action: Action) {
-    set_keys(config, action, &[]);
+    clear_keys_of(config, action.id());
+}
+
+/// Removes every key of the command `id`.
+pub fn clear_keys_of(config: &mut Config, id: &str) {
+    set_keys(config, id, &[]);
 }
 
 /// Gives `action` its built-in keys again, taking them from commands that
-/// have them now; returns those commands.
-pub fn reset_keys(config: &mut Config, action: Action) -> Vec<Action> {
+/// have them now; returns the ids of those commands.
+pub fn reset_keys(config: &mut Config, action: Action) -> Vec<String> {
     config.keys.remove(action.id());
     let mut losers = Vec::new();
-    for key in action.default_keys() {
-        let Ok(chord) = key.parse::<KeyChord>() else { continue };
+    for chord in default_keys(action.id()) {
         let (keymap, _) = Keymap::with_overrides(&config.keys);
-        if let Some(other) = keymap.action_for(&chord).filter(|a| *a != action) {
+        if let Some(other) = keymap.command_for(&chord).filter(|o| o != action.id()) {
             let remaining: Vec<KeyChord> =
-                keymap.chords_for(other).iter().copied().filter(|c| *c != chord).collect();
-            set_keys(config, other, &remaining);
+                keymap.chords_for_id(&other).iter().copied().filter(|c| *c != chord).collect();
+            set_keys(config, &other, &remaining);
             losers.push(other);
         }
     }
     losers
 }
 
-/// Stores `keys` for `action` as an override, or no override when they are
-/// the built-in ones.
-fn set_keys(config: &mut Config, action: Action, keys: &[KeyChord]) {
-    let texts: Vec<String> = keys.iter().map(ToString::to_string).collect();
-    let defaults: Vec<String> = action
-        .default_keys()
-        .iter()
-        .filter_map(|k| k.parse::<KeyChord>().ok())
-        .map(|c| c.to_string())
-        .collect();
-    if texts == defaults {
-        config.keys.remove(action.id());
+/// The built-in keys of command `id` (none for plugins and scripts).
+fn default_keys(id: &str) -> Vec<KeyChord> {
+    Action::from_id(id)
+        .map(|action| action.default_keys().iter().filter_map(|k| k.parse().ok()).collect())
+        .unwrap_or_default()
+}
+
+/// Stores `keys` for command `id` as an override, or no override when they
+/// are the built-in ones.
+fn set_keys(config: &mut Config, id: &str, keys: &[KeyChord]) {
+    if keys == default_keys(id).as_slice() {
+        config.keys.remove(id);
     } else {
-        config.keys.insert(action.id().to_owned(), texts);
+        config.keys.insert(id.to_owned(), keys.iter().map(ToString::to_string).collect());
     }
 }
 
@@ -508,11 +518,11 @@ mod tests {
         let mut config = Config::default();
         // F5 goes from Copy to Refresh; Copy is left without keys.
         let previous = assign_key(&mut config, Action::Refresh, chord("F5"), true);
-        assert_eq!(previous, Some(Action::Copy));
+        assert_eq!(previous.as_deref(), Some("files.copy"));
         assert_eq!(keys_of(&config, Action::Refresh), [chord("Ctrl+R"), chord("F5")]);
         assert!(keys_of(&config, Action::Copy).is_empty());
         // Resetting Copy takes F5 back.
-        assert_eq!(reset_keys(&mut config, Action::Copy), [Action::Refresh]);
+        assert_eq!(reset_keys(&mut config, Action::Copy), [Action::Refresh.id()]);
         assert_eq!(keys_of(&config, Action::Copy), [chord("F5")]);
         assert_eq!(keys_of(&config, Action::Refresh), [chord("Ctrl+R")]);
         assert!(config.keys.is_empty(), "back to the built-in keys: no overrides");

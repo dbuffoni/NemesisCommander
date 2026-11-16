@@ -18,6 +18,8 @@ ApplicationWindow {
     // The screen description (see sc_frontend::view::Screen).
     readonly property var screen: commander.screen ? JSON.parse(commander.screen) : null
     readonly property var menuList: commander.menus ? JSON.parse(commander.menus) : []
+    // The application, for windows drawn in other files (clicks).
+    readonly property var app: commander
     readonly property int activeSide: screen && screen.panels[1].active ? 1 : 0
 
     // Shared sizes and colors.

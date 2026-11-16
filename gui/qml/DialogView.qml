@@ -28,7 +28,7 @@ Item {
         sourceComponent: {
             switch (dialogs.view ? dialogs.view.kind : "") {
             case "help": return help
-            case "menu": return menu
+            case "commands": return commands
             case "input": return input
             case "confirm": return confirm
             case "choose": return choose
@@ -85,7 +85,7 @@ Item {
         id: help
         Box {
             title: "Main shortcuts"
-            hint: "Every command is also in the menu bar.    Esc: close"
+            hint: "F9 lists every command.    Esc: close"
             GridLayout {
                 columns: 3
                 columnSpacing: 32
@@ -116,42 +116,100 @@ Item {
         }
     }
 
+    // The command list: category buttons, what was typed, then every
+    // command as Category/Command with its shortcuts. Buttons and rows take
+    // clicks too (MouseAreas, so the keyboard stays with the window).
     Component {
-        id: menu
+        id: commands
         Box {
-            readonly property bool filtering: dialogs.view.filter !== ""
-            title: "Menu"
-            hint: filtering ? "Up Down: command    Enter: run    Backspace: erase    Esc: all menus"
-                            : "Type to find    Left Right: menu    Up Down: command    Enter: run    Esc: close"
-            RowLayout {
-                spacing: 16
-                visible: !filtering
+            title: "Commands"
+            hint: dialogs.view.hint
+            hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
+            width: Math.min(dialogs.theme.width - 40, 860)
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
                 Repeater {
-                    model: dialogs.view.menus
-                    delegate: Label {
-                        text: modelData.title
-                        font.bold: index === dialogs.view.menu
-                        color: index === dialogs.view.menu ? dialogs.theme.accent
-                                                           : palette.windowText
+                    model: dialogs.view.categories
+                    delegate: Rectangle {
+                        readonly property bool chosen: index === dialogs.view.category
+                        implicitWidth: name.implicitWidth + 20
+                        implicitHeight: name.implicitHeight + 8
+                        radius: 3
+                        color: chosen ? palette.highlight : "transparent"
+                        border.color: chosen ? palette.highlight : dialogs.theme.lineColor
+                        Label {
+                            id: name
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: chosen ? palette.highlightedText : palette.windowText
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: dialogs.theme.app.pick("category", index)
+                        }
                     }
                 }
             }
-            // What was typed, while filtering.
-            Label {
-                visible: filtering
-                text: "Find: " + dialogs.view.filter + "_"
-                font.bold: true
-                color: dialogs.theme.accent
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                implicitHeight: dialogs.theme.rowHeight + 6
+                color: palette.base
+                border.color: palette.highlight
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: 6
+                    text: dialogs.view.recording
+                          ? "Press the new shortcut for " + dialogs.view.recording
+                          : "> " + dialogs.view.filter + "_"
+                    color: dialogs.view.recording ? dialogs.theme.accent : palette.text
+                    font: dialogs.theme.fixedFont
+                }
             }
-            CursorList {
-                cursor: dialogs.view.item
-                model: dialogs.view.shown.map((item) => {
-                    const label = filtering ? item.menu + ": " + item.label : item.label
-                    return item.shortcut ? label + "    " + item.shortcut : label
-                })
+            ListView {
+                id: rows
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, dialogs.height * 0.6)
+                implicitWidth: 600
+                interactive: false
+                clip: true
+                model: dialogs.view.rows
+                currentIndex: dialogs.view.item
+                onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                onCountChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                delegate: Rectangle {
+                    readonly property bool current: index === dialogs.view.item
+                    width: ListView.view.width
+                    height: dialogs.theme.rowHeight
+                    radius: 2
+                    color: current ? palette.highlight : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 16
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: modelData.name
+                            color: current ? palette.highlightedText : palette.windowText
+                        }
+                        Label {
+                            text: modelData.keys
+                            font: dialogs.theme.fixedFont
+                            color: current ? palette.highlightedText : dialogs.theme.dim
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: dialogs.theme.app.pick("command", index)
+                    }
+                }
             }
             Label {
-                visible: filtering && dialogs.view.shown.length === 0
+                visible: dialogs.view.rows.length === 0
                 text: "Nothing matches"
                 color: dialogs.theme.dim
             }
