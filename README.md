@@ -11,7 +11,8 @@ A fast dual-pane file manager for local and remote files, written in Rust.
 - Background transfers with a queue, verification and resume after crashes.
 - A small static agent for Linux servers (`sc agent` over SSH, `sc serve`
   over mutual TLS) for fast remote work and server-to-server copies.
-- Plugins and scripts in TypeScript, in a sandbox.
+- Plugins and scripts in TypeScript, in a sandbox, tested with `sc test`
+  and, with your Anthropic API key, written by Claude (`sc ai new`).
 - `sc`, a command line for all of it.
 
 ![SuperCommander](docs/manual/images/panels-1280x800.png)

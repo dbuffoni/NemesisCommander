@@ -5373,6 +5373,8 @@ dependencies = [
  "async-trait",
  "clap",
  "predicates",
+ "reqwest",
+ "rustls",
  "sc-agent",
  "sc-app",
  "sc-archive",

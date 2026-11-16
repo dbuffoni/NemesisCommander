@@ -1,5 +1,6 @@
 //! Implementations of the subcommands.
 
+mod ai;
 mod archive;
 mod files;
 mod find;
@@ -49,6 +50,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Run(args) => script::run(&context, args).await,
         Command::Plugin(args) => script::plugin(&context, args).await,
         Command::Test(args) => script_test::test(&context, args).await,
+        Command::Ai(args) => ai::ai(&context, args).await,
     }
 }
 

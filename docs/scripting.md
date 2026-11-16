@@ -130,5 +130,33 @@ sc run --guide > AGENTS.md     # or CLAUDE.md
 ```
 
 ask for the script, and it writes it, runs `sc test --json`, reads what
-went wrong or what changed, and fixes it until it passes. SuperCommander
-has no AI of its own (ADR 0021).
+went wrong or what changed, and fixes it until it passes (ADR 0021).
+
+## `sc ai`: scripts written by Claude
+
+SuperCommander can also do this loop itself, with your Anthropic API key:
+
+```sh
+echo "$KEY" | sc ai key        # once; or set ANTHROPIC_API_KEY
+sc ai new "move files older than 30 days into a folder named old"
+sc ai new --plugin "count the lines of the selected text files"
+```
+
+`sc ai new` sends the description, the guide and the API to Claude
+(`claude-opus-5-5` unless `--model` says otherwise), tests the answer with
+`sc test`, and sends the report back when it fails, up to `--tries` times
+(default 3). Each try is one API request, billed to your key.
+
+- A script that passes is saved in your scripts folder, so it is a command
+  of the `Scripts` category (F9). A plugin is installed; like any plugin it
+  asks for its permissions the first time it runs.
+- `--out PATH` saves it elsewhere instead, `--fixture DIR` tests it on your
+  own sample files, `--force` replaces one with the same name.
+- If no try passes, nothing is saved and the drafts are kept in a
+  temporary folder, named in the error.
+- In the terminal UI and the window: F9, **Tools/Write a script with AI…**
+  asks what the script should do and runs `sc ai new` with it.
+
+A passing test means the script ran without errors on sample files and the
+report shows what it changed; read the script before running it on files
+that matter. Server builds leave `sc ai` out (ADR 0022).

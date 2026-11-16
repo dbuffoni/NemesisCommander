@@ -12,6 +12,8 @@ pub async fn test(_context: &sc_app::AppContext, _args: crate::cli::TestArgs) ->
 
 #[cfg(feature = "scripting")]
 pub use engine::test;
+#[cfg(feature = "ai")]
+pub(crate) use engine::{report, summary};
 
 #[cfg(feature = "scripting")]
 mod engine {
@@ -44,10 +46,10 @@ mod engine {
     ];
 
     #[derive(Serialize)]
-    struct Report {
+    pub(crate) struct Report {
         target: String,
         kind: &'static str,
-        passed: bool,
+        pub(crate) passed: bool,
         checks: Vec<Check>,
         runs: Vec<Run>,
         /// Where the test folders are, with --keep.
@@ -96,6 +98,22 @@ mod engine {
     }
 
     pub async fn test(context: &AppContext, args: TestArgs) -> CmdResult {
+        let report = report(context, &args).await?;
+        if args.json {
+            crate::out!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            for line in summary(&report) {
+                crate::out!("{line}");
+            }
+        }
+        Ok(if report.passed { ExitCode::SUCCESS } else { ExitCode::from(1) })
+    }
+
+    /// Tests `args.target` as `sc test` does, and returns the report.
+    pub(crate) async fn report(
+        context: &AppContext,
+        args: &TestArgs,
+    ) -> Result<Report, Box<dyn std::error::Error>> {
         let root = tempfile::Builder::new().prefix("sc-test-").tempdir()?;
         let mut report = Report {
             target: args.target.clone(),
@@ -108,10 +126,10 @@ mod engine {
         };
         // Permissions compare real paths (macOS keeps temp in /private/var).
         let folder = fs::canonicalize(root.path())?;
-        if let Some(target) = load(&args, &mut report) {
+        if let Some(target) = load(args, &mut report) {
             check_source(&target, &folder, &mut report);
             if report.checks.iter().all(|check| check.status != Status::Failed) {
-                run_all(context, &args, &target, &folder, &mut report).await?;
+                run_all(context, args, &target, &folder, &mut report).await?;
             }
         }
         report.passed = !report.runs.is_empty()
@@ -120,12 +138,7 @@ mod engine {
         if args.keep {
             report.folder = Some(root.keep().display().to_string());
         }
-        if args.json {
-            crate::out!("{}", serde_json::to_string_pretty(&report)?);
-        } else {
-            print_text(&report);
-        }
-        Ok(if report.passed { ExitCode::SUCCESS } else { ExitCode::from(1) })
+        Ok(report)
     }
 
     /// The script or plugin named on the command line; a failed check
@@ -463,8 +476,10 @@ mod engine {
         Check { name, status: Status::Failed, message }
     }
 
-    fn print_text(report: &Report) {
-        crate::out!("sc test {} ({})", report.target, report.kind);
+    /// The report as lines of text.
+    pub(crate) fn summary(report: &Report) -> Vec<String> {
+        let mut lines = Vec::new();
+        lines.push(format!("sc test {} ({})", report.target, report.kind));
         for check in &report.checks {
             let status = match check.status {
                 Status::Passed => "passed",
@@ -472,35 +487,36 @@ mod engine {
                 Status::Skipped => "skipped",
             };
             match check.message.as_str() {
-                "" => crate::out!("  {:<9} {status}", check.name),
-                message => crate::out!("  {:<9} {status}: {message}", check.name),
+                "" => lines.push(format!("  {:<9} {status}", check.name)),
+                message => lines.push(format!("  {:<9} {status}: {message}", check.name)),
             }
         }
         for note in &report.notes {
-            crate::out!("  note: {note}");
+            lines.push(format!("  note: {note}"));
         }
         for run in &report.runs {
             let label =
                 run.command.as_deref().map(|c| format!("run {c}")).unwrap_or_else(|| "run".into());
             let status = if run.passed { "passed" } else { "FAILED" };
-            crate::out!("  {label:<9} {status} in {:.2} s", run.seconds);
+            lines.push(format!("  {label:<9} {status} in {:.2} s", run.seconds));
             if let Some(error) = &run.error {
-                crate::out!("    error: {error}");
+                lines.push(format!("    error: {error}"));
             }
             for line in &run.output {
-                crate::out!("    | {line}");
+                lines.push(format!("    | {line}"));
             }
             for (title, paths) in
                 [("created", &run.created), ("removed", &run.removed), ("changed", &run.changed)]
             {
                 for path in paths {
-                    crate::out!("    {title} {path}");
+                    lines.push(format!("    {title} {path}"));
                 }
             }
         }
         if let Some(folder) = &report.folder {
-            crate::out!("  folder kept: {folder}");
+            lines.push(format!("  folder kept: {folder}"));
         }
-        crate::out!("{}", if report.passed { "passed" } else { "FAILED" });
+        lines.push((if report.passed { "passed" } else { "FAILED" }).to_owned());
+        lines
     }
 }

@@ -983,6 +983,7 @@ impl App {
                 self.overlay = Some(Overlay::Choose(dialog));
             }
             Action::RunScript => self.choose_plugin_command(),
+            Action::AiScript => self.ask_ai_script(),
             Action::Help => self.overlay = Some(Overlay::Help),
             Action::Menu => self.open_commands(),
             Action::Settings => self.open_settings(),
@@ -1233,6 +1234,7 @@ impl App {
             InputPurpose::SettingValue { field, .. } => self.setting_typed(field, &text),
             InputPurpose::SendSettings(_) => self.send_settings(&text),
             InputPurpose::FetchSettings(_) => self.fetch_settings(&text),
+            InputPurpose::AiScript => self.write_script_with_ai(text),
         }
     }
 

@@ -33,8 +33,7 @@ needs only a safe way to try a script and a clear report.
 
 ## Consequences
 
-- No AI inside the program; any assistant that can run a command can write
-  and test scripts. A built-in assistant (a command that asks a model for a
-  script and loops on `sc test`) stays possible later, on top of this.
+- Any assistant that can run a command can write and test scripts. The
+  built-in `sc ai` (ADR 0022) is the same loop on top of this.
 - The report compares file contents before and after, so tests suit
   sample-sized folders, not large fixtures.

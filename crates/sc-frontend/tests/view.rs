@@ -103,3 +103,18 @@ async fn menus_list_every_command_with_its_shortcut() {
     let total: usize = menus.iter().map(|m| m.items.len()).sum();
     assert_eq!(total, sc_config::Action::ALL.len());
 }
+
+/// Tools, "Write a script with AI…" asks what the script should do (the
+/// answer goes to `sc ai new`).
+#[tokio::test]
+async fn ai_scripts_start_with_a_question() {
+    let (mut app, _events, _dir) = app().await;
+    assert!(app.run_command("tools.ai-script"));
+    match Screen::of(&mut app, 10, 20).overlay {
+        Some(OverlayView::Input { title, .. }) if cfg!(feature = "scripting") => {
+            assert_eq!(title, "Write a script with AI")
+        }
+        None if !cfg!(feature = "scripting") => {}
+        other => panic!("{other:?}"),
+    }
+}

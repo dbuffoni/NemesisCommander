@@ -63,6 +63,9 @@ pub enum Command {
     /// Try a script or a plugin on sample files in a throwaway folder and
     /// report what it did (for authors and AI assistants).
     Test(TestArgs),
+    /// Have Claude write a script or a plugin, tested with `sc test` until
+    /// it passes.
+    Ai(AiArgs),
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -515,6 +518,48 @@ pub struct TestArgs {
     /// Keep the test folder and say where it is.
     #[arg(long)]
     pub keep: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct AiArgs {
+    #[command(subcommand)]
+    pub action: AiAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AiAction {
+    /// Write a script (or a plugin) from a description: Claude writes it,
+    /// `sc test` tries it on sample files, and Claude fixes what failed.
+    /// A script that passes is saved among your scripts (F9, Scripts).
+    #[command(after_help = "Needs an Anthropic API key: ANTHROPIC_API_KEY, or one saved \
+        with `sc ai key`. Each try is one request to the Claude API, billed to that key.\n\n\
+        Examples:\n  sc ai new \"move files older than 30 days into a folder named old\"\n  \
+        sc ai new --plugin \"count the lines of the selected text files\"")]
+    New {
+        /// What the script should do, in any language.
+        #[arg(required = true, num_args = 1..)]
+        description: Vec<String>,
+        /// Write a plugin (installed when it passes) instead of a script.
+        #[arg(long)]
+        plugin: bool,
+        /// Save here instead: a file for a script, a folder for a plugin.
+        #[arg(long, value_name = "PATH")]
+        out: Option<String>,
+        /// Test on a copy of this folder instead of the sample files.
+        #[arg(long, value_name = "DIR")]
+        fixture: Option<String>,
+        /// How many times Claude may try.
+        #[arg(long, value_name = "N", default_value_t = 3)]
+        tries: u32,
+        /// The Claude model.
+        #[arg(long, default_value = "claude-opus-5-5")]
+        model: String,
+        /// Replace a script or plugin with the same name.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Save an Anthropic API key (read from standard input) for `sc ai`.
+    Key,
 }
 
 #[derive(Debug, Args)]
