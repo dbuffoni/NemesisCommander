@@ -191,7 +191,11 @@ mod tests {
 
         // Sending again keeps the previous file, and merging keeps their bookmarks.
         let mut theirs = Config::default();
-        theirs.bookmarks.push(sc_config::Bookmark { name: "logs".into(), path: "/var/log".into() });
+        theirs.bookmarks.push(sc_config::Bookmark {
+            name: "logs".into(),
+            path: "/var/log".into(),
+            targets: vec![],
+        });
         push(&registry(), &theirs, &other, SyncMode::Replace).await.unwrap();
         assert!(dir.path().join("other/.config/supercommander/config.toml.bak").exists());
         push(&registry(), &mine, &other, SyncMode::Merge).await.unwrap();

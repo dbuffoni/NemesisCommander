@@ -323,6 +323,22 @@ parallel jobs and files, retries, and a bandwidth limit.
 
 - **Ctrl+Shift+D** bookmarks the current folder, **Ctrl+D** lists the
   bookmarks (Enter opens one, Delete removes it).
+- **Ctrl+Alt+D** bookmarks the current folder together with the folder
+  shown in the other panel, its *target*. Opening the bookmark then sets
+  both panels at once. Press Ctrl+Alt+D again on the same folder with
+  another folder on the other side to add more targets: opening a bookmark
+  with several targets shows a quick list to pick the one for the other
+  panel (Esc leaves the other panel as it is). The list of bookmarks shows
+  `→ target`, or `→ 2 targets`. Folders and targets can be any location:
+  local, archives and remote sources (SFTP, SMB, WebDAV, S3, agent).
+  In `config.toml` a bookmark looks like this:
+
+  ```toml
+  [[bookmarks]]
+  name = "site"
+  path = "~/projects/site"
+  targets = ["sftp://me@web01/var/www", "sftp://me@web02/var/www"]
+  ```
 - **Ctrl+T** opens a tab, **Ctrl+W** closes it, **Ctrl+Tab** and
   **Ctrl+Shift+Tab** move between tabs. Each panel has its own tabs.
 - **Alt+Left** and **Alt+Right** go back and forward in the folders visited.
@@ -491,6 +507,7 @@ on the settings screen (Ctrl+,).
 | Alt+F1, Ctrl+N | Drives and connections |
 | Ctrl+D | Bookmarks |
 | Ctrl+Shift+D | Bookmark this folder |
+| Ctrl+Alt+D | Bookmark this folder with the other panel's |
 | Ctrl+T, Ctrl+W | New tab, close tab |
 | Ctrl+Tab, Ctrl+PageDown | Next tab |
 | Ctrl+Shift+Tab, Ctrl+PageUp | Previous tab |

@@ -197,6 +197,17 @@ pub fn side_index(side: SideId) -> usize {
     }
 }
 
+/// One row of the bookmark list: name, folder and its targets for the
+/// other panel (`→ target`, or `→ 3 targets` when there are several).
+fn bookmark_row(bookmark: &Bookmark) -> String {
+    let row = format!("{:<20} {}", bookmark.name, bookmark.path);
+    match bookmark.targets.as_slice() {
+        [] => row,
+        [target] => format!("{row}  → {target}"),
+        targets => format!("{row}  → {} targets", targets.len()),
+    }
+}
+
 /// How a location is shown to the user: plain paths for local folders,
 /// URIs for everything else.
 pub fn display_location(path: &VfsPath) -> String {
@@ -795,6 +806,80 @@ impl App {
         self.overlay = Some(Overlay::Input(InputDialog::new(title, prompt, initial, purpose)));
     }
 
+    /// Bookmarks the active folder. With `with_target`, the other panel's
+    /// folder becomes one of its targets; bookmarking the same folder again
+    /// with another target adds that target to the list.
+    fn add_bookmark(&mut self, with_target: bool) {
+        let location = self.workspace.active().location().clone();
+        let path = display_location(&location);
+        let target = with_target.then(|| self.other_location());
+        let bookmarks = &mut self.context.config.bookmarks;
+        let message = match (bookmarks.iter().position(|b| b.path == path), target) {
+            (Some(_), None) => return self.set_status(format!("{path} is already bookmarked")),
+            (Some(index), Some(target)) => {
+                let targets = &mut bookmarks[index].targets;
+                if targets.contains(&target) {
+                    return self.set_status(format!("{path} already has target {target}"));
+                }
+                targets.push(target.clone());
+                format!("Bookmarked {path} with target {target} ({} targets)", targets.len())
+            }
+            (None, target) => {
+                let message = match &target {
+                    Some(target) => format!("Bookmarked {path} with target {target}"),
+                    None => format!("Bookmarked {path}"),
+                };
+                let name = location.file_name().unwrap_or("/").to_owned();
+                bookmarks.push(Bookmark { name, path, targets: target.into_iter().collect() });
+                message
+            }
+        };
+        if self.save_settings() {
+            self.set_status(message);
+        }
+    }
+
+    /// Opens a bookmark in the active panel, and its target in the other
+    /// one: directly when there is one, with a quick picker when there are
+    /// several (Esc leaves the other panel as it is).
+    fn open_bookmark(&mut self, bookmark: Bookmark) {
+        let here = self.workspace.active().location().clone();
+        match resolve_location(&bookmark.path, &here) {
+            Ok(path) => {
+                let request = self.workspace.active_mut().navigate(path);
+                self.load(request);
+            }
+            Err(e) => return self.set_error(e),
+        }
+        match bookmark.targets.as_slice() {
+            [] => {}
+            [target] => self.open_in_other(target),
+            targets => {
+                let title = format!("Other panel for {}", bookmark.name);
+                let items = targets.to_vec();
+                let mut dialog = ChooseDialog::new(
+                    &title,
+                    items,
+                    ChoosePurpose::BookmarkTarget(targets.to_vec()),
+                );
+                dialog.footer = "Enter: open in the other panel   Esc: leave it".into();
+                self.overlay = Some(Overlay::Choose(dialog));
+            }
+        }
+    }
+
+    /// Opens `location` (relative to the other panel's folder) there.
+    fn open_in_other(&mut self, location: &str) {
+        let here = self.workspace.inactive().location().clone();
+        match resolve_location(location, &here) {
+            Ok(path) => {
+                let request = self.workspace.inactive_mut().navigate(path);
+                self.load(request);
+            }
+            Err(e) => self.set_error(e),
+        }
+    }
+
     /// Runs a key-map action (from a key or the menu).
     pub fn perform(&mut self, action: Action) {
         let targets = self.targets();
@@ -901,24 +986,13 @@ impl App {
                     let key = self.context.keymap.shortcut_text(Action::AddBookmark);
                     return self.set_status(format!("No bookmarks yet ({key} adds this folder)"));
                 }
-                let items =
-                    bookmarks.iter().map(|b| format!("{:<20} {}", b.name, b.path)).collect();
+                let items = bookmarks.iter().map(bookmark_row).collect();
                 let mut dialog = ChooseDialog::new("Bookmarks", items, ChoosePurpose::Bookmarks);
                 dialog.footer = "Enter: open   Delete: remove".into();
                 self.overlay = Some(Overlay::Choose(dialog));
             }
-            Action::AddBookmark => {
-                let location = self.workspace.active().location().clone();
-                let path = display_location(&location);
-                let name = location.file_name().unwrap_or("/").to_owned();
-                if self.context.config.bookmarks.iter().any(|b| b.path == path) {
-                    return self.set_status(format!("{path} is already bookmarked"));
-                }
-                self.context.config.bookmarks.push(Bookmark { name, path: path.clone() });
-                if self.save_settings() {
-                    self.set_status(format!("Bookmarked {path}"));
-                }
-            }
+            Action::AddBookmark => self.add_bookmark(false),
+            Action::AddBookmarkTarget => self.add_bookmark(true),
             Action::NewTab => {
                 let side = self.workspace.active_side();
                 let request = self.workspace.side_mut(side).new_tab();
@@ -1275,14 +1349,13 @@ impl App {
         let cursor = dialog.cursor;
         match dialog.purpose {
             ChoosePurpose::Bookmarks => {
-                if let Some(bookmark) = self.context.config.bookmarks.get(cursor) {
-                    match resolve_location(&bookmark.path.clone(), &here) {
-                        Ok(path) => {
-                            let request = self.workspace.active_mut().navigate(path);
-                            self.load(request);
-                        }
-                        Err(e) => self.set_error(e),
-                    }
+                if let Some(bookmark) = self.context.config.bookmarks.get(cursor).cloned() {
+                    self.open_bookmark(bookmark);
+                }
+            }
+            ChoosePurpose::BookmarkTarget(targets) => {
+                if let Some(target) = targets.get(cursor) {
+                    self.open_in_other(target);
                 }
             }
             ChoosePurpose::Drives(drives) => match drives.get(cursor) {

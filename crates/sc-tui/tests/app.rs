@@ -641,6 +641,82 @@ async fn bookmarks_are_saved_and_opened() {
 }
 
 #[tokio::test]
+async fn bookmark_with_one_target_opens_both_panels() {
+    let mut h = Harness::new().await;
+    // The target is inside an archive: any VFS source works, remote ones too.
+    h.focus("docs");
+    h.key("Alt+F5");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Tab");
+    h.focus("docs.zip");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Tab");
+    h.key("Ctrl+Alt+D");
+    assert!(h.status().starts_with("Bookmarked"), "{}", h.status());
+    let targets = &h.app.context().config.bookmarks[0].targets;
+    assert!(targets.len() == 1 && targets[0].starts_with("zip://"), "{targets:?}");
+
+    // Move both panels away, then open the bookmark.
+    h.focus("docs");
+    h.key("Enter");
+    h.key("Tab");
+    h.focus("..");
+    h.key("Enter");
+    h.key("Tab");
+    h.settle().await;
+    h.key("Ctrl+D");
+    assert!(h.screen().contains("→ zip://"), "the list shows the target");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.overlay().is_none(), "one target needs no question");
+    assert!(h.names(SideId::Left).contains(&"a.txt".to_owned()));
+    assert_eq!(h.names(SideId::Right), ["..", "docs"], "other panel inside the archive");
+}
+
+#[tokio::test]
+async fn bookmark_with_several_targets_asks_which() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+Alt+D"); // target: right/
+    h.key("Alt+O"); // the other panel shows left/ too
+    h.settle().await;
+    h.key("Ctrl+Alt+D"); // second target: left/
+    assert!(h.status().contains("2 targets"), "{}", h.status());
+    h.key("Ctrl+Alt+D");
+    assert!(h.status().contains("already has target"), "{}", h.status());
+    assert_eq!(h.app.context().config.bookmarks.len(), 1);
+
+    h.key("Ctrl+D");
+    assert!(h.screen().contains("→ 2 targets"));
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("target picker") };
+    assert_eq!(dialog.items.len(), 2);
+    assert!(dialog.items[0].ends_with("right"), "{:?}", dialog.items);
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Right), [".."], "first target: the empty right/");
+
+    // Esc in the picker leaves the other panel where it is.
+    h.key("Ctrl+D");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Esc");
+    h.settle().await;
+    assert!(h.app.overlay().is_none());
+    assert_eq!(h.names(SideId::Right), [".."]);
+
+    h.key("Ctrl+D");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Down");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.names(SideId::Right).contains(&"a.txt".to_owned()), "second target: left/");
+}
+
+#[tokio::test]
 async fn tabs_open_and_close() {
     let mut h = Harness::new().await;
     h.key("Ctrl+T");

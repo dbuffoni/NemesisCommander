@@ -134,7 +134,7 @@ mod tests {
     use crate::{Bookmark, Connection};
 
     fn bookmark(name: &str, path: &str) -> Bookmark {
-        Bookmark { name: name.into(), path: path.into() }
+        Bookmark { name: name.into(), path: path.into(), targets: vec![] }
     }
 
     #[test]
