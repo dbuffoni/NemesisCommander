@@ -83,6 +83,32 @@ impl ProviderRegistry {
         self.lock().remove(&path.provider_key());
     }
 
+    /// Drops the opened archives that nothing uses any more, to free their
+    /// index (and the downloaded copy of a remote archive). An archive is
+    /// kept while a path of `in_use` is inside it, or while someone else
+    /// still holds its provider (a running copy, for example).
+    pub fn release_archives(&self, in_use: &[VfsPath]) {
+        let mut keep = std::collections::HashSet::new();
+        for path in in_use {
+            let mut next = Some(path);
+            while let Some(path) = next {
+                keep.insert(path.provider_key());
+                next = path.container();
+            }
+        }
+        self.lock().retain(|key, provider| {
+            let scheme = key.split_once("://").map_or("", |(scheme, _)| scheme);
+            !crate::ARCHIVE_SCHEMES.contains(&scheme)
+                || keep.contains(key)
+                || Arc::strong_count(provider) > 1
+        });
+    }
+
+    /// How many providers are open now.
+    pub fn open_count(&self) -> usize {
+        self.lock().len()
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, Arc<dyn Provider>>> {
         // A poisoned lock only means another thread panicked while holding
         // it; the map itself is still consistent.
@@ -148,6 +174,30 @@ mod tests {
         registry.forget(&a);
         registry.provider_for(&a).await.unwrap();
         assert_eq!(count.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn unused_archives_are_released() {
+        let registry = ProviderRegistry::new();
+        let inside = VfsPath::parse("zip:///a.zip!/dir").unwrap();
+        let nested = VfsPath::parse("zip://zip:///b.zip!/c.zip!/").unwrap();
+        let other = VfsPath::parse("zip:///d.zip!/").unwrap();
+        let held = VfsPath::parse("zip:///e.zip!/").unwrap();
+        let local = VfsPath::parse("mem://host/").unwrap();
+        for path in [&inside, &nested, nested.container().unwrap(), &other, &held, &local] {
+            registry.insert(path, Arc::new(Dummy));
+        }
+        let holder = registry.lock().get(&held.provider_key()).cloned();
+        assert_eq!(registry.open_count(), 6);
+
+        registry.release_archives(&[inside, nested]);
+        // d.zip goes; a.zip and both of b.zip's stay (in use), e.zip is
+        // still held, other schemes are never released here.
+        assert_eq!(registry.open_count(), 5);
+        assert!(!registry.lock().contains_key(&other.provider_key()));
+        drop(holder);
+        registry.release_archives(&[]);
+        assert_eq!(registry.open_count(), 1);
     }
 
     #[tokio::test]
