@@ -135,7 +135,12 @@ impl VfsPath {
     }
 
     fn local_from_str(input: &str) -> Option<Self> {
-        let unified = input.replace('\\', "/");
+        let mut unified = input.replace('\\', "/");
+        // Windows' "verbatim" form of a drive path (`\\?\C:\dir`, which
+        // canonicalizing returns) is the plain drive path.
+        if let Some(rest) = unified.strip_prefix("//?/").filter(|rest| is_windows_drive(rest)) {
+            unified = rest.to_owned();
+        }
         let path = if is_windows_drive(&unified) {
             format!("/{unified}")
         } else if unified.starts_with('/') {
@@ -353,6 +358,12 @@ mod tests {
         assert_eq!(path.scheme(), "file");
         assert_eq!(path.path(), "/home/you/docs");
         assert_eq!(path.to_string(), "file:///home/you/docs");
+    }
+
+    #[test]
+    fn verbatim_windows_paths_are_plain_drive_paths() {
+        let path = VfsPath::local_from_str(r"\\?\C:\Users\me").unwrap();
+        assert_eq!(path.path(), "/C:/Users/me");
     }
 
     #[test]
