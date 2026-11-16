@@ -32,9 +32,13 @@ serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tokio-util.workspace = true
+tempfile = { workspace = true, optional = true }
+# `sc ai`: the same HTTP client and TLS as WebDAV and S3 (already in `sc`).
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2"], optional = true }
+rustls = { version = "0.23.4", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
 
 [features]
-default = ["desktop", "remote", "tui", "scripting"]
+default = ["desktop", "remote", "tui", "scripting", "ai"]
 # Desktop build: recycle bin support.
 desktop = ["sc-app/desktop"]
 # SFTP, WebDAV, S3 and SMB locations. Agent-only server builds leave
@@ -45,7 +49,10 @@ remote = ["sc-app/remote"]
 tui = ["dep:sc-tui"]
 # `sc run`: TypeScript scripts on V8 (adds 30-40 MB). Agent-only server
 # builds leave it out.
-scripting = ["dep:sc-script", "sc-tui?/scripting"]
+scripting = ["dep:sc-script", "dep:tempfile", "sc-tui?/scripting"]
+# `sc ai`: scripts written by Claude with the user's API key, tested with
+# `sc test`. Agent-only server builds leave it out.
+ai = ["scripting", "dep:reqwest", "dep:rustls"]
 rar = ["sc-app/rar"]
 
 [dev-dependencies]

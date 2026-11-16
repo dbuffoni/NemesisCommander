@@ -88,6 +88,8 @@ pub enum InputPurpose {
     SendSettings(Box<SettingsScreen>),
     /// Fetch the settings of the typed machine (from the settings screen).
     FetchSettings(Box<SettingsScreen>),
+    /// Have Claude write a script that does what was typed.
+    AiScript,
 }
 
 impl InputPurpose {

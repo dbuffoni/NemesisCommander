@@ -95,3 +95,68 @@ manifest requests; an update asking for more asks again.
 
 In a plugin, `sc.context` holds the command id, both panels' folders and
 the selection.
+
+## Testing, and writing with an AI assistant
+
+`sc test` tries a script or a plugin without touching your files. It makes
+a temporary folder with `panel/` (sample files, or a copy of
+`--fixture DIR`) and `other/` (empty), runs the script there, or each
+plugin command, and reports:
+
+- checks: the manifest, the syntax and, when the TypeScript compiler
+  (`tsc`) is installed, the types against `sc.d.ts`;
+- for each run: whether it passed, the error, what it printed, and the
+  files it created, removed and changed.
+
+```sh
+sc test tidy.ts                                  # sc.args = [the test panel]
+sc test tidy.ts --fixture ./samples -- '$PANEL' --dry-run
+sc test examples/plugins/sort-by-type --select photo.JPG --json
+```
+
+A script may change anything in the test folder. A plugin gets what its
+manifest asks for `$PANEL`, `$OTHER` and `$SELECTION` (filled in with the
+test folders and `--select`, default all of `panel/`); other locations are
+not granted and are listed as notes. `--json` prints the report for
+programs, `--keep` keeps the folder, and the exit status is 0 only when
+everything passed.
+
+This is what lets an AI coding assistant (Claude Code, for example) write
+scripts and plugins on its own: give it the API and the guide,
+
+```sh
+sc run --types > sc.d.ts
+sc run --guide > AGENTS.md     # or CLAUDE.md
+```
+
+ask for the script, and it writes it, runs `sc test --json`, reads what
+went wrong or what changed, and fixes it until it passes (ADR 0021).
+
+## `sc ai`: scripts written by Claude
+
+SuperCommander can also do this loop itself, with your Anthropic API key:
+
+```sh
+echo "$KEY" | sc ai key        # once; or set ANTHROPIC_API_KEY
+sc ai new "move files older than 30 days into a folder named old"
+sc ai new --plugin "count the lines of the selected text files"
+```
+
+`sc ai new` sends the description, the guide and the API to Claude
+(`claude-opus-5-5` unless `--model` says otherwise), tests the answer with
+`sc test`, and sends the report back when it fails, up to `--tries` times
+(default 3). Each try is one API request, billed to your key.
+
+- A script that passes is saved in your scripts folder, so it is a command
+  of the `Scripts` category (F9). A plugin is installed; like any plugin it
+  asks for its permissions the first time it runs.
+- `--out PATH` saves it elsewhere instead, `--fixture DIR` tests it on your
+  own sample files, `--force` replaces one with the same name.
+- If no try passes, nothing is saved and the drafts are kept in a
+  temporary folder, named in the error.
+- In the terminal UI and the window: F9, **Tools/Write a script with AI…**
+  asks what the script should do and runs `sc ai new` with it.
+
+A passing test means the script ran without errors on sample files and the
+report shows what it changed; read the script before running it on files
+that matter. Server builds leave `sc ai` out (ADR 0022).

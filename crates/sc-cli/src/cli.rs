@@ -60,6 +60,12 @@ pub enum Command {
     Run(RunArgs),
     /// Install, list, allow and run TypeScript plugins.
     Plugin(PluginArgs),
+    /// Try a script or a plugin on sample files in a throwaway folder and
+    /// report what it did (for authors and AI assistants).
+    Test(TestArgs),
+    /// Have Claude write a script or a plugin, tested with `sc test` until
+    /// it passes.
+    Ai(AiArgs),
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -438,7 +444,7 @@ pub enum TlsAction {
     or everything with --allow-all.\n\nExample:\n  sc run tidy.ts --allow-write ~/Downloads -- --dry-run")]
 pub struct RunArgs {
     /// The script: a .ts or .js file.
-    #[arg(required_unless_present = "types")]
+    #[arg(required_unless_present_any = ["types", "guide"])]
     pub script: Option<String>,
     /// Arguments for the script, as `sc.args`.
     #[arg(last = true)]
@@ -462,6 +468,10 @@ pub struct RunArgs {
     /// and exit.
     #[arg(long)]
     pub types: bool,
+    /// Print the guide for writing and testing scripts and plugins (for
+    /// people and AI assistants, e.g. saved as AGENTS.md) and exit.
+    #[arg(long, conflicts_with = "types")]
+    pub guide: bool,
     /// Start the script as if from the panels: the active panel's folder,
     /// for `sc.context` (the desktop window runs panel scripts this way).
     #[arg(long, value_name = "LOCATION")]
@@ -472,6 +482,84 @@ pub struct RunArgs {
     /// With --panel: a selected entry (repeatable).
     #[arg(long, value_name = "LOCATION", requires = "panel")]
     pub selected: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+#[command(after_help = "The script or plugin runs in a new temporary folder holding sample \
+    files (or a copy of --fixture): `panel/`, the active panel, and `other/`, the other \
+    panel. It may change only those. The report lists the checks (manifest, syntax, \
+    types with `tsc` if installed), what each run printed, and the files it created, \
+    removed and changed. Exit status 0 means every check and run passed.\n\nExamples:\n  \
+    sc test tidy.ts\n  sc test tidy.ts --fixture ./samples --json -- $PANEL --dry-run\n  \
+    sc test ./my-plugin --command sort --select photo.JPG")]
+pub struct TestArgs {
+    /// A script (.ts or .js) or a plugin folder (with plugin.json).
+    pub target: String,
+    /// Arguments for a script, as `sc.args`; `$PANEL` and `$OTHER` stand
+    /// for the test folders. Default: `$PANEL`.
+    #[arg(last = true)]
+    pub args: Vec<String>,
+    /// Copy this folder into the test panel instead of the sample files.
+    #[arg(long, value_name = "DIR")]
+    pub fixture: Option<String>,
+    /// For a plugin: test only this command (repeatable). Default: all.
+    #[arg(long, value_name = "ID")]
+    pub command: Vec<String>,
+    /// Select only this entry of the test panel (repeatable). Default:
+    /// every entry.
+    #[arg(long, value_name = "NAME")]
+    pub select: Vec<String>,
+    /// Stop a script after this many seconds (plugins use their manifest).
+    #[arg(long, value_name = "SECONDS", default_value_t = 30.0)]
+    pub timeout: f64,
+    /// Print the report as JSON.
+    #[arg(long)]
+    pub json: bool,
+    /// Keep the test folder and say where it is.
+    #[arg(long)]
+    pub keep: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct AiArgs {
+    #[command(subcommand)]
+    pub action: AiAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AiAction {
+    /// Write a script (or a plugin) from a description: Claude writes it,
+    /// `sc test` tries it on sample files, and Claude fixes what failed.
+    /// A script that passes is saved among your scripts (F9, Scripts).
+    #[command(after_help = "Needs an Anthropic API key: ANTHROPIC_API_KEY, or one saved \
+        with `sc ai key`. Each try is one request to the Claude API, billed to that key.\n\n\
+        Examples:\n  sc ai new \"move files older than 30 days into a folder named old\"\n  \
+        sc ai new --plugin \"count the lines of the selected text files\"")]
+    New {
+        /// What the script should do, in any language.
+        #[arg(required = true, num_args = 1..)]
+        description: Vec<String>,
+        /// Write a plugin (installed when it passes) instead of a script.
+        #[arg(long)]
+        plugin: bool,
+        /// Save here instead: a file for a script, a folder for a plugin.
+        #[arg(long, value_name = "PATH")]
+        out: Option<String>,
+        /// Test on a copy of this folder instead of the sample files.
+        #[arg(long, value_name = "DIR")]
+        fixture: Option<String>,
+        /// How many times Claude may try.
+        #[arg(long, value_name = "N", default_value_t = 3)]
+        tries: u32,
+        /// The Claude model.
+        #[arg(long, default_value = "claude-opus-5-5")]
+        model: String,
+        /// Replace a script or plugin with the same name.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Save an Anthropic API key (read from standard input) for `sc ai`.
+    Key,
 }
 
 #[derive(Debug, Args)]

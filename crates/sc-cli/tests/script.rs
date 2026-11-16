@@ -150,3 +150,119 @@ fn the_examples_work() {
     assert!(dir.path().join("work/bin/big.bin").exists());
     assert!(dir.path().join("work/deep/small.txt").exists());
 }
+
+/// `sc test` runs a script in a throwaway folder and reports what changed,
+/// without touching the files next to it.
+#[test]
+fn test_reports_what_a_script_did() {
+    let dir = TempDir::new().unwrap();
+    let script = r#"
+        const [folder] = sc.args;
+        for (const entry of await sc.list(folder)) {
+          if (entry.kind === "file" && entry.size === 0) {
+            await sc.remove(entry.path);
+            sc.print(`removed ${entry.name}`);
+          }
+        }
+        await sc.writeText(sc.join(folder, "notes.txt"), "rewritten");
+    "#;
+    fs::write(dir.path().join("tidy.ts"), script).unwrap();
+    let output = sc(&dir)
+        .env("SC_TSC", "no-such-tsc")
+        .args(["test", "tidy.ts", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(report["passed"], true, "{report}");
+    assert_eq!(report["checks"][1]["name"], "types");
+    assert_eq!(report["checks"][1]["status"], "skipped");
+    let run = &report["runs"][0];
+    assert_eq!(run["output"], serde_json::json!(["removed empty.log"]));
+    assert_eq!(run["removed"], serde_json::json!(["panel/empty.log"]));
+    assert_eq!(run["changed"], serde_json::json!(["panel/notes.txt"]));
+
+    // Errors and syntax errors fail the test, with the message.
+    fs::write(dir.path().join("bad.ts"), "await sc.remove('/etc/passwd');").unwrap();
+    sc(&dir)
+        .env("SC_TSC", "no-such-tsc")
+        .args(["test", "bad.ts"])
+        .assert()
+        .code(1)
+        .stdout(contains("PermissionDenied").or(contains("no permission")).and(contains("FAILED")));
+    fs::write(dir.path().join("broken.ts"), "const = 1;").unwrap();
+    sc(&dir).args(["test", "broken.ts"]).assert().code(1).stdout(contains("syntax  "));
+}
+
+/// Plugins are tested command by command, with their permissions filled
+/// in with the test folders.
+#[test]
+fn test_runs_plugin_commands() {
+    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let dir = TempDir::new().unwrap();
+    sc(&dir)
+        .env("SC_TSC", "no-such-tsc")
+        .arg("test")
+        .arg(examples.join("plugins/sort-by-type"))
+        .args(["--select", "photo.JPG", "--select", "notes.txt"])
+        .assert()
+        .success()
+        .stdout(
+            contains("run sort  passed")
+                .and(contains("| moved 2 files"))
+                .and(contains("created panel/jpg/photo.JPG"))
+                .and(contains("removed panel/notes.txt")),
+        );
+    // Nothing was installed.
+    assert!(!dir.path().join("data/plugins").exists());
+
+    // A plugin asking for too little fails, and says why.
+    let source = dir.path().join("reader");
+    fs::create_dir_all(&source).unwrap();
+    fs::write(
+        source.join("plugin.json"),
+        r#"{ "name": "reader", "version": "1.0.0",
+             "commands": [{ "id": "touch", "title": "Touch" }],
+             "permissions": { "read": ["$PANEL"], "write": ["/somewhere"] } }"#,
+    )
+    .unwrap();
+    fs::write(source.join("main.ts"), "await sc.writeText(sc.join(sc.context!.panel!, 'x'), '');")
+        .unwrap();
+    sc(&dir)
+        .args(["test", "reader", "--json"])
+        .env("SC_TSC", "no-such-tsc")
+        .assert()
+        .code(1)
+        .stdout(contains("/somewhere is not granted").and(contains("--allow-write")));
+    sc(&dir)
+        .args(["test", "reader", "--command", "nope"])
+        .assert()
+        .code(1)
+        .stdout(contains("no command"));
+}
+
+/// With the TypeScript compiler installed, type errors fail the test.
+#[test]
+fn test_checks_types_with_tsc() {
+    if std::process::Command::new("tsc").arg("--version").output().is_err() {
+        eprintln!("skipped: tsc is not installed");
+        return;
+    }
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("good.ts"),
+        "const n: number = (await sc.list('.')).length; sc.print(n);",
+    )
+    .unwrap();
+    sc(&dir).args(["test", "good.ts"]).assert().success().stdout(contains("types     passed"));
+    fs::write(dir.path().join("typo.ts"), "await sc.lst('.');").unwrap();
+    sc(&dir).args(["test", "typo.ts"]).assert().code(1).stdout(contains("lst"));
+}
+
+#[test]
+fn the_guide_is_printed() {
+    let dir = TempDir::new().unwrap();
+    sc(&dir).args(["run", "--guide"]).assert().success().stdout(contains("sc test"));
+}

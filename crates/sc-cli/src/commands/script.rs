@@ -19,6 +19,10 @@ pub async fn run(context: &AppContext, args: RunArgs) -> CmdResult {
         print!("{}", sc_script::TYPES);
         return Ok(ExitCode::SUCCESS);
     }
+    if args.guide {
+        print!("{}", sc_script::GUIDE);
+        return Ok(ExitCode::SUCCESS);
+    }
     let name = args.script.expect("clap requires a script unless --types");
     let source = std::fs::read_to_string(&name).map_err(|e| format!("{name}: {e}"))?;
 

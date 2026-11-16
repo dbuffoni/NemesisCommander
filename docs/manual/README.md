@@ -355,6 +355,17 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   with the `sc` program installed next to it (the AppImage has both), so
   they behave exactly as from the command line.
 
+- `sc test SCRIPT_OR_PLUGIN` tries it on sample files in a throwaway
+  folder and lists what it printed and which files it created, removed and
+  changed, so you (or an AI assistant writing it for you) can check it
+  before running it on real files. `sc run --guide` prints a guide for
+  AI assistants.
+- **Tools/Write a script with AI…** (F9) asks what the script should do;
+  Claude writes it with your Anthropic API key, `sc test` checks it, and
+  Claude fixes it until it passes. It then appears under **Scripts**. From
+  the command line: `sc ai new "description"` (key: `sc ai key` or
+  `ANTHROPIC_API_KEY`).
+
 See [docs/scripting.md](../scripting.md) for the API and the examples in
 `examples/`.
 

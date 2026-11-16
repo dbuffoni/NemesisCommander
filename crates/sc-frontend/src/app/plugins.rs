@@ -21,7 +21,9 @@ use sc_config::{Action, Category};
 
 use super::{App, AppEvent};
 use crate::commands::{CommandEntry, SCRIPTS, Target, plugin_category};
-use crate::dialogs::{ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, Overlay};
+use crate::dialogs::{
+    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay,
+};
 
 /// One row of the Alt+X list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -240,6 +242,47 @@ impl App {
     }
 }
 
+impl App {
+    /// Tools, "Write a script with AI…": asks what the script should do.
+    pub(super) fn ask_ai_script(&mut self) {
+        if !cfg!(feature = "scripting") {
+            self.set_error("Plugins and scripts are not part of this build");
+            return;
+        }
+        self.ask(
+            "Write a script with AI",
+            "What should the script do? (Claude writes and tests it)",
+            "",
+            InputPurpose::AiScript,
+        );
+    }
+
+    /// Runs `sc ai new` with the typed description; the new script is in
+    /// the command list (Scripts) when it passes its test.
+    pub(super) fn write_script_with_ai(&mut self, description: String) {
+        if description.trim().is_empty() {
+            return;
+        }
+        let paths = self.context.paths.clone();
+        self.set_status("Claude is writing and testing the script…");
+        self.spawn_task(async move {
+            let printed = Arc::new(Mutex::new(Vec::<String>::new()));
+            let sink = printed.clone();
+            let output: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |line| {
+                sink.lock().unwrap_or_else(|e| e.into_inner()).push(line.to_owned())
+            });
+            let args = vec!["ai".to_owned(), "new".to_owned(), description];
+            let result = run_sc(args, &paths, None, output).await;
+            let lines = printed.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            AppEvent::ScriptDone {
+                title: "Write a script with AI".into(),
+                lines,
+                error: result.err(),
+            }
+        });
+    }
+}
+
 /// A plugin's folder, name and commands (id, title, category).
 type PluginRow = (PathBuf, String, Vec<(String, String, Option<String>)>);
 
@@ -392,19 +435,34 @@ async fn run_choice(
             script.file_name().unwrap_or_default().to_string_lossy().into_owned()
         }
     };
-    let mut command = std::process::Command::new(sc_program());
+    let script = matches!(choice, PluginChoice::Script(_) | PluginChoice::UserScript(_));
+    let folder = if script { panel.to_local_path() } else { None };
+    let args = sc_arguments(&choice, &panel, &other, &selection);
+    let result = run_sc(args, paths, folder, output).await;
+    (title, result)
+}
+
+/// Runs the `sc` program with `args` (in `folder`, if given), with this
+/// program's settings folders: what it prints goes to `output`, what it
+/// reports on failure is the error.
+#[cfg(feature = "scripting")]
+async fn run_sc(
+    args: Vec<String>,
+    paths: &AppPaths,
+    folder: Option<PathBuf>,
+    output: Arc<dyn Fn(&str) + Send + Sync>,
+) -> Result<(), String> {
+    let program = sc_program();
+    let mut command = std::process::Command::new(&program);
     command
-        .args(sc_arguments(&choice, &panel, &other, &selection))
+        .args(args)
         .env("SC_CONFIG_DIR", &paths.config_dir)
         .env("SC_DATA_DIR", &paths.data_dir)
         .stdin(std::process::Stdio::null());
-    let script = matches!(choice, PluginChoice::Script(_) | PluginChoice::UserScript(_));
-    if let (true, Some(dir)) = (script, panel.to_local_path()) {
-        command.current_dir(dir);
+    if let Some(folder) = folder {
+        command.current_dir(folder);
     }
-    let program = sc_program();
-    let ran = tokio::task::spawn_blocking(move || command.output()).await;
-    let result = match ran {
+    match tokio::task::spawn_blocking(move || command.output()).await {
         Ok(Ok(finished)) => {
             for line in String::from_utf8_lossy(&finished.stdout).lines() {
                 output(line);
@@ -413,31 +471,43 @@ async fn run_choice(
                 Ok(())
             } else {
                 let error = String::from_utf8_lossy(&finished.stderr);
-                let error = error.trim().trim_start_matches("sc: ").to_owned();
+                let error = error.trim().trim_start_matches("sc: ");
                 Err(if error.is_empty() {
                     format!("sc ended with {}", finished.status)
                 } else {
-                    error
+                    error.to_owned()
                 })
             }
         }
         Ok(Err(e)) => Err(format!("cannot start {}: {e}", program.display())),
         Err(e) => Err(e.to_string()),
-    };
-    (title, result)
+    }
 }
 
-/// The `sc` program: `SC_PROGRAM` if set, else the one next to this
-/// program, else the one on the `PATH`.
-#[cfg(all(feature = "scripting", not(feature = "script-engine")))]
+#[cfg(not(feature = "scripting"))]
+async fn run_sc(
+    _args: Vec<String>,
+    _paths: &AppPaths,
+    _folder: Option<PathBuf>,
+    _output: Arc<dyn Fn(&str) + Send + Sync>,
+) -> Result<(), String> {
+    Err("Plugins and scripts are not part of this build".into())
+}
+
+/// The `sc` program: `SC_PROGRAM` if set, else this program when it is
+/// `sc` (the terminal UI), else the one next to it, else the one on the
+/// `PATH`.
+#[cfg(feature = "scripting")]
 fn sc_program() -> PathBuf {
     if let Some(program) = std::env::var_os("SC_PROGRAM") {
         return program.into();
     }
     let name = format!("sc{}", std::env::consts::EXE_SUFFIX);
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join(&name)))
+    let exe = std::env::current_exe().ok();
+    if let Some(exe) = exe.as_ref().filter(|exe| exe.file_name() == Some(name.as_ref())) {
+        return exe.clone();
+    }
+    exe.and_then(|exe| exe.parent().map(|dir| dir.join(&name)))
         .filter(|sibling| sibling.is_file())
         .unwrap_or_else(|| name.into())
 }

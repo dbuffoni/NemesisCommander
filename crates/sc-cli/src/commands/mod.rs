@@ -1,10 +1,12 @@
 //! Implementations of the subcommands.
 
+mod ai;
 mod archive;
 mod files;
 mod find;
 mod rename;
 mod script;
+mod script_test;
 mod serve;
 mod settings;
 mod transfer;
@@ -47,6 +49,8 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Tls(args) => serve::tls(&context, args),
         Command::Run(args) => script::run(&context, args).await,
         Command::Plugin(args) => script::plugin(&context, args).await,
+        Command::Test(args) => script_test::test(&context, args).await,
+        Command::Ai(args) => ai::ai(&context, args).await,
     }
 }
 
