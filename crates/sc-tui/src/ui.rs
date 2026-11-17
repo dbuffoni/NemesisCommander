@@ -124,8 +124,8 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         format!(
             " [{}] {}{} ",
             drive_label(&app.context().config, panel.location()),
-            display_location(panel.location()),
-            git.as_ref().map(|g| format!("  ⎇ {}", g.summary())).unwrap_or_default()
+            git.as_ref().map(|g| format!("⎇ {}  ", g.summary())).unwrap_or_default(),
+            display_location(panel.location())
         ),
         bold(),
     ));
