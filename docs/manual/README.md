@@ -84,7 +84,8 @@ shortcuts on the right.
 
 ![Finding a command](images/commands-find.png)
 
-In the window the menu bar has the same commands, one menu per category.
+In the window there is no menu bar: this list is the menu. Clicking **F9
+Commands** in the bar at the bottom opens it too.
 
 ## The panels
 
@@ -103,10 +104,35 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
 - **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`).
 - **Ctrl+U** swaps the panels, **Alt+O** opens this folder in the other one.
+  **Ctrl+←** and **Ctrl+→** open the folder under the cursor in the left or
+  right panel (on a file, this panel's folder). With "← goes up, → enters a
+  folder" on in the settings, **←** goes to the parent folder and **→** enters
+  the folder under the cursor.
 
 The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
 what F1–F10 do.
+
+
+### The mouse
+
+Everything works from the keyboard, and the mouse works too, in the window
+and in the terminal (if your terminal passes mouse events to programs):
+click a row to put the cursor there, double-click to open it, turn the wheel
+to scroll. **Drag a row onto the other panel** to copy it (or the selection,
+if the row is part of it): you are asked where to copy to, as with F5.
+In the window you can also drag files **to and from other programs**
+(local files only): drop them on a panel to copy them into its folder, or
+drag a row out to your desktop or another application.
+
+### Git marks
+
+Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:
+one commit to push, two to pull) and a mark before each name: **M** changed or
+staged, **?** untracked, **!** ignored. A folder carries the mark of what is
+inside it. It uses the `git` program of your system, only for local folders,
+and can be switched off in the settings ("Git marks and branch in
+repositories").
 
 ## Working with files
 
@@ -127,7 +153,9 @@ default; the destination can be edited before you confirm.
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
 | Alt+F5 / Alt+F9 | Pack into an archive / unpack one |
-| Alt+Enter | Properties, and change the permissions |
+| Alt+Enter | Properties, and change the dates and permissions |
+| F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
+| Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
 | Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
 
 | Copy | New folder | Delete |
@@ -269,7 +297,12 @@ size and age.
 ![Search](images/search.png)
 
 **Alt+C** compares: two files (one under the cursor in each panel) by
-content, or two folders, selecting the entries that differ.
+content, or two folders, selecting the entries that differ. Two different
+text files open side by side, with the file of the panel you are in on the
+left: `-` marks lines only on the left, `+` lines only on the right and `~`
+lines that differ (blue on the left, green on the right). **n** and **p** jump to the
+next and previous change, **Esc** closes. Files that are identical or not text just
+report that.
 
 ## Archives
 
@@ -297,7 +330,9 @@ Every command works the same on remote locations, written as URIs:
 
 ### One list for drives and connections
 
-**Alt+F1** (or **Ctrl+N**) opens the drive list: the drives of this computer
+**D**, **Alt+F1** or **Ctrl+N** open the drive list (in the window, clicking the
+drive name above a panel does it for that panel; the name shows where the
+panel is: `Local`, a drive letter, a connection's name): the drives of this computer
 and your saved connections together, grouped by a category column:
 
 - **Local**: your home folder, the root and the disks and network shares
@@ -484,8 +519,9 @@ sc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
 
 ## Settings
 
-**Ctrl+,** opens the settings screen. It lists every option, every
-command's shortcuts, and the commands to share settings. Changes are saved
+**Ctrl+,** opens the settings screen. It lists every option and the
+commands to share settings. Shortcuts are set in the command list (**F9**,
+then **Ctrl+K**). Changes are saved
 and applied at once; values that differ from the built-in ones are marked
 with a dot.
 
@@ -495,17 +531,15 @@ with a dot.
   text are typed after Enter (← → also step numbers). **r** puts the
   default back.
   - General: confirm before deleting, use the recycle bin, the editor.
-  - Panels: hidden files, sort order, human-readable sizes.
+  - Panels: hidden files, sort order, human-readable sizes, ← and → to move
+    between folders, git marks.
   - Transfers: jobs at the same time (1 runs them one after the other, in
     priority order), files at the same time in a job, the check after
     copying, what to do when a file exists, the bandwidth limit, retries.
   - Viewer: wrapping, tab width, when to open files as hex.
-- **Shortcuts**: Enter, then press the new key. **a** adds a key instead
-  of replacing them, **Delete** leaves the command without a key, **r**
-  gives back the built-in keys. A key that belonged to another command is
-  taken from it, and the status line says which.
-
-![Recording a shortcut](images/settings-shortcut.png)
+  - Window fonts: the font and its size for all text, and the fixed-width
+    font of the viewers and lists (empty or 0: the system's). Only the
+    window uses them; the terminal interface uses the terminal's font.
 
 The same settings serve the window and the terminal interface: a shortcut
 changed in one works in the other.
@@ -552,7 +586,7 @@ on the settings screen (Ctrl+,).
 | Shift+F8, Shift+Delete | Delete permanently |
 | Alt+F5 | Pack into archive |
 | Alt+F9 | Unpack archive |
-| Alt+Enter | Properties and permissions |
+| Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |
 
 | Select | |
@@ -570,7 +604,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| Alt+F1, Ctrl+N | Drives and connections (F4 on a connection: private key) |
+| D, Alt+F1, Ctrl+N | Drives and connections (F4 on a connection: private key) |
 | Ctrl+D | Bookmarks |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |
@@ -579,6 +613,7 @@ on the settings screen (Ctrl+,).
 | Ctrl+Shift+Tab, Ctrl+PageUp | Previous tab |
 | Alt+O | Open this folder in the other panel |
 | Ctrl+U | Swap panels |
+| Ctrl+←, Ctrl+→ | Open the folder under the cursor in the left / right panel |
 
 | View | |
 |---|---|

@@ -143,7 +143,7 @@ async fn both_panels_list_their_folders() {
     let screen = h.screen();
     assert!(screen.contains("docs/"));
     assert!(screen.contains("<DIR>"));
-    assert!(screen.contains("1Help"), "function key bar:\n{screen}");
+    assert!(screen.contains("F1Help"), "function key bar:\n{screen}");
 }
 
 #[tokio::test]
@@ -887,7 +887,7 @@ async fn permissions_can_be_changed() {
     h.focus("a.txt");
     h.key("Alt+Enter");
     h.key("Enter");
-    h.type_text("600");
+    h.type_text("mode=600");
     h.key("Enter");
     h.settle().await;
     let mode = fs::metadata(h.path("left/a.txt")).unwrap().permissions().mode();
@@ -1121,30 +1121,6 @@ async fn the_settings_screen_changes_options_and_saves_them() {
 }
 
 #[tokio::test]
-async fn the_settings_screen_records_shortcuts() {
-    let mut h = Harness::new().await;
-    h.focus("a.txt");
-    h.key("Ctrl+,");
-    settings_row(&mut h, "Refresh");
-    h.key("Enter");
-    assert!(h.screen().contains("Press the new shortcut"), "{}", h.screen());
-    h.key("F5");
-    assert!(h.status().contains("taken from Files/Copy"), "{}", h.status());
-    assert_eq!(h.app.context().config.keys["view.refresh"], ["F5"]);
-    h.key("Esc");
-    // F5 now refreshes; Copy has no key left.
-    h.key("F5");
-    assert!(h.app.overlay().is_none(), "F5 no longer opens the copy question");
-    h.key("Ctrl+,");
-    settings_row(&mut h, "Copy");
-    assert!(h.screen().contains("none"), "{}", h.screen());
-    h.press(KeyPress::char('r'));
-    h.key("Esc");
-    h.key("F5");
-    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "F5 copies again");
-}
-
-#[tokio::test]
 async fn settings_are_sent_to_another_folder_from_the_screen() {
     let mut h = Harness::new().await;
     h.key("Ctrl+,");
@@ -1334,4 +1310,227 @@ async fn sftp_connections_take_a_private_key() {
     assert!(dialog.prompt.contains("other"), "{}", dialog.prompt);
     h.key("Esc");
     assert_eq!(h.app.context().config.connections.len(), 1, "cancelled: not saved");
+}
+
+#[tokio::test]
+async fn ctrl_arrows_open_the_folder_under_the_cursor_in_a_panel() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Ctrl+Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Right), ["..", "readme.md"], "the folder opens on the right");
+    assert_eq!(h.app.workspace().active_side(), SideId::Left, "the focus stays");
+    // On a file the panel's own folder is shown.
+    h.focus("a.txt");
+    h.key("Ctrl+Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Right), h.names(SideId::Left));
+    h.focus("docs");
+    h.key("Ctrl+Left");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "readme.md"], "into the panel itself");
+}
+
+#[tokio::test]
+async fn left_and_right_move_between_folders_when_asked() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Right");
+    assert_eq!(h.names(SideId::Left)[1], "docs", "off by default: the arrows do nothing");
+    let mut h = Harness::with_settings(|c| c.panels.arrow_navigation = true).await;
+    h.focus("docs");
+    h.key("Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "readme.md"]);
+    h.key("Left");
+    h.settle().await;
+    assert_eq!(h.current(), "docs", "back up with the cursor where it was");
+    h.focus("a.txt");
+    h.key("Right");
+    h.settle().await;
+    assert_eq!(h.current(), "a.txt", "a file is not entered");
+}
+
+#[tokio::test]
+async fn d_and_a_click_on_the_drive_open_the_list_for_that_panel() {
+    let mut h = Harness::new().await;
+    h.key("d");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "d lists the drives");
+    h.key("Esc");
+    assert_eq!(h.app.workspace().active_side(), SideId::Left);
+    h.app.pick("drive", 1);
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    assert_eq!(h.app.workspace().active_side(), SideId::Right, "the clicked panel takes it");
+    let expected = if cfg!(windows) { ":]" } else { "[Local]" };
+    assert!(h.screen().contains(expected), "the panel title names the drive");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn dates_and_permissions_change_on_the_selection() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("F9");
+    h.type_text("dates and perm");
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "asks what to change");
+    for _ in 0..3 {
+        h.key("Backspace");
+    }
+    h.type_text("2001-02-03 04:05 mode=640");
+    h.key("Enter");
+    h.settle().await;
+    let meta = fs::metadata(h.path("left/a.txt")).unwrap();
+    assert_eq!(meta.permissions().mode() & 0o7777, 0o640);
+    let seconds = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    assert!((981_000_000..982_000_000).contains(&seconds), "February 2001: {seconds}");
+    // A wrong word changes nothing and says why.
+    h.key("F9");
+    h.type_text("dates and perm");
+    h.key("Enter");
+    for _ in 0..3 {
+        h.key("Backspace");
+    }
+    h.type_text("yesterday");
+    h.key("Enter");
+    assert!(h.status().contains("Not understood"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn ctrl_z_takes_back_renames_new_folders_and_moves() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+Z");
+    assert!(h.status().contains("Nothing to undo"), "{}", h.status());
+
+    h.key("F7");
+    h.type_text("fresh");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("left/fresh").is_dir());
+    h.key("Ctrl+Z");
+    h.settle().await;
+    assert!(!h.path("left/fresh").exists(), "the new folder is gone");
+
+    h.focus("a.txt");
+    h.key("F2");
+    for _ in 0..5 {
+        h.key("Backspace");
+    }
+    h.type_text("b.txt");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("left/b.txt").exists() && !h.path("left/a.txt").exists());
+    h.key("Ctrl+Z");
+    h.settle().await;
+    assert!(h.path("left/a.txt").exists() && !h.path("left/b.txt").exists(), "name back");
+
+    h.focus("a.txt");
+    h.key("F6");
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.path("right/a.txt").exists() && !h.path("left/a.txt").exists(), "moved");
+    h.key("Ctrl+Z");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.path("left/a.txt").exists() && !h.path("right/a.txt").exists(), "moved back");
+    h.key("Ctrl+Z");
+    assert!(h.status().contains("Nothing to undo"), "the move back is not undone again");
+}
+
+#[tokio::test]
+async fn panels_in_a_git_repository_show_marks_and_the_branch() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git").arg("-C").arg(root.join("left")).args(args).output()
+    };
+    fs::create_dir_all(root.join("left")).unwrap();
+    fs::write(root.join("left/tracked.txt"), "t").unwrap();
+    if !matches!(git(&["init", "-q", "-b", "trunk"]), Ok(o) if o.status.success()) {
+        return; // no git on this machine
+    }
+    let _ = git(&["add", "tracked.txt"]);
+    fs::write(root.join("left/loose.txt"), "l").unwrap();
+    fs::create_dir_all(root.join("right")).unwrap();
+
+    let paths = AppPaths::in_dir(root.join("settings"));
+    let context = AppContext::load_from(paths).unwrap();
+    let left = VfsPath::from_local(root.join("left")).unwrap();
+    let right = VfsPath::from_local(root.join("right")).unwrap();
+    let (app, events) = App::new(context, left, right).unwrap();
+    let mut h = Harness { app, events, dir };
+    h.settle().await;
+    h.settle_until(|app| app.git[0].is_some()).await;
+    let screen = h.screen();
+    assert!(screen.contains("⎇ trunk"), "branch in the title:\n{screen}");
+    let line = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap_or("").to_owned();
+    assert!(line("tracked.txt").contains("M tracked.txt"), "{screen}");
+    assert!(line("loose.txt").contains("? loose.txt"), "{screen}");
+    assert!(h.app.git[1].is_none(), "the other folder is not a repository");
+}
+
+#[tokio::test]
+async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("right/a.txt"), "alpha\nbeta\n").unwrap();
+    fs::write(h.path("left/a.txt"), "alpha\ngamma\ndelta\n").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("a.txt");
+    h.key("Tab");
+    h.focus("a.txt");
+    h.key("Alt+C");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(_)))).await;
+    let screen = h.screen();
+    assert!(screen.contains("a.txt ↔ a.txt"), "{screen}");
+    // The focused (right) panel's file is on the left of the comparison.
+    let changed = screen.lines().find(|l| l.contains("gamma")).unwrap();
+    assert!(changed.contains('~') && changed.contains("beta"), "paired on one row: {changed}");
+    let added = screen.lines().find(|l| l.contains("delta")).unwrap();
+    assert!(added.contains('+'), "only on the right: {added}");
+    assert!(screen.contains("next/previous change"), "{screen}");
+    h.key("n");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn the_mouse_clicks_scrolls_and_drags_between_panels() {
+    use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::layout::Rect;
+    use sc_tui::Pointer;
+    let mut h = Harness::new().await;
+    let screen = Rect::new(0, 0, 80, 24);
+    let event = |kind, column, row| MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE };
+    let mut pointer = Pointer::default();
+    // The panels have been drawn once, so the scroll offsets are known.
+    h.screen();
+
+    // Rows of the left panel: .., docs, a.txt, notes.txt. A click on the
+    // fourth row (cells start two lines below the top) moves the cursor.
+    pointer.handle(&mut h.app, event(MouseEventKind::Down(MouseButton::Left), 3, 5), screen);
+    assert_eq!(h.current(), "notes.txt");
+    pointer.handle(&mut h.app, event(MouseEventKind::Up(MouseButton::Left), 3, 5), screen);
+    pointer.handle(&mut h.app, event(MouseEventKind::ScrollUp, 3, 5), screen);
+    assert_eq!(h.current(), "..", "the wheel moves three rows, up to the first");
+
+    // A double click on a folder opens it.
+    for _ in 0..2 {
+        pointer.handle(&mut h.app, event(MouseEventKind::Down(MouseButton::Left), 3, 3), screen);
+        pointer.handle(&mut h.app, event(MouseEventKind::Up(MouseButton::Left), 3, 3), screen);
+    }
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "readme.md"]);
+    // Back up with the keyboard, then drag a.txt over to the right panel.
+    h.key("Backspace");
+    h.settle().await;
+    h.screen();
+    pointer.handle(&mut h.app, event(MouseEventKind::Down(MouseButton::Left), 3, 4), screen);
+    assert_eq!(h.current(), "a.txt");
+    pointer.handle(&mut h.app, event(MouseEventKind::Up(MouseButton::Left), 60, 4), screen);
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("copy question") };
+    assert!(dialog.field.text().ends_with("right"), "{}", dialog.field.text());
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.path("right/a.txt").exists());
 }

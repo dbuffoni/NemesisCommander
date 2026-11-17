@@ -11,16 +11,18 @@
 //! * `terminal`: terminal key events to [`KeyPress`]es.
 //! * [`run`]: the main loop, and handing the terminal to an editor.
 
+mod mouse;
 mod terminal;
 mod ui;
 
 use std::io;
 
-use crossterm::event::{Event, EventStream};
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream};
 use futures::StreamExt;
 use sc_app::AppContext;
 use sc_vfs::VfsPath;
 
+pub use mouse::{Pointer, hit};
 pub use sc_frontend::{
     App, AppEvent, ChoosePurpose, ConfirmPurpose, External, InputPurpose, KeyPress, Overlay,
     Status, TextField, display_location, resolve_location,
@@ -51,6 +53,8 @@ pub async fn run(
     // `init` switches to the alternate screen in raw mode and restores the
     // terminal if the program panics.
     let mut terminal = ratatui::init();
+    let _ = crossterm::execute!(io::stdout(), EnableMouseCapture);
+    let mut pointer = Pointer::default();
     let mut keys = EventStream::new();
     let result = loop {
         if let Err(e) = terminal.draw(|frame| draw(frame, &mut app)) {
@@ -66,6 +70,10 @@ pub async fn run(
                         app.handle_key(press);
                     }
                 }
+                Some(Ok(Event::Mouse(event))) => {
+                    let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
+                    pointer.handle(&mut app, event, ratatui::layout::Rect::new(0, 0, width, height));
+                }
                 Some(Ok(_)) => {} // resize and others: just redraw
                 Some(Err(e)) => break Err(e),
                 None => break Ok(()),
@@ -77,15 +85,18 @@ pub async fn run(
             app.handle_event(event);
         }
         if let Some(external) = app.take_external() {
+            let _ = crossterm::execute!(io::stdout(), DisableMouseCapture);
             ratatui::restore();
             drop(keys);
             let status = run_external(&external);
             terminal = ratatui::init();
+            let _ = crossterm::execute!(io::stdout(), EnableMouseCapture);
             keys = EventStream::new();
             terminal.clear()?;
             app.after_external(&external, status);
         }
     };
+    let _ = crossterm::execute!(io::stdout(), DisableMouseCapture);
     ratatui::restore();
     result
 }

@@ -105,6 +105,8 @@ actions! {
     Pack          = "files.pack",           Files, true,  "Pack into archive…",       ["Alt+F5"];
     Unpack        = "files.unpack",         Files, false, "Unpack archive…",          ["Alt+F9"];
     Properties    = "files.properties",     Files, false, "Properties and permissions", ["Alt+Enter"];
+    Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", ["Ctrl+Z"];
+    Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", [];
     Checksum      = "files.checksum",       Files, false, "Checksum",                 ["Ctrl+K"];
     // Select
     ToggleSelect  = "select.toggle",        Select, true, "Select / unselect",        ["Insert", "Space"];
@@ -119,7 +121,7 @@ actions! {
     GoTo          = "nav.goto",             Navigate, true,  "Go to location…",       ["Ctrl+L"];
     Back          = "nav.back",             Navigate, false, "Back",                  ["Alt+Left"];
     Forward       = "nav.forward",          Navigate, false, "Forward",               ["Alt+Right"];
-    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N"];
+    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N", "d"];
     Bookmarks     = "nav.bookmarks",        Navigate, true,  "Bookmarks…",            ["Ctrl+D"];
     AddBookmark   = "nav.add-bookmark",     Navigate, false, "Bookmark this folder",  ["Ctrl+Shift+D"];
     AddBookmarkTarget = "nav.add-bookmark-target", Navigate, false, "Bookmark this folder with the other panel's", ["Ctrl+Alt+D"];
@@ -128,6 +130,8 @@ actions! {
     NextTab       = "nav.next-tab",         Navigate, false, "Next tab",              ["Ctrl+Tab", "Ctrl+PageDown"];
     PrevTab       = "nav.prev-tab",         Navigate, false, "Previous tab",          ["Ctrl+Shift+Tab", "Ctrl+PageUp"];
     SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Alt+O"];
+    OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", ["Ctrl+Left"];
+    OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", ["Ctrl+Right"];
     SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+U"];
     // View
     Refresh       = "view.refresh",         View, false, "Refresh",                   ["Ctrl+R"];

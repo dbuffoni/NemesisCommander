@@ -15,6 +15,7 @@
 //! transfer engine (`sc-transfer`) can add queuing, retries and journaling on
 //! top of exactly the same behavior.
 
+pub mod attributes;
 pub mod conflict;
 pub mod copy;
 pub mod delete;
@@ -22,6 +23,7 @@ pub mod execute;
 pub mod plan;
 pub mod rename;
 
+pub use attributes::{AttributeChange, apply_change, parse_change};
 pub use conflict::{
     Conflict, ConflictAction, ConflictPolicy, ConflictResolver, FixedResolver, Resolution,
     unique_name,

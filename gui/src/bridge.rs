@@ -1,6 +1,6 @@
 //! The `Commander` QML object: the shared [`App`] behind the window.
 //!
-//! QML forwards every key press and menu choice here; after each change the
+//! QML forwards every key press and command choice here; after each change the
 //! object publishes the whole screen as JSON (see [`sc_frontend::view`]) in
 //! its `screen` property, which the QML files only draw. Background results
 //! (listings, transfer progress) arrive on a tokio runtime and are moved to
@@ -15,8 +15,8 @@ use std::time::Duration;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use sc_app::AppContext;
-use sc_frontend::view::{Screen, menus};
-use sc_frontend::{App, AppEvent, External, KeyPress, resolve_location};
+use sc_frontend::view::Screen;
+use sc_frontend::{App, AppEvent, External, KeyPress, SideId, resolve_location};
 use sc_vfs::VfsPath;
 use tokio::runtime::Runtime;
 
@@ -60,7 +60,6 @@ pub static ENDED_EARLY: AtomicBool = AtomicBool::new(false);
 /// The Rust side of [`qobject::Commander`].
 pub struct CommanderRust {
     pub(crate) screen: QString,
-    pub(crate) menus: QString,
     pub(crate) running: bool,
     pub(crate) screenshot: QString,
     /// The window's size when it opens.
@@ -83,7 +82,6 @@ impl Default for CommanderRust {
     fn default() -> Self {
         CommanderRust {
             screen: QString::default(),
-            menus: QString::default(),
             running: true,
             screenshot: QString::default(),
             window_width: STARTUP.get().and_then(|s| s.size).map_or(1200, |(w, _)| w),
@@ -147,12 +145,10 @@ impl qobject::Commander {
             }
         });
 
-        let menus = serde_json::to_string(&menus(&app)).unwrap_or_default();
         let mut rust = self.as_mut().rust_mut();
         rust.runtime = Some(runtime);
         rust.app = Some(app);
         rust.test = startup.self_test;
-        self.as_mut().set_menus(QString::from(&menus));
         self.as_mut().refresh();
     }
 
@@ -178,6 +174,34 @@ impl qobject::Commander {
     pub(crate) fn pick(mut self: Pin<&mut Self>, what: &QString, index: i32) {
         let what = what.to_string();
         self.as_mut().rust_mut().with_app(|app| app.pick(&what, index.max(0) as usize));
+        self.refresh();
+    }
+
+    pub(crate) fn click_row(mut self: Pin<&mut Self>, side: i32, row: i32) {
+        self.as_mut().rust_mut().with_app(|app| app.click_row(side_of(side), row.max(0) as usize));
+        self.refresh();
+    }
+
+    pub(crate) fn scroll_rows(mut self: Pin<&mut Self>, side: i32, lines: i32) {
+        self.as_mut().rust_mut().with_app(|app| app.scroll_rows(side_of(side), lines as isize));
+        self.refresh();
+    }
+
+    pub(crate) fn drag_rows(mut self: Pin<&mut Self>, from: i32, row: i32, to: i32) {
+        self.as_mut()
+            .rust_mut()
+            .with_app(|app| app.drag_rows(side_of(from), row.max(0) as usize, side_of(to)));
+        self.refresh();
+    }
+
+    pub(crate) fn drop_files(mut self: Pin<&mut Self>, side: i32, urls: &QString) {
+        let files: Vec<std::path::PathBuf> = urls
+            .to_string()
+            .lines()
+            .filter(|url| url.starts_with("file://"))
+            .map(|url| std::path::PathBuf::from(local_path_of(url)))
+            .collect();
+        self.as_mut().rust_mut().with_app(|app| app.drop_files(side_of(side), &files));
         self.refresh();
     }
 
@@ -300,6 +324,11 @@ fn run_external(external: &External) -> Result<(), String> {
     let status =
         std::process::Command::new(program).args(args).status().map_err(|e| e.to_string())?;
     if status.success() { Ok(()) } else { Err(format!("exited with {status}")) }
+}
+
+/// Side 0 is the left panel, anything else the right one.
+fn side_of(side: i32) -> SideId {
+    if side == 0 { SideId::Left } else { SideId::Right }
 }
 
 /// The local path of a `file:` URL from a file picker (anything else is

@@ -21,7 +21,9 @@
 mod app;
 pub mod commands;
 mod dialogs;
+pub mod diff;
 pub mod drives;
+pub mod git;
 mod input;
 pub mod preview;
 pub mod settings;
@@ -34,4 +36,5 @@ pub use dialogs::{
     JobsView, MessageDialog, Overlay, PendingConflict, menu_actions,
 };
 pub use input::{KeyPress, TextField};
+pub use sc_panel::SideId;
 pub use viewer::Viewer;

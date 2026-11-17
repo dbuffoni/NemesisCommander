@@ -13,7 +13,7 @@ use sc_vfs::Entry;
 use serde::Serialize;
 
 use crate::app::{App, display_location, side_index};
-use crate::commands::{ALL, CommandPalette};
+use crate::commands::CommandPalette;
 use crate::dialogs::Overlay;
 use crate::settings::SettingsScreen;
 use crate::viewer::Viewer;
@@ -33,6 +33,19 @@ pub struct Screen {
     pub overlay: Option<OverlayView>,
     /// A copy conflict waiting for an answer, shown above everything.
     pub conflict: Option<ConflictView>,
+    /// The fonts of the window (the terminal ignores them).
+    pub fonts: FontsView,
+}
+
+/// The fonts chosen in the settings; empty or 0 means the system's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FontsView {
+    /// Family of the text.
+    pub family: String,
+    /// Size in points.
+    pub size: u32,
+    /// Family of the fixed-width text.
+    pub fixed_family: String,
 }
 
 /// One side of the window.
@@ -40,6 +53,11 @@ pub struct Screen {
 pub struct PanelView {
     /// Location of the panel, as the user types it.
     pub title: String,
+    /// Git branch and distance from the upstream (`main ↑1`), empty outside a
+    /// repository.
+    pub branch: String,
+    /// The drive or connection the location is on (`Local`, `C:`, a name).
+    pub drive: String,
     /// Tabs, when there is more than one.
     pub tabs: Vec<TabView>,
     /// This side has the keyboard focus.
@@ -88,6 +106,11 @@ pub struct RowView {
     pub selected: bool,
     /// Under the cursor.
     pub cursor: bool,
+    /// Git mark: `M` changed, `?` untracked, `!` ignored, empty for none.
+    pub git: String,
+    /// The file as a `file://` URL, for dragging it to other programs;
+    /// empty for anything that is not on this disk.
+    pub url: String,
 }
 
 /// The status line.
@@ -213,26 +236,6 @@ pub struct HelpGroup {
     pub title: String,
     /// `(keys, label)` rows.
     pub rows: Vec<(String, String)>,
-}
-
-/// A menu of the menu bar.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct MenuView {
-    /// Title (`Files`).
-    pub title: String,
-    /// Commands.
-    pub items: Vec<MenuItem>,
-}
-
-/// A command in a menu.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct MenuItem {
-    /// Command id, for [`App::run_command`].
-    pub id: String,
-    /// Label.
-    pub label: String,
-    /// First shortcut, empty when none.
-    pub shortcut: String,
 }
 
 /// The command list (F9).
@@ -440,38 +443,13 @@ impl Screen {
             keys,
             overlay,
             conflict,
+            fonts: FontsView {
+                family: app.context().config.appearance.font_family.clone(),
+                size: app.context().config.appearance.font_size,
+                fixed_family: app.context().config.appearance.fixed_font_family.clone(),
+            },
         }
     }
-}
-
-/// The menus of the GUI's menu bar: one per category of the command list
-/// (built-in, plugins, scripts), each command with its first shortcut.
-pub fn menus(app: &App) -> Vec<MenuView> {
-    let palette = CommandPalette::new(app.commands());
-    palette
-        .categories
-        .iter()
-        .filter(|c| *c != ALL)
-        .map(|category| MenuView {
-            title: category.clone(),
-            items: palette
-                .entries
-                .iter()
-                .filter(|e| e.category == *category && e.can_have_keys())
-                .map(|e| MenuItem {
-                    id: e.id.clone(),
-                    label: e.label.clone(),
-                    shortcut: app
-                        .context()
-                        .keymap
-                        .chords_for_id(&e.id)
-                        .first()
-                        .map(ToString::to_string)
-                        .unwrap_or_default(),
-                })
-                .collect(),
-        })
-        .collect()
 }
 
 /// Describes the command list.
@@ -536,16 +514,20 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
     } else {
         Vec::new()
     };
+    let git = git_of(app, side);
+    let panel = app.workspace.side(side).panel();
     let row_views = panel
         .entries()
         .iter()
         .enumerate()
         .skip(offset)
         .take(rows)
-        .map(|(i, entry)| row_view(panel, entry, i == cursor, human))
+        .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref()))
         .collect();
     let view = PanelView {
         title: display_location(panel.location()),
+        drive: crate::drives::drive_label(&app.context().config, panel.location()),
+        branch: git.as_ref().map(|g| g.summary()).unwrap_or_default(),
         tabs,
         active,
         rows: row_views,
@@ -561,7 +543,28 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
     view
 }
 
-fn row_view(panel: &Panel, entry: &Entry, cursor: bool, human: bool) -> RowView {
+/// The git status of what `side` shows, if it is known for that folder.
+pub fn git_of(app: &App, side: SideId) -> Option<std::sync::Arc<crate::git::GitStatus>> {
+    let panel = app.workspace.side(side).panel();
+    match &app.git[side_index(side)] {
+        Some((path, status)) if path == panel.location() => Some(status.clone()),
+        _ => None,
+    }
+}
+
+/// The mark of `name`: one character, or empty.
+pub fn git_mark(git: Option<&crate::git::GitStatus>, name: &str) -> String {
+    let name = name.trim_end_matches('/');
+    git.and_then(|g| g.marks.get(name)).map(|m| m.to_string()).unwrap_or_default()
+}
+
+fn row_view(
+    panel: &Panel,
+    entry: &Entry,
+    cursor: bool,
+    human: bool,
+    git: Option<&crate::git::GitStatus>,
+) -> RowView {
     let mut name = entry.name.clone();
     if entry.is_dir() && entry.name != PARENT {
         name.push('/');
@@ -574,6 +577,17 @@ fn row_view(panel: &Panel, entry: &Entry, cursor: bool, human: bool) -> RowView 
         hidden: entry.is_hidden(),
         selected: panel.is_selected(&entry.name),
         cursor,
+        git: git_mark(git, &entry.name),
+        url: if entry.name == PARENT {
+            String::new()
+        } else {
+            panel
+                .location()
+                .join(&entry.name)
+                .to_local_path()
+                .map(|p| file_url(&p))
+                .unwrap_or_default()
+        },
     }
 }
 
@@ -617,6 +631,8 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
     };
     PanelView {
         title,
+        drive: String::new(),
+        branch: String::new(),
         tabs: Vec::new(),
         active: false,
         rows: Vec::new(),
@@ -686,7 +702,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
 
 /// Describes the settings screen with `rows` visible rows.
 pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> SettingsView {
-    use crate::settings::{FieldKind, Row, keys_of};
+    use crate::settings::{FieldKind, Row};
     let config = &app.context().config;
     let defaults = sc_config::Config::default();
     let rows = rows.max(3);
@@ -706,20 +722,6 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             value: field.value(config),
             changed: field.value(config) != field.value(&defaults),
         },
-        Row::Shortcut(action) => {
-            let keys = keys_of(config, action);
-            let value = if keys.is_empty() {
-                "none".to_owned()
-            } else {
-                keys.iter().map(ToString::to_string).collect::<Vec<_>>().join(" / ")
-            };
-            SettingsRowView {
-                kind: "shortcut".into(),
-                label: action.label().into(),
-                value,
-                changed: config.keys.contains_key(action.id()),
-            }
-        }
         Row::Command(command) => SettingsRowView {
             kind: "command".into(),
             label: command.label().into(),
@@ -727,11 +729,8 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             changed: false,
         },
     };
-    let hint = match (screen.recording, screen.current()) {
-        (Some(recording), _) => {
-            format!("Press the new shortcut for \"{}\"   Esc: cancel", recording.action.label())
-        }
-        (None, Row::Option(field)) => match field.kind() {
+    let hint = match screen.current() {
+        Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
                 "Enter / ← →: change   r: default   Esc: close"
             }
@@ -741,17 +740,14 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             FieldKind::Text => "Enter: type a value   r: default   Esc: close",
         }
         .to_owned(),
-        (None, Row::Shortcut(_)) => {
-            "Enter: new shortcut   a: add one   Delete: none   r: default   Esc: close".to_owned()
-        }
-        (None, _) => "Enter: run   Esc: close".to_owned(),
+        _ => "Enter: run   Esc: close".to_owned(),
     };
     SettingsView {
         rows: screen.rows.iter().skip(offset).take(rows).map(row_view).collect(),
         cursor: screen.cursor - offset,
         percent: if total <= rows { 100 } else { (offset + rows) * 100 / total },
         hint,
-        recording: screen.recording.is_some(),
+        recording: false,
     }
 }
 
@@ -775,7 +771,7 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
         viewer.visible_rows(rows)
     };
     ViewerView {
-        title: display_location(&viewer.path),
+        title: viewer.title.clone().unwrap_or_else(|| display_location(&viewer.path)),
         mode: viewer.mode().into(),
         lines,
         percent: if total <= rows { 100 } else { ((viewer.scroll + rows) * 100 / total).min(100) },
@@ -800,6 +796,9 @@ fn file_url(path: &std::path::Path) -> String {
 
 /// The keys that matter in the viewer's current mode.
 pub fn viewer_keys(viewer: &Viewer) -> &'static str {
+    if viewer.diff.is_some() {
+        return "n/p: next/previous change   PgUp/PgDn: scroll   Esc: close";
+    }
     match viewer.mode() {
         "pdf" => "PgUp/PgDn: page   +/-: zoom   0: fit   F4: hex   Esc: close",
         "model" => "Arrows: turn   +/-: zoom   0: reset   F4: hex   Esc: close",

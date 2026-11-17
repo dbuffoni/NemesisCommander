@@ -5,7 +5,7 @@
 //! The functions here only change a [`Config`]; the application saves it
 //! and applies it (key map, transfer manager) afterwards.
 
-use sc_config::{Action, Category, Config, KeyChord, Keymap};
+use sc_config::{Action, Config, KeyChord, Keymap};
 use sc_index::SortKey;
 use sc_ops::{ConflictPolicy, VerifyMode};
 
@@ -26,6 +26,10 @@ pub enum Field {
     Descending,
     /// Sizes as `1.2 MiB`.
     HumanSizes,
+    /// Left and Right move between folders.
+    ArrowNavigation,
+    /// Git marks and branch.
+    GitStatus,
     /// Jobs running at once.
     ParallelJobs,
     /// Files copied at once within a job.
@@ -44,6 +48,12 @@ pub enum Field {
     TabWidth,
     /// Files above this size open as hex.
     HexAbove,
+    /// Font family of the window.
+    FontFamily,
+    /// Font size of the window.
+    FontSize,
+    /// Fixed-width font family of the window.
+    FixedFontFamily,
 }
 
 /// How a [`Field`] is changed.
@@ -83,7 +93,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 16] = [
+    pub const ALL: [Field; 21] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -91,6 +101,8 @@ impl Field {
         Field::Sort,
         Field::Descending,
         Field::HumanSizes,
+        Field::ArrowNavigation,
+        Field::GitStatus,
         Field::ParallelJobs,
         Field::ParallelFiles,
         Field::Verify,
@@ -100,6 +112,9 @@ impl Field {
         Field::Wrap,
         Field::TabWidth,
         Field::HexAbove,
+        Field::FontFamily,
+        Field::FontSize,
+        Field::FixedFontFamily,
     ];
 
     /// The section it is shown in.
@@ -107,11 +122,12 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | Editor => "General",
-            ShowHidden | Sort | Descending | HumanSizes => "Panels",
+            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus => "Panels",
             ParallelJobs | ParallelFiles | Verify | Conflict | BandwidthLimit | Retries => {
                 "Transfers"
             }
             Wrap | TabWidth | HexAbove => "Viewer",
+            FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
         }
     }
 
@@ -126,6 +142,8 @@ impl Field {
             Sort => "Sort by",
             Descending => "Largest, latest or last first",
             HumanSizes => "Sizes as KiB, MiB, GiB",
+            ArrowNavigation => "← goes up, → enters a folder",
+            GitStatus => "Git marks and branch in repositories",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
             ParallelFiles => "Files at the same time in a job",
             Verify => "Check after copying",
@@ -135,6 +153,9 @@ impl Field {
             Wrap => "Wrap long lines",
             TabWidth => "Spaces per tab",
             HexAbove => "Open as hex above (MiB)",
+            FontFamily => "Font (empty: the system's)",
+            FontSize => "Font size in points (0: the system's)",
+            FixedFontFamily => "Fixed-width font (empty: monospace)",
         }
     }
 
@@ -142,11 +163,11 @@ impl Field {
     pub fn kind(self) -> FieldKind {
         use Field::*;
         match self {
-            ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | Wrap => {
-                FieldKind::Toggle
-            }
+            ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
+            | GitStatus | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
-            Editor => FieldKind::Text,
+            Editor | FontFamily | FixedFontFamily => FieldKind::Text,
+            FontSize => FieldKind::Number(0, 48),
             ParallelJobs => FieldKind::Number(1, 64),
             ParallelFiles => FieldKind::Number(1, 64),
             BandwidthLimit => FieldKind::Number(0, 10_000_000),
@@ -169,6 +190,8 @@ impl Field {
             Sort => name_of(&SORTS, p.sort),
             Descending => on(p.descending),
             HumanSizes => on(p.human_sizes),
+            ArrowNavigation => on(p.arrow_navigation),
+            GitStatus => on(p.git_status),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
             Verify => name_of(&VERIFY, t.verify),
@@ -178,6 +201,9 @@ impl Field {
             Wrap => on(v.wrap),
             TabWidth => v.tab_width.to_string(),
             HexAbove => v.hex_above_mib.to_string(),
+            FontFamily => config.appearance.font_family.clone(),
+            FontSize => config.appearance.font_size.to_string(),
+            FixedFontFamily => config.appearance.fixed_font_family.clone(),
         }
     }
 
@@ -192,11 +218,13 @@ impl Field {
             ShowHidden => p.show_hidden ^= true,
             Descending => p.descending ^= true,
             HumanSizes => p.human_sizes ^= true,
+            ArrowNavigation => p.arrow_navigation ^= true,
+            GitStatus => p.git_status ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),
             Conflict => t.conflict = cycle(&CONFLICTS, t.conflict, delta),
-            Editor => {}
+            Editor | FontFamily | FixedFontFamily => {}
             _ => {
                 let current: u64 = self.value(config).parse().unwrap_or(0);
                 let next = current.saturating_add_signed(delta);
@@ -221,12 +249,16 @@ impl Field {
                 Field::Retries => t.retries = n as u32,
                 Field::TabWidth => config.viewer.tab_width = n as usize,
                 Field::HexAbove => config.viewer.hex_above_mib = n,
+                Field::FontSize => config.appearance.font_size = n as u32,
                 _ => {}
             }
             return Ok(());
         }
-        if self == Field::Editor {
-            config.general.editor = text.to_owned();
+        match self {
+            Field::Editor => config.general.editor = text.to_owned(),
+            Field::FontFamily => config.appearance.font_family = text.to_owned(),
+            Field::FixedFontFamily => config.appearance.fixed_font_family = text.to_owned(),
+            _ => {}
         }
         Ok(())
     }
@@ -302,19 +334,8 @@ pub enum Row {
     Header(&'static str),
     /// An option.
     Option(Field),
-    /// The keys of a command.
-    Shortcut(Action),
     /// A command.
     Command(Command),
-}
-
-/// Waiting for the key to give to a command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Recording {
-    /// The command that gets the key.
-    pub action: Action,
-    /// Add the key instead of replacing the command's keys.
-    pub add: bool,
 }
 
 /// The state of the settings screen.
@@ -324,8 +345,6 @@ pub struct SettingsScreen {
     pub rows: Vec<Row>,
     /// The highlighted row (never a header).
     pub cursor: usize,
-    /// Set while the next key press becomes a shortcut.
-    pub recording: Option<Recording>,
 }
 
 impl Default for SettingsScreen {
@@ -346,15 +365,9 @@ impl SettingsScreen {
             }
             rows.push(Row::Option(field));
         }
-        for category in Category::ALL.iter() {
-            rows.push(Row::Header(shortcut_header(*category)));
-            rows.extend(
-                Action::ALL.iter().filter(|a| a.category() == *category).map(|a| Row::Shortcut(*a)),
-            );
-        }
         rows.push(Row::Header("Share settings"));
         rows.extend(Command::ALL.map(Row::Command));
-        SettingsScreen { rows, cursor: 1, recording: None }
+        SettingsScreen { rows, cursor: 1 }
     }
 
     /// The highlighted row.
@@ -380,24 +393,6 @@ impl SettingsScreen {
         if let Some(row) = ahead.or_else(behind) {
             self.cursor = row;
         }
-    }
-
-    /// Puts the cursor on the first shortcut of `action`'s row.
-    pub fn select_shortcut(&mut self, action: Action) {
-        if let Some(i) = self.rows.iter().position(|r| *r == Row::Shortcut(action)) {
-            self.cursor = i;
-        }
-    }
-}
-
-fn shortcut_header(category: Category) -> &'static str {
-    match category {
-        Category::Files => "Shortcuts: Files",
-        Category::Select => "Shortcuts: Select",
-        Category::Navigate => "Shortcuts: Navigate",
-        Category::View => "Shortcuts: View",
-        Category::Tools => "Shortcuts: Tools",
-        Category::App => "Shortcuts: SuperCommander",
     }
 }
 
@@ -531,6 +526,23 @@ mod tests {
     }
 
     #[test]
+    fn the_window_fonts_are_options() {
+        let mut config = Config::default();
+        Field::FontFamily.set(&mut config, " Fira Sans ").unwrap();
+        Field::FontSize.set(&mut config, "200").unwrap();
+        Field::FixedFontFamily.set(&mut config, "Fira Code").unwrap();
+        assert_eq!(config.appearance.font_family, "Fira Sans");
+        assert_eq!(config.appearance.font_size, 48, "clamped");
+        assert_eq!(Field::FixedFontFamily.value(&config), "Fira Code");
+        let again = Config::from_toml(&config.to_toml(), "test").unwrap();
+        assert_eq!(again.appearance, config.appearance);
+        for field in [Field::FontFamily, Field::FontSize, Field::FixedFontFamily] {
+            field.reset(&mut config);
+        }
+        assert_eq!(config.appearance, Default::default());
+    }
+
+    #[test]
     fn the_cursor_skips_headers() {
         let mut screen = SettingsScreen::new();
         assert_eq!(screen.current(), Row::Option(Field::ConfirmDelete));
@@ -540,7 +552,5 @@ mod tests {
         assert_eq!(screen.current(), Row::Option(Field::ShowHidden), "over the Panels title");
         screen.move_cursor(1000);
         assert_eq!(screen.current(), Row::Command(Command::EditFile));
-        screen.select_shortcut(Action::Copy);
-        assert_eq!(screen.current(), Row::Shortcut(Action::Copy));
     }
 }

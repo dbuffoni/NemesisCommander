@@ -9,9 +9,7 @@ use sc_config::{ExportBundle, Key};
 use super::{App, AppEvent, External, home_file};
 use crate::dialogs::{ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, Overlay};
 use crate::input::KeyPress;
-use crate::settings::{
-    Command, Field, FieldKind, Recording, Row, SettingsScreen, assign_key, clear_keys, reset_keys,
-};
+use crate::settings::{Command, Field, FieldKind, Row, SettingsScreen};
 
 impl App {
     /// Opens the settings screen.
@@ -26,12 +24,6 @@ impl App {
         press: KeyPress,
     ) -> Option<Overlay> {
         let key = press.plain();
-        if let Some(recording) = screen.recording.take() {
-            if key != Some(Key::Esc) {
-                self.record_key(recording, press);
-            }
-            return Some(Overlay::Settings(screen));
-        }
         match (key, press.text) {
             (Some(Key::Esc), _) => return None,
             (Some(Key::Up), _) => screen.move_cursor(-1),
@@ -43,17 +35,6 @@ impl App {
             (Some(Key::Left), _) => self.step_option(screen.current(), -1),
             (Some(Key::Right), _) => self.step_option(screen.current(), 1),
             (Some(Key::Enter | Key::Space), _) => return self.settings_enter(screen),
-            (Some(Key::Delete | Key::Backspace), _) => {
-                if let Row::Shortcut(action) = screen.current() {
-                    clear_keys(&mut self.context.config, action);
-                    self.settings_changed(format!("{} has no shortcut now", action.label()));
-                }
-            }
-            (_, Some('a')) => {
-                if let Row::Shortcut(action) = screen.current() {
-                    screen.recording = Some(Recording { action, add: true });
-                }
-            }
             (_, Some('r')) => self.reset_row(screen.current()),
             _ => {}
         }
@@ -61,7 +42,7 @@ impl App {
     }
 
     /// Enter on a row: change, type, record or run.
-    fn settings_enter(&mut self, mut screen: SettingsScreen) -> Option<Overlay> {
+    fn settings_enter(&mut self, screen: SettingsScreen) -> Option<Overlay> {
         match screen.current() {
             Row::Header(_) => {}
             Row::Option(field) => match field.kind() {
@@ -76,7 +57,6 @@ impl App {
                     )));
                 }
             },
-            Row::Shortcut(action) => screen.recording = Some(Recording { action, add: false }),
             Row::Command(command) => return self.settings_command(command, screen),
         }
         Some(Overlay::Settings(screen))
@@ -142,31 +122,10 @@ impl App {
     }
 
     fn reset_row(&mut self, row: Row) {
-        match row {
-            Row::Option(field) => {
-                field.reset(&mut self.context.config);
-                self.settings_changed(format!("{}: back to the default", field.label()));
-            }
-            Row::Shortcut(action) => {
-                let losers = reset_keys(&mut self.context.config, action);
-                let mut message = format!("{}: built-in shortcut again", action.label());
-                for other in losers {
-                    message.push_str(&format!("; taken from {}", self.command_label(&other)));
-                }
-                self.settings_changed(message);
-            }
-            _ => {}
+        if let Row::Option(field) = row {
+            field.reset(&mut self.context.config);
+            self.settings_changed(format!("{}: back to the default", field.label()));
         }
-    }
-
-    fn record_key(&mut self, recording: Recording, press: KeyPress) {
-        let chord = press.chord;
-        let previous = assign_key(&mut self.context.config, recording.action, chord, recording.add);
-        let mut message = format!("{}: {chord}", recording.action.label());
-        if let Some(other) = previous {
-            message.push_str(&format!(" (taken from {})", self.command_label(&other)));
-        }
-        self.settings_changed(message);
     }
 
     /// A typed value for `field`.

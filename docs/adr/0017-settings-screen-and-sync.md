@@ -47,3 +47,6 @@ settings to remote instances when needed.
 - An option added to `Config` must be added to `settings::Field` to appear
   on the screen (the file still accepts it otherwise).
 - Remote machines without the agent need the path of their settings file.
+- Update (SC-60): the settings screen no longer lists shortcuts. Keys are
+  set in the Commands list (F9, Ctrl+K), which does the same; `[keys]` in the
+  file is unchanged.

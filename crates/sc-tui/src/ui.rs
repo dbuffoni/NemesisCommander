@@ -12,10 +12,11 @@ use sc_panel::{PARENT, SideId};
 use sc_transfer::JobState;
 
 use sc_frontend::commands::CommandPalette;
+use sc_frontend::drives::drive_label;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
-    column_headers, commands_view, describe, entry_details, job_line, jobs_summary, panel_footer,
-    scroll_offset, short_label, size_text, tab_title,
+    column_headers, commands_view, describe, entry_details, git_mark, git_of, job_line,
+    jobs_summary, panel_footer, scroll_offset, short_label, size_text, tab_title,
 };
 use sc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -114,13 +115,20 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
 fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let is_active = app.workspace.active_side() == side;
+    let git = git_of(app, side);
     let side_state = app.workspace.side(side);
     let panel = side_state.panel();
     let border = if is_active { Style::new().fg(Color::Cyan) } else { dim() };
 
-    let mut block = Block::bordered()
-        .border_style(border)
-        .title(Line::styled(format!(" {} ", display_location(panel.location())), bold()));
+    let mut block = Block::bordered().border_style(border).title(Line::styled(
+        format!(
+            " [{}] {}{} ",
+            drive_label(&app.context().config, panel.location()),
+            git.as_ref().map(|g| format!("⎇ {}  ", g.summary())).unwrap_or_default(),
+            display_location(panel.location())
+        ),
+        bold(),
+    ));
     if side_state.tabs().len() > 1 {
         let spans: Vec<Span> = side_state
             .tabs()
@@ -147,14 +155,15 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
 
     let width = inner.width as usize;
     let show_date = width >= 40;
-    let name_width = width.saturating_sub(SIZE_WIDTH + 1).saturating_sub(if show_date {
-        DATE_WIDTH + 1
-    } else {
-        0
-    });
+    // Two columns for the git mark when the folder is in a repository.
+    let mark_width = if git.is_some() { 2 } else { 0 };
+    let name_width = width
+        .saturating_sub(SIZE_WIDTH + 1 + mark_width)
+        .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{} {:>SIZE_WIDTH$}{}",
+        "{}{} {:>SIZE_WIDTH$}{}",
+        " ".repeat(mark_width),
         fit(&name_title, name_width),
         size_title,
         if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
@@ -183,7 +192,12 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         } else {
             String::new()
         };
-        let text = format!("{} {:>SIZE_WIDTH$}{date}", fit(&name, name_width), size);
+        let mark = if mark_width > 0 {
+            format!("{:<1} ", git_mark(git.as_deref(), &entry.name))
+        } else {
+            String::new()
+        };
+        let text = format!("{mark}{} {:>SIZE_WIDTH$}{date}", fit(&name, name_width), size);
 
         let mut style = Style::new();
         if entry.is_dir() {
@@ -271,14 +285,16 @@ fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
             .action_for(&KeyChord::plain(Key::F(n)))
             .map(short_label)
             .unwrap_or("");
-        // Ten labels of six letters fit 80 columns.
+        // With the "F" in front, ten labels fit 80 columns at five letters.
+        let width = if area.width < 90 { 5 } else { 6 };
         let label = match label {
-            "Commands" if area.width < 90 => "Cmds",
+            "Commands" if width < 6 => "Cmds",
             other => other,
         };
-        spans.push(Span::raw(format!("{n}")));
+        let label: String = label.chars().take(width).collect();
+        spans.push(Span::raw(format!("F{n}")));
         spans.push(Span::styled(
-            format!("{label:<6}"),
+            format!("{label:<width$}"),
             Style::new().fg(Color::Black).bg(Color::Cyan),
         ));
         spans.push(Span::raw(" "));

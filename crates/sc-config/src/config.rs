@@ -50,6 +50,18 @@ impl Default for GeneralSettings {
     }
 }
 
+/// Fonts of the window (the terminal interface uses the terminal's font).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AppearanceSettings {
+    /// Font family of the text; empty for the system font.
+    pub font_family: String,
+    /// Font size in points; 0 for the system size.
+    pub font_size: u32,
+    /// Fixed-width font family (viewers, columns); empty for `monospace`.
+    pub fixed_font_family: String,
+}
+
 /// How panels show files.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -62,6 +74,11 @@ pub struct PanelSettings {
     pub descending: bool,
     /// Show sizes as `1.2 MiB` instead of exact bytes.
     pub human_sizes: bool,
+    /// Left goes to the parent folder and Right enters the folder under the
+    /// cursor (Double Commander's "Lynx-like" movement).
+    pub arrow_navigation: bool,
+    /// Mark changed files and show the branch inside git repositories.
+    pub git_status: bool,
 }
 
 impl Default for PanelSettings {
@@ -71,6 +88,8 @@ impl Default for PanelSettings {
             sort: SortKey::Name,
             descending: false,
             human_sizes: true,
+            arrow_navigation: false,
+            git_status: true,
         }
     }
 }
@@ -174,6 +193,8 @@ pub struct Config {
     pub transfers: TransferSettings,
     /// Viewer.
     pub viewer: ViewerSettings,
+    /// Fonts of the window.
+    pub appearance: AppearanceSettings,
     /// Shortcut overrides: action id → key chords (empty list unbinds).
     pub keys: BTreeMap<String, Vec<String>>,
     /// Bookmarks, in menu order.
