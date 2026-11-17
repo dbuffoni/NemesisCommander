@@ -26,6 +26,8 @@ pub enum Field {
     Descending,
     /// Sizes as `1.2 MiB`.
     HumanSizes,
+    /// Left and Right move between folders.
+    ArrowNavigation,
     /// Jobs running at once.
     ParallelJobs,
     /// Files copied at once within a job.
@@ -83,7 +85,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 16] = [
+    pub const ALL: [Field; 17] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -91,6 +93,7 @@ impl Field {
         Field::Sort,
         Field::Descending,
         Field::HumanSizes,
+        Field::ArrowNavigation,
         Field::ParallelJobs,
         Field::ParallelFiles,
         Field::Verify,
@@ -107,7 +110,7 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | Editor => "General",
-            ShowHidden | Sort | Descending | HumanSizes => "Panels",
+            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation => "Panels",
             ParallelJobs | ParallelFiles | Verify | Conflict | BandwidthLimit | Retries => {
                 "Transfers"
             }
@@ -126,6 +129,7 @@ impl Field {
             Sort => "Sort by",
             Descending => "Largest, latest or last first",
             HumanSizes => "Sizes as KiB, MiB, GiB",
+            ArrowNavigation => "← goes up, → enters a folder",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
             ParallelFiles => "Files at the same time in a job",
             Verify => "Check after copying",
@@ -142,9 +146,8 @@ impl Field {
     pub fn kind(self) -> FieldKind {
         use Field::*;
         match self {
-            ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | Wrap => {
-                FieldKind::Toggle
-            }
+            ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
+            | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
             Editor => FieldKind::Text,
             ParallelJobs => FieldKind::Number(1, 64),
@@ -169,6 +172,7 @@ impl Field {
             Sort => name_of(&SORTS, p.sort),
             Descending => on(p.descending),
             HumanSizes => on(p.human_sizes),
+            ArrowNavigation => on(p.arrow_navigation),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
             Verify => name_of(&VERIFY, t.verify),
@@ -192,6 +196,7 @@ impl Field {
             ShowHidden => p.show_hidden ^= true,
             Descending => p.descending ^= true,
             HumanSizes => p.human_sizes ^= true,
+            ArrowNavigation => p.arrow_navigation ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),

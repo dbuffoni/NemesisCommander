@@ -605,6 +605,16 @@ impl App {
             Some(Key::Home) => return panel.set_cursor(0),
             Some(Key::End) => return panel.set_cursor(usize::MAX),
             Some(Key::Esc) if !panel.filter().is_empty() => return panel.set_filter(""),
+            Some(Key::Left) if self.context.config.panels.arrow_navigation => {
+                let request = panel.parent();
+                return self.load_opt(request);
+            }
+            Some(Key::Right) if self.context.config.panels.arrow_navigation => {
+                if let Some(request) = panel.enter() {
+                    self.load(request);
+                }
+                return;
+            }
             _ => {}
         }
         if let Some(action) = self.context.keymap.action_for(&press.chord) {
@@ -1060,6 +1070,11 @@ impl App {
             Action::PrevTab => self.cycle_tab(-1),
             Action::SamePath => {
                 let request = self.workspace.same_location_in_other();
+                self.load(request);
+            }
+            Action::OpenInLeft | Action::OpenInRight => {
+                let side = if action == Action::OpenInLeft { SideId::Left } else { SideId::Right };
+                let request = self.workspace.open_cursor_in(side);
                 self.load(request);
             }
             Action::SwapPanels => self.workspace.swap_sides(),

@@ -62,6 +62,9 @@ pub struct PanelSettings {
     pub descending: bool,
     /// Show sizes as `1.2 MiB` instead of exact bytes.
     pub human_sizes: bool,
+    /// Left goes to the parent folder and Right enters the folder under the
+    /// cursor (Double Commander's "Lynx-like" movement).
+    pub arrow_navigation: bool,
 }
 
 impl Default for PanelSettings {
@@ -71,6 +74,7 @@ impl Default for PanelSettings {
             sort: SortKey::Name,
             descending: false,
             human_sizes: true,
+            arrow_navigation: false,
         }
     }
 }

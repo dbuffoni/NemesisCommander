@@ -189,6 +189,22 @@ impl Workspace {
         }
     }
 
+    /// Shows in `target` the folder under the cursor of the focused panel
+    /// (an archive opens at its root), or the focused panel's own folder
+    /// when the cursor is on a file or on `..`.
+    pub fn open_cursor_in(&mut self, target: SideId) -> LoadRequest {
+        let panel = self.active();
+        let path = panel
+            .current_entry()
+            .filter(|e| e.name != "..")
+            .and_then(|e| {
+                let path = panel.location().join(&e.name);
+                if e.is_dir() { Some(path) } else { sc_archive::archive_root(&path) }
+            })
+            .unwrap_or_else(|| panel.location().clone());
+        self.side_mut(target).panel_mut().navigate(path)
+    }
+
     /// Shows the focused panel's location in the other panel too.
     pub fn same_location_in_other(&mut self) -> LoadRequest {
         let location = self.active().location().clone();

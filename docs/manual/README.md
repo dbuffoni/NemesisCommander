@@ -104,6 +104,10 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
 - **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`).
 - **Ctrl+U** swaps the panels, **Alt+O** opens this folder in the other one.
+  **Ctrl+←** and **Ctrl+→** open the folder under the cursor in the left or
+  right panel (on a file, this panel's folder). With "← goes up, → enters a
+  folder" on in the settings, **←** goes to the parent folder and **→** enters
+  the folder under the cursor.
 
 The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
@@ -497,7 +501,8 @@ with a dot.
   text are typed after Enter (← → also step numbers). **r** puts the
   default back.
   - General: confirm before deleting, use the recycle bin, the editor.
-  - Panels: hidden files, sort order, human-readable sizes.
+  - Panels: hidden files, sort order, human-readable sizes, ← and → to move
+    between folders.
   - Transfers: jobs at the same time (1 runs them one after the other, in
     priority order), files at the same time in a job, the check after
     copying, what to do when a file exists, the bandwidth limit, retries.
@@ -575,6 +580,7 @@ on the settings screen (Ctrl+,).
 | Ctrl+Shift+Tab, Ctrl+PageUp | Previous tab |
 | Alt+O | Open this folder in the other panel |
 | Ctrl+U | Swap panels |
+| Ctrl+←, Ctrl+→ | Open the folder under the cursor in the left / right panel |
 
 | View | |
 |---|---|

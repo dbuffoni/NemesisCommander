@@ -128,6 +128,8 @@ actions! {
     NextTab       = "nav.next-tab",         Navigate, false, "Next tab",              ["Ctrl+Tab", "Ctrl+PageDown"];
     PrevTab       = "nav.prev-tab",         Navigate, false, "Previous tab",          ["Ctrl+Shift+Tab", "Ctrl+PageUp"];
     SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Alt+O"];
+    OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", ["Ctrl+Left"];
+    OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", ["Ctrl+Right"];
     SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+U"];
     // View
     Refresh       = "view.refresh",         View, false, "Refresh",                   ["Ctrl+R"];

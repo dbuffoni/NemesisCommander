@@ -1311,3 +1311,42 @@ async fn sftp_connections_take_a_private_key() {
     h.key("Esc");
     assert_eq!(h.app.context().config.connections.len(), 1, "cancelled: not saved");
 }
+
+#[tokio::test]
+async fn ctrl_arrows_open_the_folder_under_the_cursor_in_a_panel() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Ctrl+Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Right), ["..", "readme.md"], "the folder opens on the right");
+    assert_eq!(h.app.workspace().active_side(), SideId::Left, "the focus stays");
+    // On a file the panel's own folder is shown.
+    h.focus("a.txt");
+    h.key("Ctrl+Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Right), h.names(SideId::Left));
+    h.focus("docs");
+    h.key("Ctrl+Left");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "readme.md"], "into the panel itself");
+}
+
+#[tokio::test]
+async fn left_and_right_move_between_folders_when_asked() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Right");
+    assert_eq!(h.names(SideId::Left)[1], "docs", "off by default: the arrows do nothing");
+    let mut h = Harness::with_settings(|c| c.panels.arrow_navigation = true).await;
+    h.focus("docs");
+    h.key("Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "readme.md"]);
+    h.key("Left");
+    h.settle().await;
+    assert_eq!(h.current(), "docs", "back up with the cursor where it was");
+    h.focus("a.txt");
+    h.key("Right");
+    h.settle().await;
+    assert_eq!(h.current(), "a.txt", "a file is not entered");
+}
