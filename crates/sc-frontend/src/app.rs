@@ -7,7 +7,7 @@
 //! keeps the interface responsive and makes the whole application testable
 //! without a terminal.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -61,6 +61,9 @@ pub enum AppEvent {
     },
     /// A background task wants to show a window.
     Show(Box<Overlay>),
+    /// A task changed files in a way Ctrl+Z can take back; the event is the
+    /// task's own result.
+    Undoable(UndoStep, Box<AppEvent>),
     /// One search result.
     SearchHit(SearchHit),
     /// The search ended (with an error message, if it failed).
@@ -107,6 +110,9 @@ impl AppEvent {
     /// Whether this event ends one background task started with
     /// [`App::spawn_task`].
     fn ends_task(&self) -> bool {
+        if let AppEvent::Undoable(_, inner) = self {
+            return inner.ends_task();
+        }
         matches!(
             self,
             AppEvent::TaskDone { .. }
@@ -191,10 +197,83 @@ pub struct App {
     /// terminal.
     pub graphical: bool,
     events: mpsc::UnboundedSender<AppEvent>,
+    undo: Vec<UndoStep>,
+    undo_jobs: HashSet<JobId>,
     tasks: usize,
     search_cancel: Option<CancellationToken>,
     external: Option<External>,
     running: bool,
+}
+
+/// Something Ctrl+Z can take back: each item is `(path now, path before)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UndoStep {
+    /// Items renamed.
+    Renamed(Vec<(VfsPath, VfsPath)>),
+    /// A folder created.
+    Created(VfsPath),
+    /// Items moved by a finished job.
+    Moved(Vec<(VfsPath, VfsPath)>),
+}
+
+/// How many steps Ctrl+Z remembers.
+const UNDO_DEPTH: usize = 50;
+
+impl App {
+    fn remember_undo(&mut self, step: UndoStep) {
+        self.undo.push(step);
+        if self.undo.len() > UNDO_DEPTH {
+            self.undo.remove(0);
+        }
+    }
+
+    /// Takes back the last rename, new folder or move.
+    fn undo_last(&mut self) {
+        let Some(step) = self.undo.pop() else {
+            return self.set_status("Nothing to undo");
+        };
+        let registry = self.context.registry.clone();
+        match step {
+            UndoStep::Renamed(pairs) => {
+                let (now, before): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
+                let names: Vec<String> =
+                    before.iter().map(|p| p.file_name().unwrap_or_default().to_owned()).collect();
+                let count = now.len();
+                self.spawn_task(async move {
+                    let result = apply_renames(&registry, &now, &names).await;
+                    done(result.map(|()| format!("Undone: renamed {count} item(s) back")), None)
+                });
+            }
+            UndoStep::Created(path) => self.spawn_task(async move {
+                let result = async {
+                    let provider = registry.provider_for(&path).await?;
+                    provider.remove_dir(&path).await
+                }
+                .await;
+                done(
+                    result.map(|()| format!("Undone: removed {}", path.file_name().unwrap_or(""))),
+                    None,
+                )
+            }),
+            UndoStep::Moved(items) => {
+                // Back to where each item came from, one job per folder.
+                let mut by_folder: Vec<(VfsPath, Vec<VfsPath>)> = Vec::new();
+                for (now, before) in items {
+                    let Some(folder) = before.parent() else { continue };
+                    match by_folder.iter_mut().find(|(f, _)| *f == folder) {
+                        Some((_, list)) => list.push(now),
+                        None => by_folder.push((folder, vec![now])),
+                    }
+                }
+                for (folder, list) in by_folder {
+                    // The move back is a move too; it is not remembered.
+                    if let Some(id) = self.submit_job(JobKind::Move, list, folder) {
+                        self.undo_jobs.insert(id);
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Index of a side in per-side arrays.
@@ -306,6 +385,8 @@ impl App {
             status,
             jobs: Vec::new(),
             live_bytes: HashMap::new(),
+            undo: Vec::new(),
+            undo_jobs: HashSet::new(),
             quick_view: None,
             scroll: [0, 0],
             page: 20,
@@ -446,6 +527,15 @@ impl App {
 
     /// Applies the result of background work.
     pub fn handle_event(&mut self, event: AppEvent) {
+        let event = match event {
+            AppEvent::Undoable(step, inner) => {
+                if !matches!(*inner, AppEvent::TaskDone { error: true, .. }) {
+                    self.remember_undo(step);
+                }
+                *inner
+            }
+            other => other,
+        };
         if event.ends_task() {
             self.tasks = self.tasks.saturating_sub(1);
         }
@@ -470,7 +560,25 @@ impl App {
                     let job = self.jobs.iter().find(|j| j.id == id);
                     let title = job.map(|j| j.spec.title()).unwrap_or_default();
                     match state {
-                        JobState::Completed => self.set_status(format!("Done: {title}")),
+                        JobState::Completed => {
+                            self.set_status(format!("Done: {title}"));
+                            let own = self.undo_jobs.remove(&id);
+                            if let Some(job) = self.jobs.iter().find(|j| j.id == id)
+                                && !own
+                                && job.spec.kind == JobKind::Move
+                                && let Some(destination) = job.spec.destination.clone()
+                            {
+                                let items = job
+                                    .spec
+                                    .sources
+                                    .iter()
+                                    .filter_map(|s| {
+                                        Some((destination.join(s.file_name()?), s.clone()))
+                                    })
+                                    .collect();
+                                self.remember_undo(UndoStep::Moved(items));
+                            }
+                        }
                         JobState::Failed => {
                             let reason = job.and_then(|j| j.errors.first()).cloned();
                             self.set_error(format!(
@@ -494,6 +602,7 @@ impl App {
                     self.reload_panels(focus.as_deref());
                 }
             }
+            AppEvent::Undoable(..) => {}
             AppEvent::Show(overlay) => self.overlay = Some(*overlay),
             AppEvent::SearchHit(hit) => {
                 if let Some(Overlay::Choose(dialog)) = &mut self.overlay
@@ -1015,6 +1124,7 @@ impl App {
                     InputPurpose::Attributes(targets),
                 );
             }
+            Action::Undo => self.undo_last(),
             Action::Checksum => self.checksum_current(),
             Action::ToggleSelect => self.workspace.active_mut().toggle_current(),
             Action::SelectMask => {
@@ -1202,18 +1312,28 @@ impl App {
         });
     }
 
-    fn submit_job(&mut self, kind: JobKind, sources: Vec<VfsPath>, destination: VfsPath) {
+    fn submit_job(
+        &mut self,
+        kind: JobKind,
+        sources: Vec<VfsPath>,
+        destination: VfsPath,
+    ) -> Option<JobId> {
         let options = self.context.job_options(None);
         let spec = JobSpec { kind, sources, destination: Some(destination), options, priority: 0 };
         let title = spec.title();
-        match self.manager.submit(spec) {
-            Ok(_) => {
+        let id = match self.manager.submit(spec) {
+            Ok(id) => {
                 self.set_status(format!("Queued: {title}"));
                 self.workspace.active_mut().clear_selection();
+                Some(id)
             }
-            Err(e) => self.set_error(e.to_string()),
-        }
+            Err(e) => {
+                self.set_error(e.to_string());
+                None
+            }
+        };
         self.refresh_jobs();
+        id
     }
 
     fn submit_input(&mut self, dialog: InputDialog) {
@@ -1226,11 +1346,11 @@ impl App {
                 self.set_error("No destination given");
             }
             InputPurpose::CopyTo(paths) => match resolve_location(&text, &here) {
-                Ok(destination) => self.submit_job(JobKind::Copy, paths, destination),
+                Ok(destination) => drop(self.submit_job(JobKind::Copy, paths, destination)),
                 Err(e) => self.set_error(e),
             },
             InputPurpose::MoveTo(paths) => match resolve_location(&text, &here) {
-                Ok(destination) => self.submit_job(JobKind::Move, paths, destination),
+                Ok(destination) => drop(self.submit_job(JobKind::Move, paths, destination)),
                 Err(e) => self.set_error(e),
             },
             InputPurpose::MakeDir => {
@@ -1240,7 +1360,14 @@ impl App {
                 let first = text.split('/').next().unwrap_or(&text).to_owned();
                 self.spawn_task(async move {
                     let result = make_dirs(&registry, &here, &text).await;
-                    done(result.map(|()| format!("Created {text}")), Some(first))
+                    // Only the last folder is taken back: the ones above may have
+                    // been there before.
+                    let created = text
+                        .split('/')
+                        .filter(|part| !part.is_empty())
+                        .fold(here.clone(), |path, part| path.join(part));
+                    let step = UndoStep::Created(created);
+                    undoable(step, done(result.map(|()| format!("Created {text}")), Some(first)))
                 });
             }
             InputPurpose::Rename(path) => {
@@ -1251,9 +1378,14 @@ impl App {
                 self.spawn_task(async move {
                     // Same rules as multi-rename: never replaces another
                     // file, and case-only changes work everywhere.
-                    let result =
-                        apply_renames(&registry, &[path], std::slice::from_ref(&text)).await;
-                    done(result.map(|()| String::new()), Some(text))
+                    let result = apply_renames(
+                        &registry,
+                        std::slice::from_ref(&path),
+                        std::slice::from_ref(&text),
+                    )
+                    .await;
+                    let step = UndoStep::Renamed(vec![(renamed(&path, &text), path)]);
+                    undoable(step, done(result.map(|()| String::new()), Some(text)))
                 });
             }
             InputPurpose::MultiRename(paths) => {
@@ -1449,7 +1581,14 @@ impl App {
                 self.spawn_task(async move {
                     let count = paths.len();
                     let result = apply_renames(&registry, &paths, &names).await;
-                    done(result.map(|()| format!("Renamed {count} items")), None)
+                    let pairs = paths
+                        .iter()
+                        .zip(&names)
+                        .map(|(path, name)| (renamed(path, name), path.clone()))
+                        .filter(|(now, before)| now != before)
+                        .collect();
+                    let step = UndoStep::Renamed(pairs);
+                    undoable(step, done(result.map(|()| format!("Renamed {count} items")), None))
                 });
             }
         }
@@ -2085,6 +2224,11 @@ fn template_preview(paths: &[VfsPath], template: &str) -> Vec<String> {
         }
         Err(e) => vec![format!("  Cannot rename: {e}")],
     }
+}
+
+/// Marks the result of a task as something Ctrl+Z can take back.
+fn undoable(step: UndoStep, event: AppEvent) -> AppEvent {
+    AppEvent::Undoable(step, Box::new(event))
 }
 
 fn done(result: sc_vfs::Result<String>, focus: Option<String>) -> AppEvent {

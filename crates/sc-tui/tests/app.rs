@@ -887,7 +887,7 @@ async fn permissions_can_be_changed() {
     h.focus("a.txt");
     h.key("Alt+Enter");
     h.key("Enter");
-    h.type_text("600");
+    h.type_text("mode=600");
     h.key("Enter");
     h.settle().await;
     let mode = fs::metadata(h.path("left/a.txt")).unwrap().permissions().mode();
@@ -1393,4 +1393,44 @@ async fn dates_and_permissions_change_on_the_selection() {
     h.type_text("yesterday");
     h.key("Enter");
     assert!(h.status().contains("Not understood"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn ctrl_z_takes_back_renames_new_folders_and_moves() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+Z");
+    assert!(h.status().contains("Nothing to undo"), "{}", h.status());
+
+    h.key("F7");
+    h.type_text("fresh");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("left/fresh").is_dir());
+    h.key("Ctrl+Z");
+    h.settle().await;
+    assert!(!h.path("left/fresh").exists(), "the new folder is gone");
+
+    h.focus("a.txt");
+    h.key("F2");
+    for _ in 0..5 {
+        h.key("Backspace");
+    }
+    h.type_text("b.txt");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("left/b.txt").exists() && !h.path("left/a.txt").exists());
+    h.key("Ctrl+Z");
+    h.settle().await;
+    assert!(h.path("left/a.txt").exists() && !h.path("left/b.txt").exists(), "name back");
+
+    h.focus("a.txt");
+    h.key("F6");
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.path("right/a.txt").exists() && !h.path("left/a.txt").exists(), "moved");
+    h.key("Ctrl+Z");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.path("left/a.txt").exists() && !h.path("right/a.txt").exists(), "moved back");
+    h.key("Ctrl+Z");
+    assert!(h.status().contains("Nothing to undo"), "the move back is not undone again");
 }
