@@ -1363,3 +1363,34 @@ async fn d_and_a_click_on_the_drive_open_the_list_for_that_panel() {
     assert_eq!(h.app.workspace().active_side(), SideId::Right, "the clicked panel takes it");
     assert!(h.screen().contains("[Local]"), "the panel title names the drive");
 }
+
+#[tokio::test]
+async fn dates_and_permissions_change_on_the_selection() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("F9");
+    h.type_text("dates and perm");
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "asks what to change");
+    for _ in 0..3 {
+        h.key("Backspace");
+    }
+    h.type_text("2001-02-03 04:05 mode=640");
+    h.key("Enter");
+    h.settle().await;
+    let meta = fs::metadata(h.path("left/a.txt")).unwrap();
+    assert_eq!(meta.permissions().mode() & 0o7777, 0o640);
+    let seconds = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    assert!((981_000_000..982_000_000).contains(&seconds), "February 2001: {seconds}");
+    // A wrong word changes nothing and says why.
+    h.key("F9");
+    h.type_text("dates and perm");
+    h.key("Enter");
+    for _ in 0..3 {
+        h.key("Backspace");
+    }
+    h.type_text("yesterday");
+    h.key("Enter");
+    assert!(h.status().contains("Not understood"), "{}", h.status());
+}

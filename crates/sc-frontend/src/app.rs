@@ -22,7 +22,7 @@ use sc_ops::{
 };
 use sc_panel::{Listing, LoadRequest, Panel, SideId, Workspace};
 use sc_transfer::{JobEvent, JobId, JobInfo, JobKind, JobSpec, JobState, TransferManager};
-use sc_vfs::{Capabilities, EntryKind, HashAlgorithm, SetAttributes, VfsPath, collect_listing};
+use sc_vfs::{Capabilities, EntryKind, HashAlgorithm, VfsPath, collect_listing};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -1002,6 +1002,19 @@ impl App {
             }
             Action::Unpack => self.unpack_current(),
             Action::Properties => self.show_properties(),
+            Action::Attributes if nothing => self.set_error("Nothing to change"),
+            Action::Attributes => {
+                let prompt = format!(
+                    "Change {} (date 2026-11-17, time 10:30, now, mode=644, -r):",
+                    Self::count_text(&targets)
+                );
+                self.ask(
+                    "Dates and permissions",
+                    &prompt,
+                    "now",
+                    InputPurpose::Attributes(targets),
+                );
+            }
             Action::Checksum => self.checksum_current(),
             Action::ToggleSelect => self.workspace.active_mut().toggle_current(),
             Action::SelectMask => {
@@ -1316,18 +1329,14 @@ impl App {
                 );
             }
             InputPurpose::SearchContent { mask } => self.start_search(&mask, &text),
-            InputPurpose::Permissions(path) => {
-                let Ok(mode) = u32::from_str_radix(&text, 8) else {
-                    return self.set_error(format!("Not an octal mode: {text}"));
+            InputPurpose::Attributes(paths) => {
+                let change = match sc_ops::parse_change(&text, std::time::SystemTime::now()) {
+                    Ok(change) => change,
+                    Err(e) => return self.set_error(e),
                 };
                 self.spawn_task(async move {
-                    let result = async {
-                        let provider = registry.provider_for(&path).await?;
-                        let attributes = SetAttributes { permissions: Some(mode), modified: None };
-                        provider.set_attributes(&path, &attributes).await
-                    }
-                    .await;
-                    done(result.map(|()| format!("Permissions set to {mode:o}")), None)
+                    let result = sc_ops::apply_change(&registry, &paths, &change).await;
+                    done(result.map(|n| format!("Changed {n} item(s)")), None)
                 });
             }
             InputPurpose::ExportSettings => {
@@ -1862,19 +1871,21 @@ impl App {
         if let Some(target) = &entry.symlink_target {
             lines.push(format!("Points to:   {target}"));
         }
-        let then = entry.permissions.map(|mode| {
+        let mut suggestion = "now".to_owned();
+        if let Some(mode) = entry.permissions {
             lines.push(format!(
                 "Permissions: {} ({:o})",
                 sc_panel::format::permissions(mode),
                 mode & 0o7777
             ));
-            InputDialog::new(
-                "Permissions",
-                &format!("Octal mode for {}:", entry.name),
-                &format!("{:o}", mode & 0o7777),
-                InputPurpose::Permissions(path.clone()),
-            )
-        });
+            suggestion = format!("mode={:o}", mode & 0o7777);
+        }
+        let then = Some(InputDialog::new(
+            "Dates and permissions",
+            &format!("Change {} (date, time, now, mode=644, -r):", entry.name),
+            &suggestion,
+            InputPurpose::Attributes(vec![path.clone()]),
+        ));
         self.overlay =
             Some(Overlay::Message(MessageDialog { title: "Properties".into(), lines, then }));
     }

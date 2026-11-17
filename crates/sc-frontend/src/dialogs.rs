@@ -84,8 +84,8 @@ pub enum InputPurpose {
         /// Mask from the first question.
         mask: String,
     },
-    /// New octal permissions for this item.
-    Permissions(VfsPath),
+    /// Change the dates and permissions of these items.
+    Attributes(Vec<VfsPath>),
     /// Write the settings to the typed file.
     ExportSettings,
     /// Read settings from the typed file.

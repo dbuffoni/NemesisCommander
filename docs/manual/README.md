@@ -132,7 +132,8 @@ default; the destination can be edited before you confirm.
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
 | Alt+F5 / Alt+F9 | Pack into an archive / unpack one |
-| Alt+Enter | Properties, and change the permissions |
+| Alt+Enter | Properties, and change the dates and permissions |
+| F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
 
 | Copy | New folder | Delete |
@@ -558,7 +559,7 @@ on the settings screen (Ctrl+,).
 | Shift+F8, Shift+Delete | Delete permanently |
 | Alt+F5 | Pack into archive |
 | Alt+F9 | Unpack archive |
-| Alt+Enter | Properties and permissions |
+| Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |
 
 | Select | |

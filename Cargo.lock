@@ -5494,6 +5494,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures",
+ "jiff",
  "proptest",
  "regex",
  "sc-hash",

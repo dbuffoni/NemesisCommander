@@ -105,6 +105,7 @@ actions! {
     Pack          = "files.pack",           Files, true,  "Pack into archive…",       ["Alt+F5"];
     Unpack        = "files.unpack",         Files, false, "Unpack archive…",          ["Alt+F9"];
     Properties    = "files.properties",     Files, false, "Properties and permissions", ["Alt+Enter"];
+    Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", [];
     Checksum      = "files.checksum",       Files, false, "Checksum",                 ["Ctrl+K"];
     // Select
     ToggleSelect  = "select.toggle",        Select, true, "Select / unselect",        ["Insert", "Space"];
