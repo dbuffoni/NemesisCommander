@@ -188,7 +188,7 @@ ApplicationWindow {
                             x: 4
                             spacing: 4
                             Label {
-                                text: modelData.number
+                                text: "F" + modelData.number
                                 font.bold: true
                             }
                             Label {

@@ -143,7 +143,7 @@ async fn both_panels_list_their_folders() {
     let screen = h.screen();
     assert!(screen.contains("docs/"));
     assert!(screen.contains("<DIR>"));
-    assert!(screen.contains("1Help"), "function key bar:\n{screen}");
+    assert!(screen.contains("F1Help"), "function key bar:\n{screen}");
 }
 
 #[tokio::test]

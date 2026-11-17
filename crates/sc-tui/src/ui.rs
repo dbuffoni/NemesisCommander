@@ -271,14 +271,16 @@ fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
             .action_for(&KeyChord::plain(Key::F(n)))
             .map(short_label)
             .unwrap_or("");
-        // Ten labels of six letters fit 80 columns.
+        // With the "F" in front, ten labels fit 80 columns at five letters.
+        let width = if area.width < 90 { 5 } else { 6 };
         let label = match label {
-            "Commands" if area.width < 90 => "Cmds",
+            "Commands" if width < 6 => "Cmds",
             other => other,
         };
-        spans.push(Span::raw(format!("{n}")));
+        let label: String = label.chars().take(width).collect();
+        spans.push(Span::raw(format!("F{n}")));
         spans.push(Span::styled(
-            format!("{label:<6}"),
+            format!("{label:<width$}"),
             Style::new().fg(Color::Black).bg(Color::Cyan),
         ));
         spans.push(Span::raw(" "));
