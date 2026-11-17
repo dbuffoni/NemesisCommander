@@ -46,6 +46,12 @@ pub enum Field {
     TabWidth,
     /// Files above this size open as hex.
     HexAbove,
+    /// Font family of the window.
+    FontFamily,
+    /// Font size of the window.
+    FontSize,
+    /// Fixed-width font family of the window.
+    FixedFontFamily,
 }
 
 /// How a [`Field`] is changed.
@@ -85,7 +91,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 17] = [
+    pub const ALL: [Field; 20] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -103,6 +109,9 @@ impl Field {
         Field::Wrap,
         Field::TabWidth,
         Field::HexAbove,
+        Field::FontFamily,
+        Field::FontSize,
+        Field::FixedFontFamily,
     ];
 
     /// The section it is shown in.
@@ -115,6 +124,7 @@ impl Field {
                 "Transfers"
             }
             Wrap | TabWidth | HexAbove => "Viewer",
+            FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
         }
     }
 
@@ -139,6 +149,9 @@ impl Field {
             Wrap => "Wrap long lines",
             TabWidth => "Spaces per tab",
             HexAbove => "Open as hex above (MiB)",
+            FontFamily => "Font (empty: the system's)",
+            FontSize => "Font size in points (0: the system's)",
+            FixedFontFamily => "Fixed-width font (empty: monospace)",
         }
     }
 
@@ -149,7 +162,8 @@ impl Field {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
             | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
-            Editor => FieldKind::Text,
+            Editor | FontFamily | FixedFontFamily => FieldKind::Text,
+            FontSize => FieldKind::Number(0, 48),
             ParallelJobs => FieldKind::Number(1, 64),
             ParallelFiles => FieldKind::Number(1, 64),
             BandwidthLimit => FieldKind::Number(0, 10_000_000),
@@ -182,6 +196,9 @@ impl Field {
             Wrap => on(v.wrap),
             TabWidth => v.tab_width.to_string(),
             HexAbove => v.hex_above_mib.to_string(),
+            FontFamily => config.appearance.font_family.clone(),
+            FontSize => config.appearance.font_size.to_string(),
+            FixedFontFamily => config.appearance.fixed_font_family.clone(),
         }
     }
 
@@ -201,7 +218,7 @@ impl Field {
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),
             Conflict => t.conflict = cycle(&CONFLICTS, t.conflict, delta),
-            Editor => {}
+            Editor | FontFamily | FixedFontFamily => {}
             _ => {
                 let current: u64 = self.value(config).parse().unwrap_or(0);
                 let next = current.saturating_add_signed(delta);
@@ -226,12 +243,16 @@ impl Field {
                 Field::Retries => t.retries = n as u32,
                 Field::TabWidth => config.viewer.tab_width = n as usize,
                 Field::HexAbove => config.viewer.hex_above_mib = n,
+                Field::FontSize => config.appearance.font_size = n as u32,
                 _ => {}
             }
             return Ok(());
         }
-        if self == Field::Editor {
-            config.general.editor = text.to_owned();
+        match self {
+            Field::Editor => config.general.editor = text.to_owned(),
+            Field::FontFamily => config.appearance.font_family = text.to_owned(),
+            Field::FixedFontFamily => config.appearance.fixed_font_family = text.to_owned(),
+            _ => {}
         }
         Ok(())
     }
@@ -496,6 +517,23 @@ mod tests {
         assert!(config.keys.is_empty(), "back to the built-in keys: no overrides");
         clear_keys(&mut config, Action::Quit);
         assert_eq!(config.keys["app.quit"], Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_window_fonts_are_options() {
+        let mut config = Config::default();
+        Field::FontFamily.set(&mut config, " Fira Sans ").unwrap();
+        Field::FontSize.set(&mut config, "200").unwrap();
+        Field::FixedFontFamily.set(&mut config, "Fira Code").unwrap();
+        assert_eq!(config.appearance.font_family, "Fira Sans");
+        assert_eq!(config.appearance.font_size, 48, "clamped");
+        assert_eq!(Field::FixedFontFamily.value(&config), "Fira Code");
+        let again = Config::from_toml(&config.to_toml(), "test").unwrap();
+        assert_eq!(again.appearance, config.appearance);
+        for field in [Field::FontFamily, Field::FontSize, Field::FixedFontFamily] {
+            field.reset(&mut config);
+        }
+        assert_eq!(config.appearance, Default::default());
     }
 
     #[test]

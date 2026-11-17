@@ -50,6 +50,18 @@ impl Default for GeneralSettings {
     }
 }
 
+/// Fonts of the window (the terminal interface uses the terminal's font).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AppearanceSettings {
+    /// Font family of the text; empty for the system font.
+    pub font_family: String,
+    /// Font size in points; 0 for the system size.
+    pub font_size: u32,
+    /// Fixed-width font family (viewers, columns); empty for `monospace`.
+    pub fixed_font_family: String,
+}
+
 /// How panels show files.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -178,6 +190,8 @@ pub struct Config {
     pub transfers: TransferSettings,
     /// Viewer.
     pub viewer: ViewerSettings,
+    /// Fonts of the window.
+    pub appearance: AppearanceSettings,
     /// Shortcut overrides: action id → key chords (empty list unbinds).
     pub keys: BTreeMap<String, Vec<String>>,
     /// Bookmarks, in menu order.

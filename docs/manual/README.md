@@ -507,6 +507,9 @@ with a dot.
     priority order), files at the same time in a job, the check after
     copying, what to do when a file exists, the bandwidth limit, retries.
   - Viewer: wrapping, tab width, when to open files as hex.
+  - Window fonts: the font and its size for all text, and the fixed-width
+    font of the viewers and lists (empty or 0: the system's). Only the
+    window uses them; the terminal interface uses the terminal's font.
 
 The same settings serve the window and the terminal interface: a shortcut
 changed in one works in the other.

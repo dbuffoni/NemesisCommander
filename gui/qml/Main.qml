@@ -26,7 +26,14 @@ ApplicationWindow {
 
     // Shared sizes and colors.
     readonly property int rowHeight: Math.ceil(fixedMetrics.height * 1.3)
-    readonly property font fixedFont: Qt.font({ family: "monospace", pointSize: font.pointSize })
+    // The fonts of the settings; empty or 0 keeps the system's.
+    readonly property var fonts: screen ? screen.fonts : null
+    font.family: fonts && fonts.family ? fonts.family : Qt.application.font.family
+    font.pointSize: fonts && fonts.size > 0 ? fonts.size : Qt.application.font.pointSize
+    readonly property font fixedFont: Qt.font({
+        family: fonts && fonts.fixed_family ? fonts.fixed_family : "monospace",
+        pointSize: font.pointSize
+    })
     readonly property color accent: "#c8901a"
     readonly property color errorColor: "#c0392b"
     readonly property bool dark: palette.window.hslLightness < 0.5

@@ -33,6 +33,19 @@ pub struct Screen {
     pub overlay: Option<OverlayView>,
     /// A copy conflict waiting for an answer, shown above everything.
     pub conflict: Option<ConflictView>,
+    /// The fonts of the window (the terminal ignores them).
+    pub fonts: FontsView,
+}
+
+/// The fonts chosen in the settings; empty or 0 means the system's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FontsView {
+    /// Family of the text.
+    pub family: String,
+    /// Size in points.
+    pub size: u32,
+    /// Family of the fixed-width text.
+    pub fixed_family: String,
 }
 
 /// One side of the window.
@@ -420,6 +433,11 @@ impl Screen {
             keys,
             overlay,
             conflict,
+            fonts: FontsView {
+                family: app.context().config.appearance.font_family.clone(),
+                size: app.context().config.appearance.font_size,
+                fixed_family: app.context().config.appearance.fixed_font_family.clone(),
+            },
         }
     }
 }
