@@ -21,6 +21,7 @@
 mod app;
 pub mod commands;
 mod dialogs;
+pub mod diff;
 pub mod drives;
 pub mod git;
 mod input;

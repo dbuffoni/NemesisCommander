@@ -286,7 +286,12 @@ size and age.
 ![Search](images/search.png)
 
 **Alt+C** compares: two files (one under the cursor in each panel) by
-content, or two folders, selecting the entries that differ.
+content, or two folders, selecting the entries that differ. Two different
+text files open side by side, with the file of the panel you are in on the
+left: `-` marks lines only on the left, `+` lines only on the right and `~`
+lines that differ (blue on the left, green on the right). **n** and **p** jump to the
+next and previous change, **Esc** closes. Files that are identical or not text just
+report that.
 
 ## Archives
 

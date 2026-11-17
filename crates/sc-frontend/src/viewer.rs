@@ -204,6 +204,10 @@ pub struct Viewer {
     pub kind: Option<Kind>,
     /// A formatted document (Markdown, Office).
     pub rich: Option<RichText>,
+    /// This viewer shows the comparison of two files (Alt+C).
+    pub diff: Option<crate::diff::Diff>,
+    /// A title to show instead of the path.
+    pub title: Option<String>,
     /// A PDF: its bytes, page count and the page shown (from 0).
     pub pdf: Option<(Arc<Vec<u8>>, usize, usize)>,
     /// A 3D model and where it is seen from.
@@ -235,6 +239,8 @@ impl Viewer {
             image: None,
             kind,
             rich: None,
+            diff: None,
+            title: None,
             pdf: None,
             model: None,
             zoom: Zoom::default(),
@@ -350,9 +356,42 @@ impl Viewer {
         self.render_source()
     }
 
+    /// A viewer showing the comparison of two files.
+    pub fn for_diff(left: VfsPath, diff: crate::diff::Diff) -> Self {
+        let mut viewer = Viewer::new(left, false);
+        viewer.title = Some(format!("{} ↔ {}", diff.left_name, diff.right_name));
+        viewer.data = Some(Arc::new(Vec::new()));
+        viewer.rich = Some(RichText::default());
+        viewer.diff = Some(diff);
+        viewer
+    }
+
+    /// Scrolls to the next (`1`) or previous (`-1`) change of a comparison.
+    pub fn jump_change(&mut self, direction: isize) {
+        let Some(diff) = &self.diff else { return };
+        let starts: Vec<usize> =
+            (0..diff.changes.len()).filter_map(|i| diff.line_of_change(i)).collect();
+        let target = if direction >= 0 {
+            starts.iter().copied().find(|line| *line > self.scroll)
+        } else {
+            starts.iter().rev().copied().find(|line| *line < self.scroll)
+        };
+        if let Some(line) = target {
+            self.scroll = line;
+        }
+    }
+
     /// Lays a formatted document out for `columns` (front ends call this
     /// with their width before drawing).
     pub fn layout(&mut self, columns: usize) {
+        if let (Some(diff), Some(rich)) = (&self.diff, &mut self.rich) {
+            if rich.width != columns {
+                rich.lines = diff.render(columns);
+                rich.width = columns;
+            }
+            self.scroll = self.scroll.min(rich.lines.len().saturating_sub(1));
+            return;
+        }
         if let Some(rich) = &mut self.rich {
             rich.layout(columns);
             let max = rich.lines.len().saturating_sub(1);
@@ -460,7 +499,7 @@ impl Viewer {
     /// Switches between text (or the picture) and hex, keeping roughly the
     /// same position.
     pub fn toggle_hex(&mut self) {
-        if self.data.is_none() {
+        if self.data.is_none() || self.diff.is_some() {
             return;
         }
         if self.image.is_some() || self.rich.is_some() || self.pdf.is_some() || self.model.is_some()

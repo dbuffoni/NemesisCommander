@@ -937,6 +937,8 @@ impl App {
                     (Some(Key::PageDown | Key::Space), _) => viewer.scroll_by(ipage, page),
                     (Some(Key::Home), _) => viewer.scroll = 0,
                     (Some(Key::End), _) => viewer.scroll_by(isize::MAX, page),
+                    (_, Some('n')) if viewer.diff.is_some() => viewer.jump_change(1),
+                    (_, Some('p')) if viewer.diff.is_some() => viewer.jump_change(-1),
                     (Some(Key::F(4)), _) | (_, Some('h')) => viewer.toggle_hex(),
                     (Some(Key::F(2)), _) | (_, Some('w')) => viewer.wrap = !viewer.wrap,
                     _ => {}
@@ -2115,8 +2117,13 @@ impl App {
             let registry = self.context.registry.clone();
             self.set_status("Comparing…");
             return self.spawn_task(async move {
-                let result = compare_files(&registry, &left, &right).await;
-                done(result, None)
+                match diff_files(&registry, &left, &right).await {
+                    Ok(Some(viewer)) => AppEvent::Show(Box::new(Overlay::Viewer(viewer))),
+                    Ok(None) | Err(_) => {
+                        let result = compare_files(&registry, &left, &right).await;
+                        done(result, None)
+                    }
+                }
             });
         }
         let (only_a, only_b, different) = compare_listings(a, b);
@@ -2299,6 +2306,27 @@ async fn make_dirs(
 }
 
 /// Compares two files by size, then by BLAKE3 hash.
+/// The side-by-side comparison of two text files, or `None` when they are
+/// not both (small enough) text.
+async fn diff_files(
+    registry: &sc_vfs::ProviderRegistry,
+    a: &VfsPath,
+    b: &VfsPath,
+) -> Result<Option<Viewer>, String> {
+    const LIMIT: u64 = 4 << 20;
+    let (data_a, cut_a) = viewer::load(registry, a, LIMIT).await.map_err(|e| e.to_string())?;
+    let (data_b, cut_b) = viewer::load(registry, b, LIMIT).await.map_err(|e| e.to_string())?;
+    if cut_a || cut_b || !viewer::looks_like_text(&data_a) || !viewer::looks_like_text(&data_b) {
+        return Ok(None);
+    }
+    let (Ok(text_a), Ok(text_b)) = (String::from_utf8(data_a), String::from_utf8(data_b)) else {
+        return Ok(None);
+    };
+    let name = |p: &VfsPath| p.file_name().unwrap_or_default().to_owned();
+    Ok(crate::diff::Diff::new(&name(a), &text_a, &name(b), &text_b)
+        .map(|diff| Viewer::for_diff(a.clone(), diff)))
+}
+
 async fn compare_files(
     registry: &sc_vfs::ProviderRegistry,
     a: &VfsPath,

@@ -1466,3 +1466,28 @@ async fn panels_in_a_git_repository_show_marks_and_the_branch() {
     assert!(line("loose.txt").contains("? loose.txt"), "{screen}");
     assert!(h.app.git[1].is_none(), "the other folder is not a repository");
 }
+
+#[tokio::test]
+async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("right/a.txt"), "alpha\nbeta\n").unwrap();
+    fs::write(h.path("left/a.txt"), "alpha\ngamma\ndelta\n").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("a.txt");
+    h.key("Tab");
+    h.focus("a.txt");
+    h.key("Alt+C");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(_)))).await;
+    let screen = h.screen();
+    assert!(screen.contains("a.txt ↔ a.txt"), "{screen}");
+    // The focused (right) panel's file is on the left of the comparison.
+    let changed = screen.lines().find(|l| l.contains("gamma")).unwrap();
+    assert!(changed.contains('~') && changed.contains("beta"), "paired on one row: {changed}");
+    let added = screen.lines().find(|l| l.contains("delta")).unwrap();
+    assert!(added.contains('+'), "only on the right: {added}");
+    assert!(screen.contains("next/previous change"), "{screen}");
+    h.key("n");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}

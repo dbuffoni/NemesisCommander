@@ -20,6 +20,7 @@ sc-app.workspace = true
 sc-ssh.workspace = true
 sc-preview.workspace = true
 async-trait.workspace = true
+similar.workspace = true
 bytes.workspace = true
 futures.workspace = true
 serde.workspace = true

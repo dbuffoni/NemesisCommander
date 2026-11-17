@@ -758,7 +758,7 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
         viewer.visible_rows(rows)
     };
     ViewerView {
-        title: display_location(&viewer.path),
+        title: viewer.title.clone().unwrap_or_else(|| display_location(&viewer.path)),
         mode: viewer.mode().into(),
         lines,
         percent: if total <= rows { 100 } else { ((viewer.scroll + rows) * 100 / total).min(100) },
@@ -783,6 +783,9 @@ fn file_url(path: &std::path::Path) -> String {
 
 /// The keys that matter in the viewer's current mode.
 pub fn viewer_keys(viewer: &Viewer) -> &'static str {
+    if viewer.diff.is_some() {
+        return "n/p: next/previous change   PgUp/PgDn: scroll   Esc: close";
+    }
     match viewer.mode() {
         "pdf" => "PgUp/PgDn: page   +/-: zoom   0: fit   F4: hex   Esc: close",
         "model" => "Arrows: turn   +/-: zoom   0: reset   F4: hex   Esc: close",
