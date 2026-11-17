@@ -118,6 +118,7 @@ ApplicationWindow {
                     onVisibleRowsChanged: window.reportSize()
                 }
                 PanelView {
+                    side: 1
                     view: window.screen ? window.screen.panels[1] : null
                     Layout.fillWidth: true
                     Layout.fillHeight: true

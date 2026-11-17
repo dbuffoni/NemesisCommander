@@ -119,7 +119,7 @@ actions! {
     GoTo          = "nav.goto",             Navigate, true,  "Go to location…",       ["Ctrl+L"];
     Back          = "nav.back",             Navigate, false, "Back",                  ["Alt+Left"];
     Forward       = "nav.forward",          Navigate, false, "Forward",               ["Alt+Right"];
-    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N"];
+    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N", "d"];
     Bookmarks     = "nav.bookmarks",        Navigate, true,  "Bookmarks…",            ["Ctrl+D"];
     AddBookmark   = "nav.add-bookmark",     Navigate, false, "Bookmark this folder",  ["Ctrl+Shift+D"];
     AddBookmarkTarget = "nav.add-bookmark-target", Navigate, false, "Bookmark this folder with the other panel's", ["Ctrl+Alt+D"];

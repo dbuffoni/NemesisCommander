@@ -53,6 +53,8 @@ pub struct FontsView {
 pub struct PanelView {
     /// Location of the panel, as the user types it.
     pub title: String,
+    /// The drive or connection the location is on (`Local`, `C:`, a name).
+    pub drive: String,
     /// Tabs, when there is more than one.
     pub tabs: Vec<TabView>,
     /// This side has the keyboard focus.
@@ -514,6 +516,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .collect();
     let view = PanelView {
         title: display_location(panel.location()),
+        drive: crate::drives::drive_label(&app.context().config, panel.location()),
         tabs,
         active,
         rows: row_views,
@@ -585,6 +588,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
     };
     PanelView {
         title,
+        drive: String::new(),
         tabs: Vec::new(),
         active: false,
         rows: Vec::new(),

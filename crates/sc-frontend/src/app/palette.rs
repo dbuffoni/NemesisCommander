@@ -1,7 +1,8 @@
 //! The command list (F9): finding a command, running it, and giving it a
 //! shortcut.
 
-use sc_config::Key;
+use sc_config::{Action, Key};
+use sc_panel::SideId;
 
 use super::App;
 use crate::commands::CommandPalette;
@@ -68,6 +69,13 @@ impl App {
     /// A click in the command list: on category button `index`
     /// (`"category"`) or on listed row `index` (`"command"`, which runs it).
     pub fn pick(&mut self, what: &str, index: usize) {
+        // A click on the drive above a panel: that panel takes the list.
+        if what == "drive" {
+            let side = if index == 0 { SideId::Left } else { SideId::Right };
+            self.workspace.set_active(side);
+            self.perform(Action::Drives);
+            return;
+        }
         let Some(Overlay::Commands(mut palette)) = self.overlay.take() else {
             return;
         };

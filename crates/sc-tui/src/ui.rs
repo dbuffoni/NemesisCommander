@@ -12,6 +12,7 @@ use sc_panel::{PARENT, SideId};
 use sc_transfer::JobState;
 
 use sc_frontend::commands::CommandPalette;
+use sc_frontend::drives::drive_label;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
     column_headers, commands_view, describe, entry_details, job_line, jobs_summary, panel_footer,
@@ -118,9 +119,14 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let panel = side_state.panel();
     let border = if is_active { Style::new().fg(Color::Cyan) } else { dim() };
 
-    let mut block = Block::bordered()
-        .border_style(border)
-        .title(Line::styled(format!(" {} ", display_location(panel.location())), bold()));
+    let mut block = Block::bordered().border_style(border).title(Line::styled(
+        format!(
+            " [{}] {} ",
+            drive_label(&app.context().config, panel.location()),
+            display_location(panel.location())
+        ),
+        bold(),
+    ));
     if side_state.tabs().len() > 1 {
         let spans: Vec<Span> = side_state
             .tabs()

@@ -63,6 +63,31 @@ impl Drive {
     }
 }
 
+/// The short name shown above a panel for `location`: the saved connection
+/// it is inside, else the kind of place (`Local`, `C:`, `sftp`, `Archive`).
+pub fn drive_label(config: &Config, location: &sc_vfs::VfsPath) -> String {
+    let text = location.to_string();
+    let scheme = location.scheme();
+    if scheme == "file" {
+        let local = location.to_local_path().map(|p| p.display().to_string()).unwrap_or_default();
+        let bytes = local.as_bytes();
+        return if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+            local[..2].to_ascii_uppercase()
+        } else {
+            "Local".to_owned()
+        };
+    }
+    if ARCHIVE_SCHEMES.contains(&scheme) {
+        return "Archive".to_owned();
+    }
+    config
+        .connections
+        .iter()
+        .filter(|c| text.starts_with(c.uri.trim_end_matches('/')))
+        .max_by_key(|c| c.uri.len())
+        .map_or_else(|| scheme.to_owned(), |c| c.name.clone())
+}
+
 /// Every drive of the list, grouped by category (Local, Remote, Archive):
 /// this computer's drives first, then the saved connections in their order.
 pub fn drives(config: &Config) -> Vec<Drive> {
@@ -246,5 +271,21 @@ tmpfs /tmp tmpfs rw 0 0
             list.last().unwrap().row(),
             format!("{:<8} {:<20} {}", "Archive", "site", "zip:///srv/site.zip!/")
         );
+    }
+
+    #[test]
+    fn a_panel_names_its_drive() {
+        let mut config = Config::default();
+        config.connections.push(Connection {
+            name: "nas".into(),
+            uri: "sftp://me@nas/srv".into(),
+            identity_file: None,
+            options: Default::default(),
+        });
+        let label = |text: &str| drive_label(&config, &sc_vfs::VfsPath::parse(text).unwrap());
+        assert_eq!(label("/var/tmp"), "Local");
+        assert_eq!(label("sftp://me@nas/srv/photos"), "nas");
+        assert_eq!(label("sftp://me@other/home"), "sftp");
+        assert_eq!(label("s3://bucket/key"), "s3");
     }
 }

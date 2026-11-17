@@ -302,7 +302,9 @@ Every command works the same on remote locations, written as URIs:
 
 ### One list for drives and connections
 
-**Alt+F1** (or **Ctrl+N**) opens the drive list: the drives of this computer
+**D**, **Alt+F1** or **Ctrl+N** open the drive list (in the window, clicking the
+drive name above a panel does it for that panel; the name shows where the
+panel is: `Local`, a drive letter, a connection's name): the drives of this computer
 and your saved connections together, grouped by a category column:
 
 - **Local**: your home folder, the root and the disks and network shares
@@ -574,7 +576,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| Alt+F1, Ctrl+N | Drives and connections (F4 on a connection: private key) |
+| D, Alt+F1, Ctrl+N | Drives and connections (F4 on a connection: private key) |
 | Ctrl+D | Bookmarks |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |

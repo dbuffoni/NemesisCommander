@@ -9,6 +9,8 @@ import QtQuick.Layouts
 Rectangle {
     id: panel
     property var view: null
+    // 0 for the left panel, 1 for the right one.
+    property int side: 0
     // Rows that fit in the listing; the window reports it to the application.
     readonly property int visibleRows: Math.max(1, Math.floor(list.height / theme.rowHeight))
     readonly property var theme: ApplicationWindow.window
@@ -55,11 +57,36 @@ Rectangle {
             }
         }
 
-        Label {
+        // The drive or connection of this panel; a click chooses another
+        // one (the same list as Alt+F1).
+        RowLayout {
             Layout.fillWidth: true
-            text: panel.view ? panel.view.title : ""
-            elide: Text.ElideMiddle
-            font.bold: true
+            spacing: 6
+            Rectangle {
+                implicitWidth: driveLabel.implicitWidth + 12
+                implicitHeight: driveLabel.implicitHeight + 4
+                radius: 2
+                color: palette.button
+                Label {
+                    id: driveLabel
+                    anchors.centerIn: parent
+                    text: (panel.view ? panel.view.drive : "") + " \u25be"
+                    color: palette.buttonText
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        panel.theme.app.pick("drive", panel.side)
+                        panel.theme.focusKeys()
+                    }
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: panel.view ? panel.view.title : ""
+                elide: Text.ElideMiddle
+                font.bold: true
+            }
         }
 
         // Column titles; the sorted one has an arrow.

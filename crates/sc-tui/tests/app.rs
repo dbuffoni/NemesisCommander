@@ -1350,3 +1350,16 @@ async fn left_and_right_move_between_folders_when_asked() {
     h.settle().await;
     assert_eq!(h.current(), "a.txt", "a file is not entered");
 }
+
+#[tokio::test]
+async fn d_and_a_click_on_the_drive_open_the_list_for_that_panel() {
+    let mut h = Harness::new().await;
+    h.key("d");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "d lists the drives");
+    h.key("Esc");
+    assert_eq!(h.app.workspace().active_side(), SideId::Left);
+    h.app.pick("drive", 1);
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    assert_eq!(h.app.workspace().active_side(), SideId::Right, "the clicked panel takes it");
+    assert!(h.screen().contains("[Local]"), "the panel title names the drive");
+}
