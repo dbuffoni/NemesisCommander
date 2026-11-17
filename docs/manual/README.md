@@ -484,8 +484,9 @@ sc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
 
 ## Settings
 
-**Ctrl+,** opens the settings screen. It lists every option, every
-command's shortcuts, and the commands to share settings. Changes are saved
+**Ctrl+,** opens the settings screen. It lists every option and the
+commands to share settings. Shortcuts are set in the command list (**F9**,
+then **Ctrl+K**). Changes are saved
 and applied at once; values that differ from the built-in ones are marked
 with a dot.
 
@@ -500,12 +501,6 @@ with a dot.
     priority order), files at the same time in a job, the check after
     copying, what to do when a file exists, the bandwidth limit, retries.
   - Viewer: wrapping, tab width, when to open files as hex.
-- **Shortcuts**: Enter, then press the new key. **a** adds a key instead
-  of replacing them, **Delete** leaves the command without a key, **r**
-  gives back the built-in keys. A key that belonged to another command is
-  taken from it, and the status line says which.
-
-![Recording a shortcut](images/settings-shortcut.png)
 
 The same settings serve the window and the terminal interface: a shortcut
 changed in one works in the other.

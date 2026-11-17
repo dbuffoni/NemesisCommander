@@ -5,7 +5,7 @@
 //! The functions here only change a [`Config`]; the application saves it
 //! and applies it (key map, transfer manager) afterwards.
 
-use sc_config::{Action, Category, Config, KeyChord, Keymap};
+use sc_config::{Action, Config, KeyChord, Keymap};
 use sc_index::SortKey;
 use sc_ops::{ConflictPolicy, VerifyMode};
 
@@ -302,19 +302,8 @@ pub enum Row {
     Header(&'static str),
     /// An option.
     Option(Field),
-    /// The keys of a command.
-    Shortcut(Action),
     /// A command.
     Command(Command),
-}
-
-/// Waiting for the key to give to a command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Recording {
-    /// The command that gets the key.
-    pub action: Action,
-    /// Add the key instead of replacing the command's keys.
-    pub add: bool,
 }
 
 /// The state of the settings screen.
@@ -324,8 +313,6 @@ pub struct SettingsScreen {
     pub rows: Vec<Row>,
     /// The highlighted row (never a header).
     pub cursor: usize,
-    /// Set while the next key press becomes a shortcut.
-    pub recording: Option<Recording>,
 }
 
 impl Default for SettingsScreen {
@@ -346,15 +333,9 @@ impl SettingsScreen {
             }
             rows.push(Row::Option(field));
         }
-        for category in Category::ALL.iter() {
-            rows.push(Row::Header(shortcut_header(*category)));
-            rows.extend(
-                Action::ALL.iter().filter(|a| a.category() == *category).map(|a| Row::Shortcut(*a)),
-            );
-        }
         rows.push(Row::Header("Share settings"));
         rows.extend(Command::ALL.map(Row::Command));
-        SettingsScreen { rows, cursor: 1, recording: None }
+        SettingsScreen { rows, cursor: 1 }
     }
 
     /// The highlighted row.
@@ -380,24 +361,6 @@ impl SettingsScreen {
         if let Some(row) = ahead.or_else(behind) {
             self.cursor = row;
         }
-    }
-
-    /// Puts the cursor on the first shortcut of `action`'s row.
-    pub fn select_shortcut(&mut self, action: Action) {
-        if let Some(i) = self.rows.iter().position(|r| *r == Row::Shortcut(action)) {
-            self.cursor = i;
-        }
-    }
-}
-
-fn shortcut_header(category: Category) -> &'static str {
-    match category {
-        Category::Files => "Shortcuts: Files",
-        Category::Select => "Shortcuts: Select",
-        Category::Navigate => "Shortcuts: Navigate",
-        Category::View => "Shortcuts: View",
-        Category::Tools => "Shortcuts: Tools",
-        Category::App => "Shortcuts: SuperCommander",
     }
 }
 
@@ -540,7 +503,5 @@ mod tests {
         assert_eq!(screen.current(), Row::Option(Field::ShowHidden), "over the Panels title");
         screen.move_cursor(1000);
         assert_eq!(screen.current(), Row::Command(Command::EditFile));
-        screen.select_shortcut(Action::Copy);
-        assert_eq!(screen.current(), Row::Shortcut(Action::Copy));
     }
 }

@@ -1121,30 +1121,6 @@ async fn the_settings_screen_changes_options_and_saves_them() {
 }
 
 #[tokio::test]
-async fn the_settings_screen_records_shortcuts() {
-    let mut h = Harness::new().await;
-    h.focus("a.txt");
-    h.key("Ctrl+,");
-    settings_row(&mut h, "Refresh");
-    h.key("Enter");
-    assert!(h.screen().contains("Press the new shortcut"), "{}", h.screen());
-    h.key("F5");
-    assert!(h.status().contains("taken from Files/Copy"), "{}", h.status());
-    assert_eq!(h.app.context().config.keys["view.refresh"], ["F5"]);
-    h.key("Esc");
-    // F5 now refreshes; Copy has no key left.
-    h.key("F5");
-    assert!(h.app.overlay().is_none(), "F5 no longer opens the copy question");
-    h.key("Ctrl+,");
-    settings_row(&mut h, "Copy");
-    assert!(h.screen().contains("none"), "{}", h.screen());
-    h.press(KeyPress::char('r'));
-    h.key("Esc");
-    h.key("F5");
-    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "F5 copies again");
-}
-
-#[tokio::test]
 async fn settings_are_sent_to_another_folder_from_the_screen() {
     let mut h = Harness::new().await;
     h.key("Ctrl+,");

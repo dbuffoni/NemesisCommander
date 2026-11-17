@@ -91,8 +91,6 @@ fn every_dialog_draws_cleanly() {
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
         ("Ctrl+,", "settings"),
-        // Recording a shortcut.
-        ("Ctrl+, End Up Up Up Up Up Up Up Up Up Enter", "settings"),
     ] {
         let run = run(home.path(), keys, None);
         assert_no_qml_warnings(&run);

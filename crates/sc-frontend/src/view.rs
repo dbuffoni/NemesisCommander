@@ -686,7 +686,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
 
 /// Describes the settings screen with `rows` visible rows.
 pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> SettingsView {
-    use crate::settings::{FieldKind, Row, keys_of};
+    use crate::settings::{FieldKind, Row};
     let config = &app.context().config;
     let defaults = sc_config::Config::default();
     let rows = rows.max(3);
@@ -706,20 +706,6 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             value: field.value(config),
             changed: field.value(config) != field.value(&defaults),
         },
-        Row::Shortcut(action) => {
-            let keys = keys_of(config, action);
-            let value = if keys.is_empty() {
-                "none".to_owned()
-            } else {
-                keys.iter().map(ToString::to_string).collect::<Vec<_>>().join(" / ")
-            };
-            SettingsRowView {
-                kind: "shortcut".into(),
-                label: action.label().into(),
-                value,
-                changed: config.keys.contains_key(action.id()),
-            }
-        }
         Row::Command(command) => SettingsRowView {
             kind: "command".into(),
             label: command.label().into(),
@@ -727,11 +713,8 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             changed: false,
         },
     };
-    let hint = match (screen.recording, screen.current()) {
-        (Some(recording), _) => {
-            format!("Press the new shortcut for \"{}\"   Esc: cancel", recording.action.label())
-        }
-        (None, Row::Option(field)) => match field.kind() {
+    let hint = match screen.current() {
+        Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
                 "Enter / ← →: change   r: default   Esc: close"
             }
@@ -741,17 +724,14 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             FieldKind::Text => "Enter: type a value   r: default   Esc: close",
         }
         .to_owned(),
-        (None, Row::Shortcut(_)) => {
-            "Enter: new shortcut   a: add one   Delete: none   r: default   Esc: close".to_owned()
-        }
-        (None, _) => "Enter: run   Esc: close".to_owned(),
+        _ => "Enter: run   Esc: close".to_owned(),
     };
     SettingsView {
         rows: screen.rows.iter().skip(offset).take(rows).map(row_view).collect(),
         cursor: screen.cursor - offset,
         percent: if total <= rows { 100 } else { (offset + rows) * 100 / total },
         hint,
-        recording: screen.recording.is_some(),
+        recording: false,
     }
 }
 
