@@ -153,6 +153,10 @@ actions! {
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];
+    Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     [];
+    FolderSizes   = "view.folder-sizes",    View, false, "Count folder sizes",        ["Alt+S"];
+    DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", ["Alt+U"];
+    Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    ["Alt+K"];
     SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          [];
     SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    [];

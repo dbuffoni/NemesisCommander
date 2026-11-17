@@ -34,6 +34,7 @@ use crate::dialogs::{
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
+mod diskwork;
 mod features;
 mod palette;
 mod plugins;
@@ -74,6 +75,11 @@ pub enum AppEvent {
     /// A task changed files in a way Ctrl+Z can take back; the event is the
     /// task's own result.
     Undoable(UndoStep, Box<AppEvent>),
+    /// The sizes of folders were counted: (folder, bytes, items).
+    FolderSizes {
+        /// The folders and what is below each.
+        sizes: Vec<(VfsPath, (u64, u64))>,
+    },
     /// One search result.
     SearchHit(SearchHit),
     /// The search ended (with an error message, if it failed).
@@ -151,6 +157,7 @@ impl AppEvent {
                 | AppEvent::AiRenameDone { .. }
                 | AppEvent::SyncCopies { .. }
                 | AppEvent::Compared { .. }
+                | AppEvent::FolderSizes { .. }
         )
     }
 }
@@ -237,6 +244,8 @@ pub struct App {
     frecency: crate::frecency::Frecency,
     /// The installed font families, for the font settings (empty in a terminal).
     fonts: Vec<String>,
+    /// Folder sizes counted in the panels, until the folder is listed again.
+    pub(crate) folder_sizes: HashMap<VfsPath, (u64, u64)>,
     /// The folder last recorded for each side.
     visited: [Option<String>; 2],
     /// The last search, to save it.
@@ -449,6 +458,7 @@ impl App {
             clipboard: None,
             frecency,
             fonts: Vec::new(),
+            folder_sizes: HashMap::new(),
             visited: [None, None],
             last_search: None,
             target_override: None,
@@ -634,6 +644,7 @@ impl App {
             }
             AppEvent::Listing(listing) => {
                 let listed = listing.path.clone();
+                self.folder_sizes.retain(|path, _| path.parent().as_ref() != Some(&listed));
                 if self.workspace.apply(listing) {
                     self.record_visits(&listed);
                     self.refresh_git(&listed);
@@ -701,6 +712,7 @@ impl App {
             }
             AppEvent::Undoable(..) => {}
             AppEvent::Show(overlay) => self.overlay = Some(*overlay),
+            AppEvent::FolderSizes { sizes } => self.folder_sizes_counted(sizes),
             AppEvent::SyncCopies { copies, deleted, error } => {
                 let files = self.queue_sync_copies(copies);
                 match error {
@@ -1262,6 +1274,13 @@ impl App {
             Action::CompareHash => self.compare_by_hash(),
             Action::Sync => self.ask_sync(),
             Action::SimilarImages => self.find_similar(),
+            Action::FolderSizes => self.count_folder_sizes(),
+            Action::DiskUsage => {
+                let folder = self.workspace.active().location().clone();
+                self.disk_usage(folder);
+            }
+            Action::Duplicates => self.find_duplicates(),
+            Action::Disks => self.show_disks(),
             Action::SavedSearches => self.open_saved_searches(),
             Action::SaveSearch if self.last_search.is_none() => {
                 self.set_error("Search first (Alt+F7), then save that search")
@@ -1826,6 +1845,11 @@ impl App {
             | ChoosePurpose::Basket(_)
             | ChoosePurpose::SyncMode
             | ChoosePurpose::Similar(_)) => self.chosen_feature(purpose, cursor),
+            purpose @ (ChoosePurpose::Duplicates(_) | ChoosePurpose::Disks(_)) => {
+                self.chosen_disk_tool(purpose, cursor);
+            }
+            // Enter is handled by its own key.
+            ChoosePurpose::DiskUsage { .. } => {}
             ChoosePurpose::Font { field, screen, names } => {
                 if let Some(name) = names.get(cursor) {
                     self.setting_typed(field, name);

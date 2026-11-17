@@ -237,6 +237,18 @@ pub enum ChoosePurpose {
     Basket(Vec<VfsPath>),
     /// How to synchronize the two folders.
     SyncMode,
+    /// The items of a folder by size: Enter looks into a folder.
+    DiskUsage {
+        /// The folder listed.
+        folder: VfsPath,
+        /// The rows' names, and whether each is a folder.
+        names: Vec<(String, bool)>,
+    },
+    /// Groups of identical files (the first of each is the one kept), after
+    /// a row that puts the extra copies in the basket.
+    Duplicates(Vec<Vec<VfsPath>>),
+    /// The disks and partitions; where each is mounted.
+    Disks(Vec<Option<String>>),
     /// A font family for a setting (the first name may be empty: the
     /// system's), back to the settings screen afterwards.
     Font {

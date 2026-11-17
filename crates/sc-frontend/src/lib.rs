@@ -22,6 +22,7 @@ mod app;
 pub mod commands;
 mod dialogs;
 pub mod diff;
+pub mod disks;
 pub mod drives;
 pub mod export;
 pub mod frecency;
@@ -32,6 +33,7 @@ pub mod searches;
 pub mod settings;
 pub mod similar;
 pub mod syncplan;
+pub mod usage;
 pub mod view;
 pub mod viewer;
 

@@ -2007,3 +2007,72 @@ async fn the_terminal_has_no_font_list() {
     assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))));
     assert!(h.status().contains("terminal uses its own font"), "{}", h.status());
 }
+
+#[tokio::test]
+async fn folder_sizes_replace_dir_until_the_folder_is_listed_again() {
+    let mut h = Harness::new().await;
+    let docs_row = |h: &Harness| {
+        h.screen().lines().find(|l| l.contains("docs/")).unwrap_or_default().to_owned()
+    };
+    assert!(docs_row(&h).contains("<DIR>"), "{}", docs_row(&h));
+    h.key("Alt+S");
+    h.settle().await;
+    assert!(h.status().contains("1 folder: 9 B in all"), "{}", h.status());
+    assert!(docs_row(&h).contains("9 B") && !docs_row(&h).contains("<DIR>"), "{}", docs_row(&h));
+    h.key("Ctrl+R");
+    h.settle().await;
+    assert!(docs_row(&h).contains("<DIR>"), "listing again forgets the count");
+}
+
+#[tokio::test]
+async fn disk_usage_lists_by_size_and_drills_down() {
+    let mut h = Harness::new().await;
+    h.key("Alt+U");
+    h.settle().await;
+    let rows = results(&h);
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert!(rows[0].ends_with("notes.txt"), "biggest first: {rows:?}");
+    assert!(rows[1].ends_with("docs/"), "{rows:?}");
+    h.key("Down");
+    h.key("Enter");
+    h.settle().await;
+    assert!(results(&h)[0].ends_with("readme.md"));
+    h.key("Backspace");
+    h.settle().await;
+    assert_eq!(results(&h).len(), 3, "back in the first folder");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn duplicates_are_found_by_content_across_both_panels() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/same.txt"), "the needle is here\n").unwrap();
+    fs::write(h.path("right/copy.txt"), "the needle is here\n").unwrap();
+    fs::write(h.path("right/other.txt"), "the needle is HERE\n").unwrap(); // same size, other content
+    h.app.perform(Action::Duplicates);
+    h.settle().await;
+    let rows = results(&h);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows[0].starts_with("Put 2 extra copies in the basket"), "{rows:?}");
+    assert!(rows[1].starts_with("3 copies of 19 B"), "{rows:?}");
+    h.key("Enter");
+    assert!(h.status().contains("2 extra copies are in the basket"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn no_duplicates_is_said() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::Duplicates);
+    h.settle().await;
+    assert!(h.status().contains("No duplicates among"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn the_disk_table_opens_or_says_why_not() {
+    let mut h = Harness::new().await;
+    h.key("Alt+K");
+    h.settle().await;
+    let shown = matches!(h.app.overlay(), Some(Overlay::Choose(_)));
+    assert!(shown || h.status().contains("Disks:"), "{}", h.status());
+}

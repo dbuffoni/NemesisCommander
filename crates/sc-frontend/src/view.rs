@@ -516,6 +516,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         Vec::new()
     };
     let git = git_of(app, side);
+    let sizes = &app.folder_sizes;
     let panel = app.workspace.side(side).panel();
     let row_views = panel
         .entries()
@@ -523,7 +524,14 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .enumerate()
         .skip(offset)
         .take(rows)
-        .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref()))
+        .map(|(i, entry)| {
+            let counted = entry
+                .is_dir()
+                .then(|| sizes.get(&panel.location().join(&entry.name)))
+                .flatten()
+                .map(|(bytes, _)| *bytes);
+            row_view(panel, entry, i == cursor, human, git.as_deref(), counted)
+        })
         .collect();
     let view = PanelView {
         title: display_location(panel.location()),
@@ -565,6 +573,7 @@ fn row_view(
     cursor: bool,
     human: bool,
     git: Option<&crate::git::GitStatus>,
+    counted: Option<u64>,
 ) -> RowView {
     let mut name = entry.name.clone();
     if entry.is_dir() && entry.name != PARENT {
@@ -572,7 +581,11 @@ fn row_view(
     }
     RowView {
         name,
-        size: size_text(entry, human),
+        size: match counted {
+            Some(bytes) if human => human_size(bytes),
+            Some(bytes) => bytes.to_string(),
+            None => size_text(entry, human),
+        },
         date: entry.modified.map(local_time).unwrap_or_default(),
         dir: entry.is_dir(),
         hidden: entry.is_hidden(),
