@@ -5700,6 +5700,7 @@ dependencies = [
  "sc-providers",
  "sc-transfer",
  "sc-vfs",
+ "serde_json",
  "tempfile",
  "tokio",
 ]

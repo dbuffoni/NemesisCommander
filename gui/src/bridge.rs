@@ -61,6 +61,10 @@ pub static ENDED_EARLY: AtomicBool = AtomicBool::new(false);
 pub struct CommanderRust {
     pub(crate) screen: QString,
     pub(crate) running: bool,
+    /// Text for the system clipboard, and a number that grows with each, so
+    /// QML notices a repeat.
+    pub(crate) clipboard: QString,
+    pub(crate) clipboard_seq: i32,
     pub(crate) screenshot: QString,
     /// The window's size when it opens.
     pub(crate) window_width: i32,
@@ -83,6 +87,8 @@ impl Default for CommanderRust {
         CommanderRust {
             screen: QString::default(),
             running: true,
+            clipboard: QString::default(),
+            clipboard_seq: 0,
             screenshot: QString::default(),
             window_width: STARTUP.get().and_then(|s| s.size).map_or(1200, |(w, _)| w),
             window_height: STARTUP.get().and_then(|s| s.size).map_or(760, |(_, h)| h),
@@ -244,10 +250,16 @@ impl qobject::Commander {
         app.columns = columns;
         let running = app.is_running();
         let external = app.take_external();
+        let clipboard = app.take_clipboard();
         let json = serde_json::to_string(&Screen::of(app, rows, viewer_rows)).unwrap_or_default();
         let changed = json != rust.last;
         if changed {
             rust.last = json;
+        }
+        if let Some(text) = clipboard {
+            let seq = self.rust().clipboard_seq + 1;
+            self.as_mut().set_clipboard(QString::from(&text));
+            self.as_mut().set_clipboard_seq(seq);
         }
         if let Some(external) = external {
             let thread = self.qt_thread();

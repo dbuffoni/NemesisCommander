@@ -40,6 +40,7 @@ ApplicationWindow {
     readonly property color headingColor: dark ? "#e0b050" : "#8a5a00"
     readonly property color codeColor: dark ? "#8fd18f" : "#1d7a33"
     readonly property color linkColor: dark ? "#7fb2ff" : "#1f5fbf"
+    readonly property color removedColor: dark ? "#ff7b72" : "#c62828"
     readonly property color selectionTint: Qt.rgba(0.78, 0.56, 0.10, dark ? 0.22 : 0.16)
     readonly property color selectedText: dark ? "#f0c060" : "#7a4d00"
     readonly property color lineColor: Qt.rgba(palette.windowText.r, palette.windowText.g,
@@ -52,9 +53,21 @@ ApplicationWindow {
         font: window.fixedFont
     }
 
+    // The system clipboard: Qt Quick has no direct call, but a text field
+    // that selects and copies its text does the same.
+    TextEdit {
+        id: clipboardHelper
+        visible: false
+    }
+
     Commander {
         id: commander
         onRunningChanged: if (!running) Qt.quit()
+        onClipboard_seqChanged: {
+            clipboardHelper.text = commander.clipboard
+            clipboardHelper.selectAll()
+            clipboardHelper.copy()
+        }
         // Self test: save a picture of the window, then quit.
         // Pictures load in the background, so give them a moment.
         onScreenshotChanged: shotTimer.start()

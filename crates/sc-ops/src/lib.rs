@@ -20,8 +20,10 @@ pub mod conflict;
 pub mod copy;
 pub mod delete;
 pub mod execute;
+pub mod link;
 pub mod plan;
 pub mod rename;
+pub mod sync;
 
 pub use attributes::{AttributeChange, apply_change, parse_change};
 pub use conflict::{
@@ -35,7 +37,9 @@ pub use delete::{DeleteOptions, delete_paths};
 pub use execute::{
     ExecuteOptions, Executor, Observer, OpEvent, Report, RetryPolicy, StepOutcome, StepTracker,
 };
+pub use link::{LinkKind, LinkReport, create_links, relative_path};
 pub use plan::{Plan, PlanOptions, Step, plan_copy, plan_delete, plan_move};
 pub use rename::{
     CaseChange, RenameError, RenameRule, apply_renames, preview_renames, rename_conflicts, renamed,
 };
+pub use sync::{SyncAction, SyncItem, SyncMode, SyncPlan, Tree, list_tree, plan_sync};

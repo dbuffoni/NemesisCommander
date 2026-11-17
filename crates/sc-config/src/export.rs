@@ -105,6 +105,8 @@ impl ExportBundle {
                     merge_by_name(&current.bookmarks, merged.bookmarks, |b| b.name.clone());
                 merged.connections =
                     merge_by_name(&current.connections, merged.connections, |c| c.name.clone());
+                merged.searches =
+                    merge_by_name(&current.searches, merged.searches, |s| s.name.clone());
                 merged
             }
         }

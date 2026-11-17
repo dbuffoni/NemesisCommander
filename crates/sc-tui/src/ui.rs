@@ -582,6 +582,9 @@ fn rich_style(style: &sc_preview::rich::Style) -> Style {
     if style.mark {
         out = out.fg(Color::DarkGray);
     }
+    if style.removed {
+        out = out.fg(Color::Red);
+    }
     out
 }
 

@@ -766,6 +766,7 @@ async fn search_by_content_and_jump_to_the_hit() {
     h.key("Enter");
     h.type_text("NEEDLE");
     h.key("Enter");
+    h.key("Enter"); // no size or age conditions
     h.settle().await;
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("results") };
     assert_eq!(dialog.items.len(), 1, "{:?}", dialog.items);
@@ -1217,6 +1218,35 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
     assert!(saved.contains("name = \"backup\""), "{saved}");
 
+    // F2 gives a saved connection another name; local drives have none to change.
+    h.key("Alt+F1");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+    let row = dialog.items.iter().position(|r| r.contains(" backup ")).unwrap();
+    for _ in 0..row {
+        h.key("Down");
+    }
+    h.key("F2");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no name asked") };
+    assert_eq!(dialog.field.text(), "backup");
+    h.type_text("Backup disk");
+    h.key("Enter");
+    assert!(h.status().contains("Renamed to Backup disk"), "{}", h.status());
+    assert_eq!(h.app.context().config.connections[0].name, "Backup disk");
+    h.key("Alt+F1");
+    h.key("Home");
+    h.key("F2");
+    assert!(h.status().contains("Only saved connections"), "{}", h.status());
+    h.key("Alt+F1");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+    assert!(dialog.items.iter().any(|r| r.contains("Backup disk")));
+    let rename_back = dialog.items.iter().position(|r| r.contains("Backup disk")).unwrap();
+    for _ in 0..rename_back {
+        h.key("Down");
+    }
+    h.key("F2");
+    h.type_text("backup");
+    h.key("Enter");
+
     // Delete takes it out of the list and the settings again.
     h.key("Alt+F1");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
@@ -1533,4 +1563,399 @@ async fn the_mouse_clicks_scrolls_and_drags_between_panels() {
     h.key("Enter");
     h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
     assert!(h.path("right/a.txt").exists());
+}
+
+/// Runs the search dialogs: mask, text, conditions.
+async fn search(h: &mut Harness, mask: &str, content: &str, filters: &str) {
+    h.key("Alt+F7");
+    h.type_text(mask);
+    h.key("Enter");
+    h.type_text(content);
+    h.key("Enter");
+    h.type_text(filters);
+    h.key("Enter");
+    h.settle().await;
+}
+
+fn results(h: &Harness) -> Vec<String> {
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list was expected") };
+    dialog.items.clone()
+}
+
+#[tokio::test]
+async fn copy_path_puts_the_chosen_form_in_the_clipboard() {
+    let mut h = Harness::new().await;
+    h.focus("notes.txt");
+    h.key("Alt+P");
+    assert_eq!(results(&h).len(), 4);
+    h.key("Enter"); // the first row: the full path
+    let text = h.app.take_clipboard().expect("something was copied");
+    assert_eq!(text, h.path("left/notes.txt").display().to_string());
+    assert!(h.app.take_clipboard().is_none(), "handed over once");
+
+    h.key("Alt+P");
+    h.key("Down"); // name
+    h.key("Enter");
+    assert_eq!(h.app.take_clipboard().unwrap(), "notes.txt");
+
+    h.focus("a.txt");
+    h.key("Insert");
+    h.focus("notes.txt");
+    h.key("Insert");
+    h.key("Alt+P");
+    h.key("Down");
+    h.key("Down"); // URI
+    h.key("Enter");
+    let uris = h.app.take_clipboard().unwrap();
+    assert_eq!(uris.lines().count(), 2, "{uris}");
+    assert!(uris.lines().all(|l| l.starts_with("file://")));
+}
+
+#[tokio::test]
+async fn the_listing_is_exported_to_a_file_or_the_clipboard() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("export listing");
+    h.key("Enter");
+    assert_eq!(results(&h), ["CSV", "JSON", "Markdown", "HTML"]);
+    h.key("Down");
+    h.key("Enter"); // JSON
+    h.key("Enter"); // empty: the clipboard
+    let json = h.app.take_clipboard().expect("copied");
+    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let names: Vec<&str> =
+        value.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["docs", "a.txt", "notes.txt"]);
+
+    // Only the selection, written to a file.
+    h.focus("a.txt");
+    h.key("Insert");
+    h.key("F9");
+    h.type_text("export listing");
+    h.key("Enter");
+    h.key("Enter"); // CSV
+    h.type_text("list.csv");
+    h.key("Enter");
+    h.settle().await;
+    let csv = fs::read_to_string(h.path("left/list.csv")).unwrap();
+    assert_eq!(csv.lines().count(), 2, "{csv}");
+    assert!(csv.lines().nth(1).unwrap().starts_with("a.txt,"));
+
+    // An existing file is never overwritten.
+    h.key("F9");
+    h.type_text("export listing");
+    h.key("Enter");
+    h.key("Enter");
+    h.type_text("list.csv");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.status().contains("already exists"), "{}", h.status());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn links_are_made_in_the_other_panel() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Alt+L");
+    assert_eq!(results(&h).len(), 3);
+    h.key("Enter"); // relative symbolic link
+    h.settle().await;
+    let link = h.path("right/a.txt");
+    assert_eq!(fs::read_link(&link).unwrap(), PathBuf::from("../left/a.txt"));
+    assert_eq!(fs::read_to_string(&link).unwrap(), "alpha\n");
+
+    h.key("Alt+L");
+    h.key("Down");
+    h.key("Down"); // hard link
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.status().contains("already exists"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn renaming_in_the_editor_previews_then_renames() {
+    let mut h = Harness::with_settings(|c| c.general.editor = "my-editor --wait".into()).await;
+    h.focus("a.txt");
+    h.key("Insert");
+    h.focus("notes.txt");
+    h.key("Insert");
+    h.app.perform(Action::BulkRename);
+    let external = h.app.take_external().expect("the editor is started");
+    let (file, paths) = external.rename.clone().expect("a rename");
+    assert_eq!(paths.len(), 2);
+    assert_eq!(fs::read_to_string(&file).unwrap(), "a.txt\nnotes.txt\n");
+
+    // What the user does in the editor.
+    fs::write(&file, "first.txt\nsecond.txt\n").unwrap();
+    h.app.after_external(&external, Ok(()));
+    h.settle().await;
+    let Some(Overlay::Confirm(dialog)) = h.app.overlay() else { panic!("a preview") };
+    assert!(dialog.lines.iter().any(|l| l.contains("a.txt") && l.contains("first.txt")));
+    assert!(!file.exists(), "the temporary file is removed");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("left/first.txt").exists() && h.path("left/second.txt").exists());
+    assert!(!h.path("left/a.txt").exists());
+}
+
+#[tokio::test]
+async fn names_from_the_editor_are_checked() {
+    let mut h = Harness::with_settings(|c| c.general.editor = "my-editor --wait".into()).await;
+    h.focus("a.txt");
+    h.key("Insert");
+    h.focus("notes.txt");
+    h.key("Insert");
+    for (text, complaint) in [
+        ("only-one\n", "1 lines for 2 items"),
+        ("same\nsame\n", "Two items would be called"),
+        ("ok.txt\n../bad\n", "Not a file name"),
+        ("a.txt\nnotes.txt\n", "no name would change"),
+    ] {
+        h.app.perform(Action::BulkRename);
+        let external = h.app.take_external().unwrap();
+        fs::write(&external.rename.as_ref().unwrap().0, text).unwrap();
+        h.app.after_external(&external, Ok(()));
+        h.settle().await;
+        assert!(h.status().contains(complaint), "{text:?}: {}", h.status());
+    }
+    assert!(h.path("left/a.txt").exists() && h.path("left/notes.txt").exists());
+
+    // A desktop window needs an editor that waits.
+    let mut window = Harness::new().await;
+    window.app.graphical = true;
+    window.focus("a.txt");
+    window.app.perform(Action::BulkRename);
+    assert!(window.app.take_external().is_none());
+    assert!(window.status().contains("editor that waits"), "{}", window.status());
+}
+
+#[tokio::test]
+async fn jump_goes_to_the_most_used_matching_folder() {
+    let mut h = Harness::new().await;
+    // Open docs twice and right once: both are remembered.
+    for _ in 0..2 {
+        h.focus("docs");
+        h.key("Enter");
+        h.settle().await;
+        h.key("Backspace");
+        h.settle().await;
+    }
+    h.key("Alt+J");
+    h.type_text("zzz");
+    h.key("Enter");
+    assert!(h.status().contains("No frequent folder"), "{}", h.status());
+
+    h.key("Alt+J");
+    h.type_text("doc");
+    h.key("Enter"); // one match: straight there
+    h.settle().await;
+    assert!(h.app.workspace().active().location().to_string().ends_with("/left/docs"));
+
+    // Without words: a list, and the choice is opened.
+    h.key("Alt+J");
+    h.key("Enter");
+    let rows = results(&h);
+    assert!(rows.iter().any(|r| r.ends_with("left")), "{rows:?}");
+    assert!(!rows.iter().any(|r| r.ends_with("docs")), "not the folder we are in: {rows:?}");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.workspace().active().location().to_string().ends_with("/left"));
+}
+
+#[tokio::test]
+async fn searches_are_saved_run_from_the_command_list_and_forgotten() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::SaveSearch);
+    assert!(h.status().contains("Search first"), "{}", h.status());
+
+    fs::write(h.path("left/big.log"), "x".repeat(5000)).unwrap();
+    fs::write(h.path("left/small.log"), "x").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    search(&mut h, "*.log", "", ">1k").await;
+    assert_eq!(results(&h).len(), 1, "{:?}", results(&h));
+    assert!(results(&h)[0].ends_with("big.log"));
+    h.key("Esc");
+
+    h.app.perform(Action::SaveSearch);
+    h.type_text("big logs");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.searches.len(), 1);
+    let saved = fs::read_to_string(h.path("settings/config/config.toml")).unwrap();
+    assert!(saved.contains("big logs") && saved.contains(">1k"), "{saved}");
+
+    // Run from the command list, in the folder we are in now.
+    h.focus("docs");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Backspace");
+    h.settle().await;
+    h.key("F9");
+    h.type_text("big logs");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(results(&h).len(), 1);
+    h.key("Esc");
+
+    // The same from the list of saved searches, which also forgets them.
+    h.app.perform(Action::SavedSearches);
+    assert!(results(&h)[0].starts_with("big logs  (*.log"));
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(results(&h).len(), 1);
+    h.key("Esc");
+    h.app.perform(Action::SavedSearches);
+    h.key("Delete");
+    assert!(h.app.context().config.searches.is_empty());
+    assert!(h.app.overlay().is_none(), "the list closes when empty");
+}
+
+#[tokio::test]
+async fn search_results_go_to_the_basket_and_are_acted_on_together() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/docs/more.txt"), "needle\n").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.key("Ctrl+B");
+    assert!(h.status().contains("basket is empty"), "{}", h.status());
+
+    search(&mut h, "*.txt", "", "").await;
+    assert_eq!(results(&h).len(), 3);
+    h.key("Alt+B");
+    assert!(h.app.overlay().is_none());
+    assert_eq!(h.app.basket.len(), 3);
+
+    // The selection of another folder joins them; duplicates do not.
+    h.focus("a.txt");
+    h.key("Alt+B");
+    assert_eq!(h.app.basket.len(), 3);
+
+    h.key("Ctrl+B");
+    assert_eq!(results(&h).len(), 3);
+    h.key("Delete"); // forget the first
+    assert_eq!(results(&h).len(), 2);
+    h.key("F5"); // copy what is left to the other panel
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    let copied: Vec<String> = h.names(SideId::Right);
+    assert_eq!(copied.len(), 3, "the parent row and two files: {copied:?}");
+    assert!(h.app.basket.len() == 2, "copying keeps the basket");
+
+    // Moving takes them out of the basket.
+    fs::create_dir(h.path("moved")).unwrap();
+    h.key("Ctrl+B");
+    h.key("F6");
+    h.type_text(&h.path("moved").display().to_string());
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.app.basket.is_empty(), "{:?}", h.app.basket);
+    assert_eq!(fs::read_dir(h.path("moved")).unwrap().count(), 2);
+}
+
+#[tokio::test]
+async fn the_basket_can_be_emptied_and_shows_an_item() {
+    let mut h = Harness::new().await;
+    h.focus("notes.txt");
+    h.key("Alt+B");
+    h.focus("docs");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Ctrl+B");
+    h.key("Enter"); // show it in the panel
+    h.settle().await;
+    assert_eq!(h.current(), "notes.txt");
+    h.key("Ctrl+B");
+    h.key("Shift+Delete");
+    assert!(h.app.basket.is_empty());
+}
+
+#[tokio::test]
+async fn similar_pictures_are_grouped_and_the_extra_copies_go_to_the_basket() {
+    use image::{DynamicImage, ImageBuffer, Rgb};
+    let scene = |width: u32, height: u32, cx: f32| {
+        DynamicImage::ImageRgb8(ImageBuffer::from_fn(width, height, |x, y| {
+            let (u, v) = (x as f32 / width as f32, y as f32 / height as f32);
+            let blob = (-(((u - cx).powi(2) + (v - 0.4).powi(2)) * 40.0)).exp();
+            let value = (u * 120.0 + v * 60.0 + blob * 120.0).min(255.0) as u8;
+            Rgb([value, value / 2, 255 - value])
+        }))
+    };
+    let mut h = Harness::new().await;
+    let big = scene(300, 200, 0.3);
+    big.save(h.path("left/photo.png")).unwrap();
+    big.resize_exact(60, 40, image::imageops::FilterType::Lanczos3)
+        .save(h.path("left/docs/thumb.png"))
+        .unwrap();
+    scene(300, 200, 0.85).save(h.path("left/other.png")).unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.key("F9");
+    h.type_text("similar");
+    h.key("Enter");
+    h.settle().await;
+    let rows = results(&h);
+    assert_eq!(rows.len(), 2, "the basket row and one group: {rows:?}");
+    assert!(rows[1].contains("keep photo.png") && rows[1].contains("thumb.png"), "{rows:?}");
+    h.key("Enter"); // the extra copies
+    assert_eq!(h.app.basket.len(), 1);
+    assert!(h.app.basket[0].to_string().ends_with("docs/thumb.png"));
+}
+
+#[tokio::test]
+async fn comparing_by_content_marks_what_differs_even_inside_folders() {
+    let mut h = Harness::new().await;
+    fs::create_dir_all(h.path("right/docs")).unwrap();
+    fs::write(h.path("right/a.txt"), "alpha\n").unwrap(); // same content
+    fs::write(h.path("right/notes.txt"), "the NEEDLE is here\n").unwrap(); // same size, different
+    fs::write(h.path("right/docs/readme.md"), "# README\n").unwrap(); // different, inside docs
+    fs::write(h.path("right/only-right.txt"), "x").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.app.perform(Action::CompareHash);
+    h.settle().await;
+    let left = h.app.workspace().side(SideId::Left).panel();
+    assert!(left.is_selected("notes.txt") && left.is_selected("docs"));
+    assert!(!left.is_selected("a.txt"), "same content, different time: still the same");
+    let right = h.app.workspace().side(SideId::Right).panel();
+    assert!(right.is_selected("notes.txt") && right.is_selected("only-right.txt"));
+    assert!(h.status().contains("1 identical, 2 different"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn synchronizing_shows_the_plan_and_runs_it_on_enter() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("right/extra.txt"), "extra").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.key("F9");
+    h.type_text("synchronize");
+    h.key("Enter");
+    assert_eq!(results(&h).len(), 3);
+    h.key("Enter"); // mirror
+    h.settle().await;
+    let Some(Overlay::Viewer(viewer)) = h.app.overlay() else { panic!("the plan") };
+    let text: Vec<String> = viewer
+        .report
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|line| line.iter().map(|s| s.text.as_str()).collect())
+        .collect();
+    assert!(text.iter().any(|l| l.starts_with("→ new") && l.contains("docs/")), "{text:?}");
+    assert!(text.iter().any(|l| l.starts_with("✗ delete") && l.contains("extra.txt")), "{text:?}");
+    assert!(!h.path("right/a.txt").exists(), "nothing is done before Enter");
+
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert_eq!(fs::read_to_string(h.path("right/a.txt")).unwrap(), "alpha\n");
+    assert!(h.path("right/docs/readme.md").exists());
+    assert!(!h.path("right/extra.txt").exists(), "a mirror deletes what only the target has");
+
+    // Now they agree: the plan says so.
+    h.app.perform(Action::Sync);
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Viewer(viewer)) = h.app.overlay() else { panic!("the plan") };
+    assert!(viewer.sync.is_none(), "nothing to run");
 }

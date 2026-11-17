@@ -10,12 +10,13 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use async_trait::async_trait;
 use sc_app::AppContext;
 use sc_archive::{ArchiveFormat, PackOptions, archive_root};
 use sc_config::{Action, Bookmark, Connection, ExportBundle, ImportMode, Key, Keymap};
-use sc_index::{ContentQuery, Mask, SearchCriteria, SearchHit, SortKey, SortSpec};
+use sc_index::{Mask, SearchCriteria, SearchHit, SortKey, SortSpec};
 use sc_ops::{
     Conflict, ConflictAction, ConflictResolver, DeleteOptions, RenameRule, Resolution,
     apply_renames, delete_paths, preview_renames, rename_conflicts, renamed,
@@ -33,6 +34,7 @@ use crate::dialogs::{
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
+mod features;
 mod palette;
 mod plugins;
 mod pointer;
@@ -103,6 +105,22 @@ pub enum AppEvent {
         /// The rule and Claude's explanation, or why there is none.
         result: Result<(RenameRule, String), String>,
     },
+    /// A synchronization deleted what it had to; these copies are next.
+    SyncCopies {
+        /// Sources and the folder they are copied into.
+        copies: Vec<(Vec<VfsPath>, VfsPath)>,
+        /// How many items were deleted.
+        deleted: usize,
+        /// What went wrong, if something did.
+        error: Option<String>,
+    },
+    /// A comparison by content: select these names.
+    Compared {
+        /// The names to select on each side.
+        marks: Vec<(SideId, Vec<String>)>,
+        /// The result for the status line.
+        message: String,
+    },
     /// A plugin command or script ended.
     ScriptDone {
         /// What ran, for messages.
@@ -131,6 +149,8 @@ impl AppEvent {
                 | AppEvent::Rendered { .. }
                 | AppEvent::ScriptDone { .. }
                 | AppEvent::AiRenameDone { .. }
+                | AppEvent::SyncCopies { .. }
+                | AppEvent::Compared { .. }
         )
     }
 }
@@ -151,6 +171,9 @@ pub struct External {
     pub command: Vec<String>,
     /// The settings file was edited: reload settings afterwards.
     pub reload_settings: bool,
+    /// The file of names being edited for "rename in the editor", and the
+    /// items they belong to.
+    pub rename: Option<(PathBuf, Vec<VfsPath>)>,
 }
 
 /// Asks the user about copy conflicts through the event channel.
@@ -206,6 +229,19 @@ pub struct App {
     /// terminal.
     pub graphical: bool,
     events: mpsc::UnboundedSender<AppEvent>,
+    /// The basket: items collected from several folders to act on together.
+    pub basket: Vec<VfsPath>,
+    /// Text waiting to go to the system clipboard.
+    clipboard: Option<String>,
+    /// How often and how recently folders were opened (the jump command).
+    frecency: crate::frecency::Frecency,
+    /// The folder last recorded for each side.
+    visited: [Option<String>; 2],
+    /// The last search, to save it.
+    last_search: Option<sc_config::SavedSearch>,
+    /// Items for the commands to act on instead of the panel's selection
+    /// (the basket's).
+    target_override: Option<Vec<VfsPath>>,
     /// Git status of what each side shows, with the folder it is for.
     pub git: [Option<(VfsPath, Arc<crate::git::GitStatus>)>; 2],
     undo: Vec<UndoStep>,
@@ -404,7 +440,15 @@ impl App {
         let (workspace, requests) = Workspace::new(left, right, sort, panels.show_hidden);
         let status = (!context.warnings.is_empty())
             .then(|| Status { text: context.warnings.join("; "), error: true });
+        let frecency =
+            crate::frecency::Frecency::load(&context.paths.data_dir.join("frecency.json"));
         let mut app = App {
+            basket: Vec::new(),
+            clipboard: None,
+            frecency,
+            visited: [None, None],
+            last_search: None,
+            target_override: None,
             context,
             workspace,
             manager,
@@ -580,6 +624,7 @@ impl App {
             AppEvent::Listing(listing) => {
                 let listed = listing.path.clone();
                 if self.workspace.apply(listing) {
+                    self.record_visits(&listed);
                     self.refresh_git(&listed);
                     self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
@@ -615,7 +660,9 @@ impl App {
                                         Some((destination.join(s.file_name()?), s.clone()))
                                     })
                                     .collect();
+                                let moved = job.spec.sources.clone();
                                 self.remember_undo(UndoStep::Moved(items));
+                                self.basket_forget(&moved);
                             }
                         }
                         JobState::Failed => {
@@ -643,7 +690,28 @@ impl App {
             }
             AppEvent::Undoable(..) => {}
             AppEvent::Show(overlay) => self.overlay = Some(*overlay),
+            AppEvent::SyncCopies { copies, deleted, error } => {
+                let files = self.queue_sync_copies(copies);
+                match error {
+                    Some(e) => self.set_error(format!("Synchronize: {e}")),
+                    None => self.set_status(format!(
+                        "Synchronize: {deleted} deleted, {files} items queued for copying"
+                    )),
+                }
+                self.reload_panels(None);
+            }
+            AppEvent::Compared { marks, message } => {
+                for (side, names) in marks {
+                    let panel = self.workspace.side_mut(side).panel_mut();
+                    panel.clear_selection();
+                    for name in &names {
+                        panel.set_selected(name, true);
+                    }
+                }
+                self.set_status(format!("{message} (differences are selected)"));
+            }
             AppEvent::SearchHit(hit) => {
+                let hint = self.basket_hint();
                 if let Some(Overlay::Choose(dialog)) = &mut self.overlay
                     && let ChoosePurpose::SearchResults(paths) = &mut dialog.purpose
                 {
@@ -653,17 +721,18 @@ impl App {
                     }
                     dialog.items.push(row);
                     paths.push(hit.path);
-                    dialog.footer = format!("{} found, searching…", paths.len());
+                    dialog.footer = format!("{} found, searching…   {hint}", paths.len());
                 }
             }
             AppEvent::SearchDone(error) => {
                 self.search_cancel = None;
+                let hint = self.basket_hint();
                 if let Some(Overlay::Choose(dialog)) = &mut self.overlay
                     && let ChoosePurpose::SearchResults(paths) = &dialog.purpose
                 {
                     dialog.footer = match &error {
-                        Some(e) => format!("{} found, stopped: {e}", paths.len()),
-                        None => format!("{} found", paths.len()),
+                        Some(e) => format!("{} found, stopped: {e}   {hint}", paths.len()),
+                        None => format!("{} found   {hint}", paths.len()),
                     };
                 }
             }
@@ -845,6 +914,9 @@ impl App {
             }
             Overlay::Choose(mut dialog) => {
                 let page = self.page.max(1) as isize;
+                if let Some(keep) = self.choose_extra_key(&mut dialog, &press) {
+                    return keep.then_some(Overlay::Choose(dialog));
+                }
                 match key {
                     Some(Key::Up) => dialog.move_cursor(-1),
                     Some(Key::Down) => dialog.move_cursor(1),
@@ -930,6 +1002,12 @@ impl App {
                 if viewer.shows_image() && viewer_zoom_key(&mut viewer, key, press.text) {
                     return Some(Overlay::Viewer(viewer));
                 }
+                if key == Some(Key::Enter)
+                    && let Some(run) = viewer.sync.take()
+                {
+                    self.run_sync(*run);
+                    return None;
+                }
                 match (key, press.text) {
                     (Some(Key::Esc | Key::F(3) | Key::F(10)), _) | (_, Some('q')) => return None,
                     (Some(Key::Up), _) => viewer.scroll_by(-1, page),
@@ -992,6 +1070,9 @@ impl App {
 
     /// The items an operation acts on (selection or cursor).
     fn targets(&self) -> Vec<VfsPath> {
+        if let Some(items) = &self.target_override {
+            return items.clone();
+        }
         self.workspace.active().targets()
     }
 
@@ -1167,6 +1248,23 @@ impl App {
             }
             Action::Undo => self.undo_last(),
             Action::Checksum => self.checksum_current(),
+            Action::CopyPath => self.ask_copy_path(),
+            Action::Export => self.ask_export(),
+            Action::Link => self.ask_link(),
+            Action::BulkRename => self.bulk_rename(),
+            Action::BasketAdd => self.add_selection_to_basket(),
+            Action::Basket => self.open_basket(),
+            Action::Jump => self.ask_jump(),
+            Action::CompareHash => self.compare_by_hash(),
+            Action::Sync => self.ask_sync(),
+            Action::SimilarImages => self.find_similar(),
+            Action::SavedSearches => self.open_saved_searches(),
+            Action::SaveSearch if self.last_search.is_none() => {
+                self.set_error("Search first (Alt+F7), then save that search")
+            }
+            Action::SaveSearch => {
+                self.ask("Save search", "Name for this search:", "", InputPurpose::NameSearch)
+            }
             Action::ToggleSelect => self.workspace.active_mut().toggle_current(),
             Action::SelectMask => {
                 self.ask("Select", "Select files matching:", "*", InputPurpose::SelectMask)
@@ -1437,7 +1535,7 @@ impl App {
             InputPurpose::NewConnection => match VfsPath::parse(text.trim()) {
                 Ok(location) => self.ask(
                     "New connection",
-                    "Save it in the drive list as:",
+                    "Name of this connection in the drive list (so you recognise it later):",
                     &crate::drives::suggested_name(&location),
                     InputPurpose::NameConnection(location.to_string()),
                 ),
@@ -1452,6 +1550,27 @@ impl App {
                     return self.ask_connection_key(name, uri, true, "");
                 }
                 self.save_connection(name, uri, None, true);
+            }
+            InputPurpose::RenameConnection { name, uri } => {
+                if text.is_empty() {
+                    return self.set_error("no name given".to_owned());
+                }
+                let taken = self.context.config.connections.iter().any(|c| c.name == text);
+                if taken && text != name {
+                    return self.set_error(format!("There is already a connection called {text}"));
+                }
+                if let Some(c) = self
+                    .context
+                    .config
+                    .connections
+                    .iter_mut()
+                    .find(|c| c.name == name && c.uri == uri)
+                {
+                    c.name = text.clone();
+                    if self.save_settings() {
+                        self.set_status(format!("Renamed to {text}"));
+                    }
+                }
             }
             InputPurpose::ConnectionKey { name, uri, new } => {
                 let key = (!text.is_empty()).then_some(text);
@@ -1501,7 +1620,20 @@ impl App {
                     InputPurpose::SearchContent { mask },
                 );
             }
-            InputPurpose::SearchContent { mask } => self.start_search(&mask, &text),
+            InputPurpose::SearchContent { mask } => self.ask(
+                "Search",
+                "Size and age (>10M <1G newer:7d older:2w; empty: any):",
+                "",
+                InputPurpose::SearchFilters { mask, content: text },
+            ),
+            InputPurpose::SearchFilters { mask, content } => {
+                self.start_search(&mask, &content, &text)
+            }
+            InputPurpose::NameSearch => self.save_search_as(&text),
+            InputPurpose::Jump => self.jump(&text),
+            InputPurpose::ExportTo { format, selection_only } => {
+                self.export_listing(format, selection_only, &text)
+            }
             InputPurpose::Attributes(paths) => {
                 let change = match sc_ops::parse_change(&text, std::time::SystemTime::now()) {
                     Ok(change) => change,
@@ -1554,10 +1686,6 @@ impl App {
             Ok(names) => names,
             Err(e) => return self.set_error(e.to_string()),
         };
-        let changed = paths.iter().zip(&names).filter(|(p, n)| p.file_name() != Some(n)).count();
-        if changed == 0 {
-            return self.set_error("Multi-rename: no name would change");
-        }
         let mut lines = Vec::new();
         if let Some(explanation) = explanation {
             lines.push(explanation);
@@ -1566,6 +1694,21 @@ impl App {
                 let kind = if rule.regex { "Regex" } else { "Find" };
                 lines.push(format!("{kind}: {}  →  {}", rule.find, rule.replace));
             }
+        }
+        self.confirm_new_names(paths, names, lines);
+    }
+
+    /// Shows what renaming `paths` to `names` would do and asks to go ahead
+    /// (or says which names are taken). `lines` come first.
+    pub(super) fn confirm_new_names(
+        &mut self,
+        paths: Vec<VfsPath>,
+        names: Vec<String>,
+        mut lines: Vec<String>,
+    ) {
+        let changed = paths.iter().zip(&names).filter(|(p, n)| p.file_name() != Some(n)).count();
+        if changed == 0 {
+            return self.set_error("Rename: no name would change");
         }
         let registry = self.context.registry.clone();
         self.spawn_task(async move {
@@ -1601,6 +1744,7 @@ impl App {
         match purpose {
             ConfirmPurpose::Delete { paths, trash } => {
                 self.workspace.active_mut().clear_selection();
+                self.basket_forget(&paths);
                 self.spawn_task(async move {
                     let count = paths.len();
                     let options = DeleteOptions { use_trash: trash, observer: None };
@@ -1678,6 +1822,14 @@ impl App {
                     self.plugin_chosen(choices.swap_remove(cursor));
                 }
             }
+            purpose @ (ChoosePurpose::CopyPath(_)
+            | ChoosePurpose::ExportFormat { .. }
+            | ChoosePurpose::LinkKind(_)
+            | ChoosePurpose::Jump(_)
+            | ChoosePurpose::SavedSearches
+            | ChoosePurpose::Basket(_)
+            | ChoosePurpose::SyncMode
+            | ChoosePurpose::Similar(_)) => self.chosen_feature(purpose, cursor),
             ChoosePurpose::ImportMode(bundle) => {
                 let mode = if cursor == 0 { ImportMode::Replace } else { ImportMode::Merge };
                 self.context.config = bundle.apply(&self.context.config, mode);
@@ -1689,16 +1841,24 @@ impl App {
         }
     }
 
-    fn start_search(&mut self, mask: &str, content: &str) {
-        let name = match Mask::parse(mask) {
-            Ok(name) => name,
-            Err(e) => return self.set_error(e.to_string()),
+    fn start_search(&mut self, mask: &str, content: &str, filters: &str) {
+        let criteria = match crate::searches::criteria(mask, content, filters, SystemTime::now()) {
+            Ok(criteria) => criteria,
+            Err(e) => return self.set_error(e),
         };
-        let criteria = SearchCriteria {
-            name,
-            content: (!content.is_empty()).then(|| ContentQuery::text(content, false)),
-            ..SearchCriteria::default()
+        let search = sc_config::SavedSearch {
+            name: String::new(),
+            mask: mask.to_owned(),
+            content: content.to_owned(),
+            filters: filters.to_owned(),
         };
+        self.search_with(criteria, search);
+    }
+
+    /// Searches the folder of the active panel; `search` is remembered so it
+    /// can be saved.
+    fn search_with(&mut self, criteria: SearchCriteria, search: sc_config::SavedSearch) {
+        self.last_search = Some(search);
         let root = self.workspace.active().location().clone();
         let cancel = CancellationToken::new();
         self.search_cancel = Some(cancel.clone());
@@ -1856,8 +2016,11 @@ impl App {
         }
         match path.to_local_path().filter(|_| path.scheme() == "file") {
             Some(local) => {
-                self.external =
-                    Some(External { command: self.editor_command(&local), reload_settings: false });
+                self.external = Some(External {
+                    command: self.editor_command(&local),
+                    reload_settings: false,
+                    rename: None,
+                });
             }
             None => self.set_error("Only local files can be edited for now; use F3 to view"),
         }
@@ -1887,6 +2050,16 @@ impl App {
 
     /// Called by the main loop after an external program ended.
     pub fn after_external(&mut self, external: &External, result: Result<(), String>) {
+        if let Some((file, paths)) = &external.rename {
+            match result {
+                Ok(()) => self.finish_bulk_rename(file, paths.clone()),
+                Err(e) => {
+                    let _ = std::fs::remove_file(file);
+                    self.set_error(format!("{}: {e}", external.command[0]));
+                }
+            }
+            return;
+        }
         if let Err(e) = result {
             self.set_error(format!("{}: {e}", external.command[0]));
         }

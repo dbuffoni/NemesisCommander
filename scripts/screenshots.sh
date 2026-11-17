@@ -83,3 +83,9 @@ shot quick-view-pdf 1280x800 "Down Down Down Down Down Ctrl+Q" "$docs" "$right"
 shot quick-view-model 1280x800 "Down Ctrl+Q" "$models" "$right"
 shot quick-view-markdown 1280x800 "Down Ctrl+Q" "$demo/home/Projects/notes" "$right"
 shot settings 1280x800 "Ctrl+," "$left" "$right"
+# Synchronize: the plan of a mirror, before anything is run.
+shot sync 1280x800 "F9 s y n c Enter Enter" "$left" "$right"
+# The basket with two items from the left panel.
+shot basket 1280x800 "Down Insert Down Insert Alt+B Ctrl+B" "$left" "$right"
+# Copy path: the forms offered.
+shot copy-path 1280x800 "Down Alt+P" "$left" "$right"

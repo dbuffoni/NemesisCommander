@@ -356,6 +356,7 @@ impl SpanView {
             (s.code, "code"),
             (s.link, "link"),
             (s.mark, "mark"),
+            (s.removed, "removed"),
         ] {
             if on {
                 words.push(word.to_owned());

@@ -107,7 +107,7 @@ impl Diff {
         let half = columns.saturating_sub(2 * NUMBER + 5).max(10) / 2;
         let plain = Style::default();
         let mark = Style { mark: true, ..Style::default() };
-        let removed = Style { link: true, ..Style::default() };
+        let removed = Style { removed: true, ..Style::default() };
         let added = Style { code: true, ..Style::default() };
         let cell = |side: &Option<(usize, String)>, style: Style| -> Vec<Span> {
             match side {
