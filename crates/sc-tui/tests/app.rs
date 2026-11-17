@@ -1364,6 +1364,7 @@ async fn d_and_a_click_on_the_drive_open_the_list_for_that_panel() {
     assert!(h.screen().contains("[Local]"), "the panel title names the drive");
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn dates_and_permissions_change_on_the_selection() {
     use std::os::unix::fs::PermissionsExt;
