@@ -1434,3 +1434,35 @@ async fn ctrl_z_takes_back_renames_new_folders_and_moves() {
     h.key("Ctrl+Z");
     assert!(h.status().contains("Nothing to undo"), "the move back is not undone again");
 }
+
+#[tokio::test]
+async fn panels_in_a_git_repository_show_marks_and_the_branch() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git").arg("-C").arg(root.join("left")).args(args).output()
+    };
+    fs::create_dir_all(root.join("left")).unwrap();
+    fs::write(root.join("left/tracked.txt"), "t").unwrap();
+    if !matches!(git(&["init", "-q", "-b", "trunk"]), Ok(o) if o.status.success()) {
+        return; // no git on this machine
+    }
+    let _ = git(&["add", "tracked.txt"]);
+    fs::write(root.join("left/loose.txt"), "l").unwrap();
+    fs::create_dir_all(root.join("right")).unwrap();
+
+    let paths = AppPaths::in_dir(root.join("settings"));
+    let context = AppContext::load_from(paths).unwrap();
+    let left = VfsPath::from_local(root.join("left")).unwrap();
+    let right = VfsPath::from_local(root.join("right")).unwrap();
+    let (app, events) = App::new(context, left, right).unwrap();
+    let mut h = Harness { app, events, dir };
+    h.settle().await;
+    h.settle_until(|app| app.git[0].is_some()).await;
+    let screen = h.screen();
+    assert!(screen.contains("⎇ trunk"), "branch in the title:\n{screen}");
+    let line = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap_or("").to_owned();
+    assert!(line("tracked.txt").contains("M tracked.txt"), "{screen}");
+    assert!(line("loose.txt").contains("? loose.txt"), "{screen}");
+    assert!(h.app.git[1].is_none(), "the other folder is not a repository");
+}

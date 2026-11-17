@@ -53,6 +53,9 @@ pub struct FontsView {
 pub struct PanelView {
     /// Location of the panel, as the user types it.
     pub title: String,
+    /// Git branch and distance from the upstream (`main ↑1`), empty outside a
+    /// repository.
+    pub branch: String,
     /// The drive or connection the location is on (`Local`, `C:`, a name).
     pub drive: String,
     /// Tabs, when there is more than one.
@@ -103,6 +106,8 @@ pub struct RowView {
     pub selected: bool,
     /// Under the cursor.
     pub cursor: bool,
+    /// Git mark: `M` changed, `?` untracked, `!` ignored, empty for none.
+    pub git: String,
 }
 
 /// The status line.
@@ -506,17 +511,20 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
     } else {
         Vec::new()
     };
+    let git = git_of(app, side);
+    let panel = app.workspace.side(side).panel();
     let row_views = panel
         .entries()
         .iter()
         .enumerate()
         .skip(offset)
         .take(rows)
-        .map(|(i, entry)| row_view(panel, entry, i == cursor, human))
+        .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref()))
         .collect();
     let view = PanelView {
         title: display_location(panel.location()),
         drive: crate::drives::drive_label(&app.context().config, panel.location()),
+        branch: git.as_ref().map(|g| g.summary()).unwrap_or_default(),
         tabs,
         active,
         rows: row_views,
@@ -532,7 +540,28 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
     view
 }
 
-fn row_view(panel: &Panel, entry: &Entry, cursor: bool, human: bool) -> RowView {
+/// The git status of what `side` shows, if it is known for that folder.
+pub fn git_of(app: &App, side: SideId) -> Option<std::sync::Arc<crate::git::GitStatus>> {
+    let panel = app.workspace.side(side).panel();
+    match &app.git[side_index(side)] {
+        Some((path, status)) if path == panel.location() => Some(status.clone()),
+        _ => None,
+    }
+}
+
+/// The mark of `name`: one character, or empty.
+pub fn git_mark(git: Option<&crate::git::GitStatus>, name: &str) -> String {
+    let name = name.trim_end_matches('/');
+    git.and_then(|g| g.marks.get(name)).map(|m| m.to_string()).unwrap_or_default()
+}
+
+fn row_view(
+    panel: &Panel,
+    entry: &Entry,
+    cursor: bool,
+    human: bool,
+    git: Option<&crate::git::GitStatus>,
+) -> RowView {
     let mut name = entry.name.clone();
     if entry.is_dir() && entry.name != PARENT {
         name.push('/');
@@ -545,6 +574,7 @@ fn row_view(panel: &Panel, entry: &Entry, cursor: bool, human: bool) -> RowView 
         hidden: entry.is_hidden(),
         selected: panel.is_selected(&entry.name),
         cursor,
+        git: git_mark(git, &entry.name),
     }
 }
 
@@ -589,6 +619,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
     PanelView {
         title,
         drive: String::new(),
+        branch: String::new(),
         tabs: Vec::new(),
         active: false,
         rows: Vec::new(),

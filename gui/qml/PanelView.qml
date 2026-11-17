@@ -87,6 +87,11 @@ Rectangle {
                 elide: Text.ElideMiddle
                 font.bold: true
             }
+            Label {
+                visible: panel.view !== null && panel.view.branch !== ""
+                text: panel.view ? "\u2387 " + panel.view.branch : ""
+                color: panel.theme.accent
+            }
         }
 
         // Column titles; the sorted one has an arrow.
@@ -163,6 +168,17 @@ Rectangle {
                             anchors.leftMargin: 4
                             anchors.rightMargin: 4
                             spacing: 12
+                            // Git: M changed, ? untracked, ! ignored.
+                            Label {
+                                visible: panel.view.branch !== ""
+                                Layout.preferredWidth: panel.theme.rowHeight * 0.6
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData.git
+                                font: panel.theme.fixedFont
+                                color: modelData.git === "M" ? panel.theme.accent
+                                     : modelData.git === "?" ? panel.theme.codeColor
+                                     : panel.theme.dim
+                            }
                             Label {
                                 Layout.fillWidth: true
                                 text: modelData.name

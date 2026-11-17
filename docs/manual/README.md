@@ -113,6 +113,16 @@ The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
 what F1–F10 do.
 
+
+### Git marks
+
+Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:
+one commit to push, two to pull) and a mark before each name: **M** changed or
+staged, **?** untracked, **!** ignored. A folder carries the mark of what is
+inside it. It uses the `git` program of your system, only for local folders,
+and can be switched off in the settings ("Git marks and branch in
+repositories").
+
 ## Working with files
 
 Commands act on the selected entries, or on the entry under the cursor when
@@ -506,7 +516,7 @@ with a dot.
   default back.
   - General: confirm before deleting, use the recycle bin, the editor.
   - Panels: hidden files, sort order, human-readable sizes, ← and → to move
-    between folders.
+    between folders, git marks.
   - Transfers: jobs at the same time (1 runs them one after the other, in
     priority order), files at the same time in a job, the check after
     copying, what to do when a file exists, the bandwidth limit, retries.

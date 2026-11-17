@@ -59,6 +59,13 @@ pub enum AppEvent {
         /// Put the cursor of the focused panel on this name after reloading.
         focus: Option<String>,
     },
+    /// The git status of a folder arrived (`None`: not a repository).
+    Git {
+        /// The folder.
+        path: VfsPath,
+        /// Its status.
+        status: Option<Box<crate::git::GitStatus>>,
+    },
     /// A background task wants to show a window.
     Show(Box<Overlay>),
     /// A task changed files in a way Ctrl+Z can take back; the event is the
@@ -116,6 +123,7 @@ impl AppEvent {
         matches!(
             self,
             AppEvent::TaskDone { .. }
+                | AppEvent::Git { .. }
                 | AppEvent::Show(_)
                 | AppEvent::SearchDone(_)
                 | AppEvent::Loaded { .. }
@@ -197,6 +205,8 @@ pub struct App {
     /// terminal.
     pub graphical: bool,
     events: mpsc::UnboundedSender<AppEvent>,
+    /// Git status of what each side shows, with the folder it is for.
+    pub git: [Option<(VfsPath, Arc<crate::git::GitStatus>)>; 2],
     undo: Vec<UndoStep>,
     undo_jobs: HashSet<JobId>,
     tasks: usize,
@@ -220,6 +230,23 @@ pub enum UndoStep {
 const UNDO_DEPTH: usize = 50;
 
 impl App {
+    /// Asks git, in the background, about a local folder that was just listed.
+    fn refresh_git(&mut self, path: &VfsPath) {
+        if !self.context.config.panels.git_status || path.scheme() != "file" {
+            return;
+        }
+        let Some(dir) = path.to_local_path() else { return };
+        let path = path.clone();
+        self.spawn_task(async move {
+            let status = tokio::task::spawn_blocking(move || crate::git::read(&dir))
+                .await
+                .ok()
+                .flatten()
+                .map(Box::new);
+            AppEvent::Git { path, status }
+        });
+    }
+
     fn remember_undo(&mut self, step: UndoStep) {
         self.undo.push(step);
         if self.undo.len() > UNDO_DEPTH {
@@ -385,6 +412,7 @@ impl App {
             status,
             jobs: Vec::new(),
             live_bytes: HashMap::new(),
+            git: [None, None],
             undo: Vec::new(),
             undo_jobs: HashSet::new(),
             quick_view: None,
@@ -540,8 +568,18 @@ impl App {
             self.tasks = self.tasks.saturating_sub(1);
         }
         match event {
+            AppEvent::Git { path, status } => {
+                let status = status.map(|s| Arc::new(*s));
+                for side in [SideId::Left, SideId::Right] {
+                    if self.workspace.side(side).panel().location() == &path {
+                        self.git[side_index(side)] = status.clone().map(|s| (path.clone(), s));
+                    }
+                }
+            }
             AppEvent::Listing(listing) => {
+                let listed = listing.path.clone();
                 if self.workspace.apply(listing) {
+                    self.refresh_git(&listed);
                     self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
                         let error = error.to_owned();

@@ -28,6 +28,8 @@ pub enum Field {
     HumanSizes,
     /// Left and Right move between folders.
     ArrowNavigation,
+    /// Git marks and branch.
+    GitStatus,
     /// Jobs running at once.
     ParallelJobs,
     /// Files copied at once within a job.
@@ -91,7 +93,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 20] = [
+    pub const ALL: [Field; 21] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -100,6 +102,7 @@ impl Field {
         Field::Descending,
         Field::HumanSizes,
         Field::ArrowNavigation,
+        Field::GitStatus,
         Field::ParallelJobs,
         Field::ParallelFiles,
         Field::Verify,
@@ -119,7 +122,7 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | Editor => "General",
-            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation => "Panels",
+            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus => "Panels",
             ParallelJobs | ParallelFiles | Verify | Conflict | BandwidthLimit | Retries => {
                 "Transfers"
             }
@@ -140,6 +143,7 @@ impl Field {
             Descending => "Largest, latest or last first",
             HumanSizes => "Sizes as KiB, MiB, GiB",
             ArrowNavigation => "← goes up, → enters a folder",
+            GitStatus => "Git marks and branch in repositories",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
             ParallelFiles => "Files at the same time in a job",
             Verify => "Check after copying",
@@ -160,7 +164,7 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | Wrap => FieldKind::Toggle,
+            | GitStatus | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
             Editor | FontFamily | FixedFontFamily => FieldKind::Text,
             FontSize => FieldKind::Number(0, 48),
@@ -187,6 +191,7 @@ impl Field {
             Descending => on(p.descending),
             HumanSizes => on(p.human_sizes),
             ArrowNavigation => on(p.arrow_navigation),
+            GitStatus => on(p.git_status),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
             Verify => name_of(&VERIFY, t.verify),
@@ -214,6 +219,7 @@ impl Field {
             Descending => p.descending ^= true,
             HumanSizes => p.human_sizes ^= true,
             ArrowNavigation => p.arrow_navigation ^= true,
+            GitStatus => p.git_status ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),

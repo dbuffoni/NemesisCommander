@@ -77,6 +77,8 @@ pub struct PanelSettings {
     /// Left goes to the parent folder and Right enters the folder under the
     /// cursor (Double Commander's "Lynx-like" movement).
     pub arrow_navigation: bool,
+    /// Mark changed files and show the branch inside git repositories.
+    pub git_status: bool,
 }
 
 impl Default for PanelSettings {
@@ -87,6 +89,7 @@ impl Default for PanelSettings {
             descending: false,
             human_sizes: true,
             arrow_navigation: false,
+            git_status: true,
         }
     }
 }
