@@ -36,6 +36,8 @@ Item {
                 text = "<font color=\"" + viewer.theme.codeColor + "\">" + text + "</font>"
             if (style.indexOf("link") >= 0)
                 text = "<font color=\"" + viewer.theme.linkColor + "\"><u>" + text + "</u></font>"
+            if (style.indexOf("removed") >= 0)
+                text = "<font color=\"" + viewer.theme.removedColor + "\">" + text + "</font>"
             if (style.indexOf("mark") >= 0)
                 text = "<font color=\"" + viewer.theme.dim + "\">" + text + "</font>"
             if (style.indexOf("italic") >= 0)

@@ -25,15 +25,16 @@ the real window on a demo folder.
 6. [The viewer](#the-viewer)
 7. [Quick view](#quick-view)
 8. [Searching and comparing](#searching-and-comparing)
-9. [Archives](#archives)
-10. [Remote locations](#remote-locations)
-11. [Servers: the agent and `sc serve`](#servers-the-agent-and-sc-serve)
-12. [The transfer queue](#the-transfer-queue)
-13. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
-14. [Plugins and scripts](#plugins-and-scripts)
-15. [The command line](#the-command-line)
-16. [Settings](#settings)
-17. [All shortcuts](#all-shortcuts)
+9. [Synchronizing folders](#synchronizing-folders)
+10. [Archives](#archives)
+11. [Remote locations](#remote-locations)
+12. [Servers: the agent and `sc serve`](#servers-the-agent-and-sc-serve)
+13. [The transfer queue](#the-transfer-queue)
+14. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
+15. [Plugins and scripts](#plugins-and-scripts)
+16. [The command line](#the-command-line)
+17. [Settings](#settings)
+18. [All shortcuts](#all-shortcuts)
 
 ## Getting started
 
@@ -211,6 +212,48 @@ On the command line, `sc rename` has every option of the rule (`--find`,
 "description" FILES...` prints the rule Claude wrote as an `sc rename`
 command, with the new names.
 
+### Renaming in your editor
+
+**Rename in the editor** (F9) writes the names of the selected items to a
+file, one per line, and opens it in your editor (the one set in Settings, or
+`$VISUAL` / `$EDITOR` in a terminal). Change the names, keep the lines in
+order, save and close. You then see the old and new names, and nothing is
+renamed until you confirm; names that already belong to other files stop the
+whole thing, as in multi-rename. In the window, set an editor that waits until
+it is closed (for example `code --wait`) in Settings first.
+
+### Links
+
+**Alt+L** makes a symbolic link (relative or absolute) or a hard link, in the
+other panel's folder, to the selected items, with the same names. Only local
+folders can hold links; an existing name is never replaced.
+
+### Copying paths, exporting a listing
+
+**Alt+P** copies to the system clipboard the full path, the name, the URI or
+the folder of the selected items (one per line). In a terminal this uses the
+OSC 52 escape sequence, which most terminals accept, also over SSH (tmux needs
+`set -g set-clipboard on`).
+
+![Copy path](images/copy-path.png)
+
+**Export listing** (F9) writes the selected items, or the whole folder when
+nothing is selected, as CSV, JSON, Markdown or HTML (name, path, type, size,
+date). Give a file name to write it (an existing file is never overwritten), or
+leave the name empty to copy it to the clipboard.
+
+### The basket
+
+The basket collects items from several folders and drives to act on together.
+**Alt+B** adds the selection; **Ctrl+B** opens the basket. In it, **Enter**
+shows an item in the panel, **F5** copies, **F6** moves, **F8** deletes,
+**Alt+F5** packs and **Ctrl+M** renames everything in the basket, **Delete**
+removes one item from the list (the file stays) and **Shift+Delete** empties it.
+Moved and deleted items leave the basket by themselves. The basket is kept
+until you quit.
+
+![Basket](images/basket.png)
+
 ## Selecting files
 
 - **Insert** or **Space** selects the entry under the cursor and moves down.
@@ -300,9 +343,60 @@ size and age.
 content, or two folders, selecting the entries that differ. Two different
 text files open side by side, with the file of the panel you are in on the
 left: `-` marks lines only on the left, `+` lines only on the right and `~`
-lines that differ (blue on the left, green on the right). **n** and **p** jump to the
+lines that differ (red on the left, green on the right). **n** and **p** jump to the
 next and previous change, **Esc** closes. Files that are identical or not text just
 report that.
+
+The search asks three things: the names, the text inside the files, and
+**conditions** on size and age, as words: `>10M` (bigger than 10 MiB), `<1G`,
+`newer:7d` (changed in the last 7 days), `older:2w`; units for ages are `h`,
+`d`, `w`, `m` (30 days) and `y`. Leave it empty for no conditions.
+
+In the list of results, **Alt+B** puts all of them in the [basket](#the-basket),
+so you can copy, pack, rename or delete them together.
+
+### Saved searches
+
+**Save the last search** (F9) keeps the search you just ran under a name, in
+your settings file (`[[searches]]`). **Saved searches** lists them (Enter runs one
+in the folder you are in, Delete forgets it), and each one is also in the
+command list as `Tools/Search: NAME`, where **Ctrl+K** gives it a shortcut.
+
+### Comparing by content
+
+**Compare folders by content** (F9) hashes the files with the same name and
+size on both sides, including those in subfolders, and selects what differs or
+is only on one side. When a side is an agent connection (`agent://`), the agent
+computes the hashes where the files are, so nothing is downloaded: this is the
+way to compare two servers.
+
+### Similar pictures
+
+**Find similar pictures** (F9) looks at the pictures in this folder and below
+and groups those that are resized or re-saved copies of each other (a
+perceptual hash of each picture, so different formats and sizes match). Each
+group names the best copy (most pixels, then the largest file); Enter on a
+group shows it, and the first row puts every other copy in the basket, ready to
+delete.
+
+## Synchronizing folders
+
+**Synchronize folders** (F9) makes the folder of the active panel and the other
+panel's agree, on any two locations. Choose how:
+
+- **Mirror** makes the other folder a copy of this one, deleting what only it
+  has.
+- **Update** copies new files and files that are newer here, and deletes nothing.
+- **Two-way** copies the newest version of each file in both directions.
+  Files that differ with no newer one are listed as not decided and left alone.
+
+You first see the whole plan, colour coded: green for new files, blue for files
+that replace an older one, red for deletions. Nothing has changed yet: **Enter**
+runs it (copies are queued in the transfer queue and can be undone only by
+hand), **Esc** cancels. Files count as equal when size and time (to the second,
+two on FAT) match.
+
+![Synchronize plan](images/sync.png)
 
 ## Archives
 
@@ -359,6 +453,14 @@ shared settings.
 Passwords are never stored in SuperCommander's settings: SFTP and the agent
 use SSH (keys, agent, `~/.ssh/config`), WebDAV and SMB read `~/.netrc`, S3
 reads the usual `~/.aws` files and environment variables.
+
+### Naming connections
+
+Every new connection (SFTP, WebDAV, SMB, S3, agent…) asks for a **name** right
+after its location; it is what the drive list and the drive label above the
+panel show. It starts as the host name: type something you will recognise, such
+as `Office NAS`. To change it later, select the connection in the drive list and
+press **F2**.
 
 ### Private key files (`.pem`)
 
@@ -442,6 +544,13 @@ parallel jobs and files, retries, and a bandwidth limit.
 - **Alt+Left** and **Alt+Right** go back and forward in the folders visited.
 
 ![Bookmarks](images/bookmarks.png)
+
+### Frequent folders
+
+Every folder you open is remembered with how often and how recently. **Alt+J**
+asks for part of a name (every word must be in the path, the last one in the
+folder's name) and opens the best match, or lists the matches; with nothing
+typed it lists the most used. Remote folders count too.
 
 ## Plugins and scripts
 
@@ -588,6 +697,10 @@ on the settings screen (Ctrl+,).
 | Alt+F9 | Unpack archive |
 | Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |
+| Alt+P | Copy path to clipboard |
+| Alt+L | Create symlink or hard link |
+| Alt+B | Add to basket |
+| (F9 only) | Export listing, Rename in the editor |
 
 | Select | |
 |---|---|
@@ -604,7 +717,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| D, Alt+F1, Ctrl+N | Drives and connections (F4 on a connection: private key) |
+| D, Alt+F1, Ctrl+N | Drives and connections (on a connection: F2 rename, F4 private key) |
 | Ctrl+D | Bookmarks |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |
@@ -613,6 +726,8 @@ on the settings screen (Ctrl+,).
 | Ctrl+Shift+Tab, Ctrl+PageUp | Previous tab |
 | Alt+O | Open this folder in the other panel |
 | Ctrl+U | Swap panels |
+| Alt+J | Jump to a frequent folder |
+| Ctrl+B | Basket |
 | Ctrl+←, Ctrl+→ | Open the folder under the cursor in the left / right panel |
 
 | View | |
@@ -627,6 +742,7 @@ on the settings screen (Ctrl+,).
 |---|---|
 | Alt+F7 | Search |
 | Alt+C | Compare files or folders |
+| (F9 only) | Compare folders by content, Synchronize folders, Find similar pictures, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
 | Alt+X | Plugins and scripts |
 | (F9 only) | Write a script with AI |

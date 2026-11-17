@@ -23,10 +23,15 @@ pub mod commands;
 mod dialogs;
 pub mod diff;
 pub mod drives;
+pub mod export;
+pub mod frecency;
 pub mod git;
 mod input;
 pub mod preview;
+pub mod searches;
 pub mod settings;
+pub mod similar;
+pub mod syncplan;
 pub mod view;
 pub mod viewer;
 

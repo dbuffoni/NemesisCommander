@@ -18,6 +18,8 @@ pub mod qobject {
         #[qml_element]
         #[qproperty(QString, screen)]
         #[qproperty(bool, running)]
+        #[qproperty(QString, clipboard)]
+        #[qproperty(i32, clipboard_seq)]
         #[qproperty(QString, screenshot)]
         #[qproperty(i32, window_width)]
         #[qproperty(i32, window_height)]

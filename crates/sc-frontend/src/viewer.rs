@@ -205,9 +205,14 @@ pub struct Viewer {
     /// A formatted document (Markdown, Office).
     pub rich: Option<RichText>,
     /// This viewer shows the comparison of two files (Alt+C).
-    pub diff: Option<crate::diff::Diff>,
+    pub diff: Option<Box<crate::diff::Diff>>,
     /// A title to show instead of the path.
     pub title: Option<String>,
+    /// This viewer shows a report made of ready lines (a synchronization
+    /// plan).
+    pub report: Option<Box<Vec<sc_preview::rich::Line>>>,
+    /// The synchronization the report is the plan of: Enter runs it.
+    pub sync: Option<Box<crate::syncplan::SyncRun>>,
     /// A PDF: its bytes, page count and the page shown (from 0).
     pub pdf: Option<(Arc<Vec<u8>>, usize, usize)>,
     /// A 3D model and where it is seen from.
@@ -241,6 +246,8 @@ impl Viewer {
             rich: None,
             diff: None,
             title: None,
+            report: None,
+            sync: None,
             pdf: None,
             model: None,
             zoom: Zoom::default(),
@@ -362,7 +369,7 @@ impl Viewer {
         viewer.title = Some(format!("{} ↔ {}", diff.left_name, diff.right_name));
         viewer.data = Some(Arc::new(Vec::new()));
         viewer.rich = Some(RichText::default());
-        viewer.diff = Some(diff);
+        viewer.diff = Some(Box::new(diff));
         viewer
     }
 
@@ -381,9 +388,30 @@ impl Viewer {
         }
     }
 
+    /// A viewer showing the plan of a synchronization.
+    pub fn for_sync(run: crate::syncplan::SyncRun) -> Self {
+        let mut viewer = Viewer::new(run.left.clone(), false);
+        viewer.title = Some(run.title());
+        viewer.data = Some(Arc::new(Vec::new()));
+        viewer.rich = Some(RichText::default());
+        viewer.report = Some(Box::new(run.lines()));
+        if run.plan.has_work() {
+            viewer.sync = Some(Box::new(run));
+        }
+        viewer
+    }
+
     /// Lays a formatted document out for `columns` (front ends call this
     /// with their width before drawing).
     pub fn layout(&mut self, columns: usize) {
+        if let (Some(lines), Some(rich)) = (&self.report, &mut self.rich) {
+            if rich.width != columns {
+                rich.lines = lines.to_vec();
+                rich.width = columns;
+            }
+            self.scroll = self.scroll.min(rich.lines.len().saturating_sub(1));
+            return;
+        }
         if let (Some(diff), Some(rich)) = (&self.diff, &mut self.rich) {
             if rich.width != columns {
                 rich.lines = diff.render(columns);

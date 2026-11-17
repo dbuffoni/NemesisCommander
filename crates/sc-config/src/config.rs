@@ -164,6 +164,23 @@ pub struct Bookmark {
     pub targets: Vec<String>,
 }
 
+/// A search kept under a name (F9 and shortcuts run it again).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SavedSearch {
+    /// Display name; also the id of its shortcut (`search.NAME`).
+    pub name: String,
+    /// File name mask (empty: any name).
+    #[serde(default)]
+    pub mask: String,
+    /// Text to find inside files.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub content: String,
+    /// Size and age conditions: `>10M`, `<1G`, `newer:7d`, `older:2w`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub filters: String,
+}
+
 /// A saved remote location. Secrets are never stored: authentication uses
 /// SSH keys/agents or is asked interactively.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,6 +218,8 @@ pub struct Config {
     pub bookmarks: Vec<Bookmark>,
     /// Saved connections, in menu order.
     pub connections: Vec<Connection>,
+    /// Saved searches, in list order.
+    pub searches: Vec<SavedSearch>,
 }
 
 impl Config {

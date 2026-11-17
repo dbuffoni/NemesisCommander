@@ -108,6 +108,11 @@ actions! {
     Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", ["Ctrl+Z"];
     Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", [];
     Checksum      = "files.checksum",       Files, false, "Checksum",                 ["Ctrl+K"];
+    CopyPath      = "files.copy-path",      Files, false, "Copy path to clipboard…",  ["Alt+P"];
+    Export        = "files.export",         Files, false, "Export listing…",          [];
+    Link          = "files.link",           Files, false, "Create symlink or hard link…", ["Alt+L"];
+    BulkRename    = "files.bulk-rename",    Files, false, "Rename in the editor…",    [];
+    BasketAdd     = "files.basket-add",     Files, false, "Add to basket",            ["Alt+B"];
     // Select
     ToggleSelect  = "select.toggle",        Select, true, "Select / unselect",        ["Insert", "Space"];
     SelectMask    = "select.mask",          Select, true, "Select by mask…",          ["+"];
@@ -132,6 +137,8 @@ actions! {
     SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Alt+O"];
     OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", ["Ctrl+Left"];
     OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", ["Ctrl+Right"];
+    Jump          = "nav.jump",             Navigate, false, "Jump to a frequent folder…", ["Alt+J"];
+    Basket        = "nav.basket",           Navigate, false, "Basket…",               ["Ctrl+B"];
     SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+U"];
     // View
     Refresh       = "view.refresh",         View, false, "Refresh",                   ["Ctrl+R"];
@@ -145,6 +152,11 @@ actions! {
     // Tools
     Search        = "tools.search",         Tools, true,  "Search…",                  ["Alt+F7"];
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
+    CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
+    Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];
+    SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    [];
+    SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          [];
+    SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    [];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           ["Ctrl+J"];
     RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Alt+X"];
     AiScript      = "tools.ai-script",      Tools, false, "Write a script with AI…",  [];
@@ -341,7 +353,7 @@ impl fmt::Display for KeyChord {
 /// Ids in `[keys]` that name commands of plugins (`plugin.NAME.COMMAND`)
 /// or user scripts (`script.NAME`) rather than built-in actions. They
 /// have no built-in keys.
-pub const EXTRA_PREFIXES: [&str; 2] = ["plugin.", "script."];
+pub const EXTRA_PREFIXES: [&str; 3] = ["plugin.", "script.", "search."];
 
 /// Whether `id` names a plugin or script command (see [`EXTRA_PREFIXES`]).
 pub fn is_extra_command(id: &str) -> bool {

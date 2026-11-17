@@ -74,6 +74,14 @@ impl App {
     pub fn commands(&self) -> Vec<CommandEntry> {
         let mut entries: Vec<CommandEntry> =
             Action::ALL.iter().map(|&a| CommandEntry::action(a)).collect();
+        for search in &self.context.config.searches {
+            entries.push(CommandEntry {
+                id: format!("search.{}", search.name),
+                category: Category::Tools.title().to_owned(),
+                label: format!("Search: {}", search.name),
+                target: Target::Search(search.name.clone()),
+            });
+        }
         if !cfg!(feature = "scripting") {
             return entries;
         }
@@ -144,6 +152,7 @@ impl App {
         match target {
             Target::Action(action) => self.perform(action),
             Target::Plugin(choice) => self.plugin_chosen(choice),
+            Target::Search(name) => self.run_saved_search(&name),
         }
     }
 

@@ -107,8 +107,11 @@ impl App {
         if !file.exists() && !self.save_settings() {
             return;
         }
-        self.external =
-            Some(External { command: self.editor_command(&file), reload_settings: true });
+        self.external = Some(External {
+            command: self.editor_command(&file),
+            reload_settings: true,
+            rename: None,
+        });
     }
 
     fn step_option(&mut self, row: Row, delta: i64) {

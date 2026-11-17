@@ -69,6 +69,13 @@ pub enum InputPurpose {
         /// Not saved yet: save it and open it.
         new: bool,
     },
+    /// A new name for a saved connection (F2 in the drive list).
+    RenameConnection {
+        /// The name now.
+        name: String,
+        /// Its location.
+        uri: String,
+    },
     /// Select entries matching the typed mask.
     SelectMask,
     /// Unselect entries matching the typed mask.
@@ -83,6 +90,24 @@ pub enum InputPurpose {
     SearchContent {
         /// Mask from the first question.
         mask: String,
+    },
+    /// Third search question: size and age conditions.
+    SearchFilters {
+        /// Mask from the first question.
+        mask: String,
+        /// Text from the second question.
+        content: String,
+    },
+    /// The name a search is saved under.
+    NameSearch,
+    /// Part of the name of a frequent folder to jump to.
+    Jump,
+    /// Where to write the listing (empty: the clipboard).
+    ExportTo {
+        /// The format chosen before.
+        format: crate::export::Format,
+        /// Only the selected items, not the whole listing.
+        selection_only: bool,
     },
     /// Change the dates and permissions of these items.
     Attributes(Vec<VfsPath>),
@@ -198,6 +223,26 @@ pub enum ChoosePurpose {
     ImportMode(Box<ExportBundle>),
     /// Run one of these plugin commands or scripts.
     Plugin(Vec<crate::app::PluginChoice>),
+    /// Copy these items' paths in the chosen form.
+    CopyPath(Vec<VfsPath>),
+    /// Export the listing in the chosen format.
+    ExportFormat {
+        /// Only the selected items, not the whole listing.
+        selection_only: bool,
+    },
+    /// Make the chosen kind of link to these items in the other panel.
+    LinkKind(Vec<VfsPath>),
+    /// Go to one of these frequent folders (as VFS URIs).
+    Jump(Vec<String>),
+    /// Run a saved search (Delete forgets it).
+    SavedSearches,
+    /// The basket: Enter shows the item in the panel.
+    Basket(Vec<VfsPath>),
+    /// How to synchronize the two folders.
+    SyncMode,
+    /// Groups of similar pictures, after a row that puts the extra copies
+    /// in the basket.
+    Similar(Vec<Vec<crate::similar::Picture>>),
 }
 
 /// Pick one item from a list.

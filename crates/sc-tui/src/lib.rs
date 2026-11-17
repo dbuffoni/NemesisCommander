@@ -11,6 +11,7 @@
 //! * `terminal`: terminal key events to [`KeyPress`]es.
 //! * [`run`]: the main loop, and handing the terminal to an editor.
 
+mod clipboard;
 mod mouse;
 mod terminal;
 mod ui;
@@ -83,6 +84,9 @@ pub async fn run(
         // Apply everything else that is already waiting before redrawing.
         while let Ok(event) = events.try_recv() {
             app.handle_event(event);
+        }
+        if let Some(text) = app.take_clipboard() {
+            clipboard::write(&text);
         }
         if let Some(external) = app.take_external() {
             let _ = crossterm::execute!(io::stdout(), DisableMouseCapture);

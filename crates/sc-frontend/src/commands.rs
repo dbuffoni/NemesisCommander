@@ -25,6 +25,8 @@ pub enum Target {
     Action(Action),
     /// A plugin command or a script.
     Plugin(PluginChoice),
+    /// A saved search, by name.
+    Search(String),
 }
 
 /// One row of the command list.

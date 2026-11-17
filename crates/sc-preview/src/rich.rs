@@ -20,6 +20,8 @@ pub struct Style {
     pub heading: u8,
     /// Decoration drawn by the layout (bullets, borders, quote bars).
     pub mark: bool,
+    /// Something taken away (red): removed lines, files to delete.
+    pub removed: bool,
 }
 
 /// Text with one style.
