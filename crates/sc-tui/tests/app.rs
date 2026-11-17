@@ -1361,7 +1361,8 @@ async fn d_and_a_click_on_the_drive_open_the_list_for_that_panel() {
     h.app.pick("drive", 1);
     assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
     assert_eq!(h.app.workspace().active_side(), SideId::Right, "the clicked panel takes it");
-    assert!(h.screen().contains("[Local]"), "the panel title names the drive");
+    let expected = if cfg!(windows) { ":]" } else { "[Local]" };
+    assert!(h.screen().contains(expected), "the panel title names the drive");
 }
 
 #[cfg(unix)]
