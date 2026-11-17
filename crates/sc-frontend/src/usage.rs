@@ -162,7 +162,7 @@ mod tests {
         ];
         let rows = rows(&usages);
         assert!(rows[0].starts_with("████████████  75%"), "{}", rows[0]);
-        assert!(rows[0].ends_with("3 MiB  big/"), "{}", rows[0]);
+        assert!(rows[0].ends_with("3.0 MiB  big/"), "{}", rows[0]);
         assert!(rows[1].contains(" 25%") && rows[1].ends_with("small.txt"), "{}", rows[1]);
     }
 }

@@ -32,6 +32,7 @@ pub mod preview;
 pub mod searches;
 pub mod settings;
 pub mod similar;
+pub mod speed;
 pub mod syncplan;
 pub mod usage;
 pub mod view;

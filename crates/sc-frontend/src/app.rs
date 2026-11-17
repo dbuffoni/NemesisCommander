@@ -222,6 +222,8 @@ pub struct App {
     pub jobs: Vec<JobInfo>,
     /// Bytes done of running jobs, updated more often than `jobs`.
     pub live_bytes: HashMap<JobId, u64>,
+    /// Transfer speed of the running jobs.
+    pub speed: crate::speed::SpeedMeter,
     /// The quick view (Ctrl+Q) and the file it shows.
     pub quick_view: Option<Option<Viewer>>,
     /// First visible row of each side's list, kept by the renderer.
@@ -470,6 +472,7 @@ impl App {
             status,
             jobs: Vec::new(),
             live_bytes: HashMap::new(),
+            speed: crate::speed::SpeedMeter::default(),
             git: [None, None],
             undo: Vec::new(),
             undo_jobs: HashSet::new(),
@@ -614,6 +617,9 @@ impl App {
             Ok(jobs) => self.jobs = jobs,
             Err(e) => self.set_error(format!("transfer queue: {e}")),
         }
+        if crate::view::jobs_progress(&self.jobs, self).is_none() {
+            self.speed.clear();
+        }
     }
 
     fn set_status(&mut self, text: impl Into<String>) {
@@ -663,6 +669,7 @@ impl App {
             }
             AppEvent::Job(JobEvent::Progress { id, bytes }) => {
                 *self.live_bytes.entry(id).or_default() += bytes;
+                self.speed.record(std::time::Instant::now(), bytes);
             }
             AppEvent::Job(JobEvent::StateChanged { id, state }) => {
                 self.live_bytes.remove(&id);

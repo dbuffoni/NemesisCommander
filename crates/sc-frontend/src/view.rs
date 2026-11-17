@@ -27,6 +27,8 @@ pub struct Screen {
     pub status: StatusView,
     /// Progress of running transfers (`2 jobs 40%`), empty when idle.
     pub jobs: String,
+    /// How far they are, 0 to 1; -1 when idle.
+    pub progress: f64,
     /// Function keys F1–F10 with short labels.
     pub keys: Vec<KeyLabel>,
     /// The open dialog or window.
@@ -441,6 +443,7 @@ impl Screen {
             panels,
             status,
             jobs: jobs_summary(&app.jobs, app).unwrap_or_default(),
+            progress: jobs_progress(&app.jobs, app).unwrap_or(-1.0),
             keys,
             overlay,
             conflict,
@@ -948,18 +951,61 @@ pub fn percent(done: u64, total: u64) -> Option<u64> {
     (done.min(total) * 100).checked_div(total)
 }
 
-/// `2 jobs 40%` for queued and running transfers.
-pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
+/// The running and queued transfers, with what the totals say.
+struct Active {
+    running: usize,
+    queued: usize,
+    total: u64,
+    done: u64,
+}
+
+fn active_jobs(jobs: &[JobInfo], app: &App) -> Option<Active> {
     let active: Vec<&JobInfo> =
         jobs.iter().filter(|j| matches!(j.state, JobState::Queued | JobState::Running)).collect();
     if active.is_empty() {
         return None;
     }
-    let total: u64 = active.iter().map(|j| j.total_bytes).sum();
-    let done: u64 =
-        active.iter().map(|j| j.done_bytes + app.live_bytes.get(&j.id).copied().unwrap_or(0)).sum();
-    let percent = percent(done, total).map_or("…".into(), |p| format!("{p}%"));
-    Some(format!("{} jobs {percent}", active.len()))
+    Some(Active {
+        running: active.iter().filter(|j| j.state == JobState::Running).count(),
+        queued: active.iter().filter(|j| j.state == JobState::Queued).count(),
+        total: active.iter().map(|j| j.total_bytes).sum(),
+        done: active
+            .iter()
+            .map(|j| j.done_bytes + app.live_bytes.get(&j.id).copied().unwrap_or(0))
+            .sum(),
+    })
+}
+
+/// How far the running and queued transfers are, from 0 to 1 (`None` when
+/// idle; 0 while the sizes are not known yet).
+pub fn jobs_progress(jobs: &[JobInfo], app: &App) -> Option<f64> {
+    let active = active_jobs(jobs, app)?;
+    Some(if active.total == 0 {
+        0.0
+    } else {
+        active.done.min(active.total) as f64 / active.total as f64
+    })
+}
+
+/// `2 jobs · 40% · 12.4 MiB/s · 0:42 left · 3 queued` for queued and
+/// running transfers.
+pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
+    let active = active_jobs(jobs, app)?;
+    let count = active.running + active.queued;
+    let mut parts = vec![format!("{count} job{}", if count == 1 { "" } else { "s" })];
+    parts.push(percent(active.done, active.total).map_or("…".into(), |p| format!("{p}%")));
+    if let Some(speed) = app.speed.speed(std::time::Instant::now()).filter(|s| *s >= 1.0) {
+        parts.push(format!("{}/s", human_size(speed as u64)));
+        let left = active.total.saturating_sub(active.done);
+        if active.total > 0 {
+            parts
+                .push(format!("{} left", crate::speed::clock((left as f64 / speed).ceil() as u64)));
+        }
+    }
+    if active.queued > 0 && active.running > 0 {
+        parts.push(format!("{} queued", active.queued));
+    }
+    Some(parts.join(" · "))
 }
 
 /// A job's state in words.

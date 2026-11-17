@@ -156,6 +156,26 @@ ApplicationWindow {
                 }
             }
 
+            // Progress of the transfers: a thin line, only while there are some.
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 3
+                visible: window.screen ? window.screen.progress >= 0 : false
+                color: palette.mid
+                Rectangle {
+                    height: parent.height
+                    width: parent.width * (window.screen ? Math.max(0, window.screen.progress) : 0)
+                    color: window.accent
+                }
+                // A click opens the transfer queue.
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.topMargin: -6
+                    anchors.bottomMargin: -6
+                    onClicked: commander.perform("tools.jobs")
+                }
+            }
+
             // Function keys F1-F10.
             RowLayout {
                 Layout.fillWidth: true

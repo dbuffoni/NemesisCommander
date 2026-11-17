@@ -16,7 +16,8 @@ use sc_frontend::drives::drive_label;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
     column_headers, commands_view, counted_size, describe, entry_details, git_mark, git_of,
-    job_line, jobs_summary, panel_footer, scroll_offset, short_label, size_text_counted, tab_title,
+    job_line, jobs_progress, jobs_summary, panel_footer, scroll_offset, short_label,
+    size_text_counted, tab_title,
 };
 use sc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -49,9 +50,15 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if let Some(Some(viewer)) = &mut app.quick_view {
         viewer.layout((width / 2).saturating_sub(2));
     }
-    let [panels, status, keys] =
-        Layout::vertical([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)])
-            .areas(frame.area());
+    // A line for the transfers, only while there are some.
+    let progress = jobs_progress(&app.jobs, app);
+    let [panels, transfers, status, keys] = Layout::vertical([
+        Constraint::Min(3),
+        Constraint::Length(u16::from(progress.is_some())),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(frame.area());
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(panels);
 
@@ -62,6 +69,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         } else {
             draw_panel(frame, app, side, area);
         }
+    }
+    if let Some(progress) = progress {
+        draw_transfers(frame, app, progress, transfers);
     }
     draw_status(frame, app, status);
     draw_key_bar(frame, app, keys);
@@ -260,20 +270,29 @@ fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
 
 // ------------------------------------------------------- status and keys
 
+/// A thin bar and the numbers of the running transfers.
+fn draw_transfers(frame: &mut Frame, app: &App, progress: f64, area: Rect) {
+    let width = (area.width as usize / 4).clamp(10, 40);
+    let filled = ((progress * width as f64).round() as usize).min(width);
+    let line = Line::from(vec![
+        Span::styled("━".repeat(filled), Style::new().fg(Color::Cyan)),
+        Span::styled("─".repeat(width - filled), dim()),
+        Span::raw("  "),
+        Span::styled(
+            jobs_summary(&app.jobs, app).unwrap_or_default(),
+            Style::new().fg(Color::Cyan),
+        ),
+    ]);
+    frame.render_widget(Paragraph::new(line), area);
+}
+
 fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
-    let right = jobs_summary(&app.jobs, app).unwrap_or_default();
     let (text, style) = match app.status() {
         Some(status) if status.error => (status.text.clone(), Style::new().fg(Color::Red)),
         Some(status) => (status.text.clone(), Style::new()),
         None => (entry_details(app.workspace.active()), dim()),
     };
-    let width = area.width as usize;
-    let left_width = width.saturating_sub(right.chars().count() + 1);
-    let line = Line::from(vec![
-        Span::styled(fit(&text, left_width), style),
-        Span::raw(" "),
-        Span::styled(right, Style::new().fg(Color::Cyan)),
-    ]);
+    let line = Line::from(Span::styled(fit(&text, area.width as usize), style));
     frame.render_widget(Paragraph::new(line), area);
 }
 

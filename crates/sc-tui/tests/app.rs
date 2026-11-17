@@ -2079,3 +2079,22 @@ async fn the_disk_table_opens_or_says_why_not() {
     let shown = matches!(h.app.overlay(), Some(Overlay::Choose(_)));
     assert!(shown || h.status().contains("Disks:"), "{}", h.status());
 }
+
+#[tokio::test]
+async fn running_transfers_show_a_bar_and_their_numbers() {
+    let mut h = Harness::with_settings(|c| c.transfers.conflict = ConflictPolicy::Ask).await;
+    let idle = h.screen();
+    assert!(!idle.contains("1 job"), "idle: no transfer line");
+    fs::write(h.path("right/a.txt"), "old").unwrap();
+    h.focus("a.txt");
+    h.key("F5");
+    h.key("Enter");
+    // The copy waits for the answer, so it is running.
+    h.settle_until(|app| app.pending_conflict().is_some()).await;
+    let screen = h.screen();
+    assert!(screen.contains("1 job ·"), "{screen}");
+    h.press(KeyPress::char('o'));
+    h.settle_until(|app| sc_frontend::view::jobs_progress(&app.jobs, app).is_none()).await;
+    let screen = h.screen();
+    assert!(!screen.contains("1 job"), "the line goes with the job: {screen}");
+}
