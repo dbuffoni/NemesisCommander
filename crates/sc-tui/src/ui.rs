@@ -15,8 +15,8 @@ use sc_frontend::commands::CommandPalette;
 use sc_frontend::drives::drive_label;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
-    column_headers, commands_view, describe, entry_details, git_mark, git_of, job_line,
-    jobs_summary, panel_footer, scroll_offset, short_label, size_text, tab_title,
+    column_headers, commands_view, counted_size, describe, entry_details, git_mark, git_of,
+    job_line, jobs_summary, panel_footer, scroll_offset, short_label, size_text_counted, tab_title,
 };
 use sc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -186,7 +186,8 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         if entry.is_dir() && entry.name != PARENT {
             name.push('/');
         }
-        let size = size_text(entry, app.context().config.panels.human_sizes);
+        let counted = counted_size(app.folder_sizes(), panel.location(), entry);
+        let size = size_text_counted(entry, app.context().config.panels.human_sizes, counted);
         let date = if show_date {
             format!(" {:<DATE_WIDTH$}", entry.modified.map(local_time).unwrap_or_default())
         } else {

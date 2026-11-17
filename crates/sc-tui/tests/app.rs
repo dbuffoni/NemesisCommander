@@ -2011,17 +2011,20 @@ async fn the_terminal_has_no_font_list() {
 #[tokio::test]
 async fn folder_sizes_replace_dir_until_the_folder_is_listed_again() {
     let mut h = Harness::new().await;
-    let docs_row = |h: &Harness| {
+    let docs_row = |h: &mut Harness| {
         h.screen().lines().find(|l| l.contains("docs/")).unwrap_or_default().to_owned()
     };
-    assert!(docs_row(&h).contains("<DIR>"), "{}", docs_row(&h));
+    let row = docs_row(&mut h);
+    assert!(row.contains("<DIR>"), "{row}");
     h.key("Alt+S");
     h.settle().await;
     assert!(h.status().contains("1 folder: 9 B in all"), "{}", h.status());
-    assert!(docs_row(&h).contains("9 B") && !docs_row(&h).contains("<DIR>"), "{}", docs_row(&h));
+    let row = docs_row(&mut h);
+    assert!(row.contains("9 B") && !row.contains("<DIR>"), "{row}");
     h.key("Ctrl+R");
     h.settle().await;
-    assert!(docs_row(&h).contains("<DIR>"), "listing again forgets the count");
+    let row = docs_row(&mut h);
+    assert!(row.contains("<DIR>"), "listing again forgets the count: {row}");
 }
 
 #[tokio::test]

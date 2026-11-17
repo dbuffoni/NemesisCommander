@@ -516,7 +516,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         Vec::new()
     };
     let git = git_of(app, side);
-    let sizes = &app.folder_sizes;
+    let sizes = app.folder_sizes();
     let panel = app.workspace.side(side).panel();
     let row_views = panel
         .entries()
@@ -525,11 +525,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .skip(offset)
         .take(rows)
         .map(|(i, entry)| {
-            let counted = entry
-                .is_dir()
-                .then(|| sizes.get(&panel.location().join(&entry.name)))
-                .flatten()
-                .map(|(bytes, _)| *bytes);
+            let counted = counted_size(sizes, panel.location(), entry);
             row_view(panel, entry, i == cursor, human, git.as_deref(), counted)
         })
         .collect();
@@ -567,6 +563,19 @@ pub fn git_mark(git: Option<&crate::git::GitStatus>, name: &str) -> String {
     git.and_then(|g| g.marks.get(name)).map(|m| m.to_string()).unwrap_or_default()
 }
 
+/// The bytes counted for the folder `entry` of `folder`, if "count folder
+/// sizes" was run for it.
+pub fn counted_size(
+    sizes: &std::collections::HashMap<sc_vfs::VfsPath, (u64, u64)>,
+    folder: &sc_vfs::VfsPath,
+    entry: &Entry,
+) -> Option<u64> {
+    if !entry.is_dir() || entry.name == PARENT {
+        return None;
+    }
+    sizes.get(&folder.join(&entry.name)).map(|(bytes, _)| *bytes)
+}
+
 fn row_view(
     panel: &Panel,
     entry: &Entry,
@@ -581,11 +590,7 @@ fn row_view(
     }
     RowView {
         name,
-        size: match counted {
-            Some(bytes) if human => human_size(bytes),
-            Some(bytes) => bytes.to_string(),
-            None => size_text(entry, human),
-        },
+        size: size_text_counted(entry, human, counted),
         date: entry.modified.map(local_time).unwrap_or_default(),
         dir: entry.is_dir(),
         hidden: entry.is_hidden(),
@@ -844,6 +849,16 @@ pub fn column_headers(sort: sc_index::SortSpec) -> [String; 3] {
 /// Last name of a tab's location.
 pub fn tab_title(panel: &Panel) -> String {
     panel.location().file_name().unwrap_or("/").to_owned()
+}
+
+/// The size column of a folder whose contents were counted (`counted`),
+/// else as [`size_text`].
+pub fn size_text_counted(entry: &Entry, human: bool, counted: Option<u64>) -> String {
+    match counted {
+        Some(bytes) if human => human_size(bytes),
+        Some(bytes) => bytes.to_string(),
+        None => size_text(entry, human),
+    }
 }
 
 /// The size column: `UP`, `<DIR>`, or the size.

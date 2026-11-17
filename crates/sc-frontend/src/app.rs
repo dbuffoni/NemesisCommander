@@ -245,7 +245,7 @@ pub struct App {
     /// The installed font families, for the font settings (empty in a terminal).
     fonts: Vec<String>,
     /// Folder sizes counted in the panels, until the folder is listed again.
-    pub(crate) folder_sizes: HashMap<VfsPath, (u64, u64)>,
+    folder_sizes: HashMap<VfsPath, (u64, u64)>,
     /// The folder last recorded for each side.
     visited: [Option<String>; 2],
     /// The last search, to save it.
@@ -519,6 +519,11 @@ impl App {
         fonts.sort_by_key(|f| f.to_lowercase());
         fonts.dedup();
         self.fonts = fonts;
+    }
+
+    /// Folder sizes counted in the panels, by folder.
+    pub fn folder_sizes(&self) -> &HashMap<VfsPath, (u64, u64)> {
+        &self.folder_sizes
     }
 
     /// The settings and key map in use.
