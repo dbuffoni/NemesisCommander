@@ -1590,7 +1590,9 @@ async fn copy_path_puts_the_chosen_form_in_the_clipboard() {
     assert_eq!(results(&h).len(), 4);
     h.key("Enter"); // the first row: the full path
     let text = h.app.take_clipboard().expect("something was copied");
-    assert_eq!(text, h.path("left/notes.txt").display().to_string());
+    // Windows writes the folders of the path with backslashes.
+    let same = |a: &str, b: &str| a.replace('\\', "/") == b.replace('\\', "/");
+    assert!(same(&text, &h.path("left/notes.txt").display().to_string()), "{text}");
     assert!(h.app.take_clipboard().is_none(), "handed over once");
 
     h.key("Alt+P");
