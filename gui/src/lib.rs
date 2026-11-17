@@ -2,8 +2,8 @@
 //!
 //! SuperCommander's desktop interface: the same two panels, dialogs and
 //! commands as the terminal interface, in a Qt 6 window. There are no
-//! toolbars or icons: every command is in the menu bar (with its shortcut)
-//! and on the keyboard, and F1 lists the main shortcuts.
+//! toolbars or icons: every command is in the Commands list (F9, with its
+//! shortcut) and on the keyboard, and F1 lists the main shortcuts.
 //!
 //! The application itself is the shared [`sc_frontend::App`]:
 //!

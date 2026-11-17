@@ -1,7 +1,8 @@
 // SuperCommander's window. It only draws: the state lives in the Rust
 // `Commander` object, which publishes the whole screen as JSON (`screen`)
 // and receives every key press. There are no toolbars or icons; commands
-// are in the menu bar and on the keyboard (F1 lists the main shortcuts).
+// are in the Commands list (F9) and on the keyboard (F1 lists the main
+// shortcuts).
 
 import QtQuick
 import QtQuick.Controls
@@ -17,7 +18,6 @@ ApplicationWindow {
 
     // The screen description (see sc_frontend::view::Screen).
     readonly property var screen: commander.screen ? JSON.parse(commander.screen) : null
-    readonly property var menuList: commander.menus ? JSON.parse(commander.menus) : []
     // The application, for windows drawn in other files (clicks).
     readonly property var app: commander
     // Gives the keyboard back to the application (after a file picker).
@@ -73,43 +73,7 @@ ApplicationWindow {
                          Math.floor(body.width / fixedMetrics.averageCharacterWidth) - 4)
     }
 
-    // Menus built from the command table, each item with its shortcut. The
-    // keyboard focus goes back to the panels when a menu closes.
-    menuBar: MenuBar {
-        id: bar
-        Instantiator {
-            model: window.menuList
-            delegate: Menu {
-                id: menu
-                title: modelData.title
-                onClosed: keys.forceActiveFocus()
-                Instantiator {
-                    model: modelData.items
-                    delegate: MenuItem {
-                        text: modelData.label
-                        onTriggered: commander.perform(modelData.id)
-                        contentItem: RowLayout {
-                            spacing: 32
-                            Label {
-                                text: modelData.label
-                                Layout.fillWidth: true
-                            }
-                            Label {
-                                text: modelData.shortcut
-                                color: window.dim
-                            }
-                        }
-                    }
-                    onObjectAdded: (index, object) => menu.insertItem(index, object)
-                    onObjectRemoved: (index, object) => menu.removeItem(object)
-                }
-            }
-            onObjectAdded: (index, object) => bar.insertMenu(index, object)
-            onObjectRemoved: (index, object) => bar.removeMenu(object)
-        }
-    }
-
-    // Everything below the menu bar.
+    // The whole window.
     Rectangle {
         id: page
         anchors.fill: parent
@@ -183,6 +147,15 @@ ApplicationWindow {
                         implicitHeight: window.rowHeight
                         color: palette.button
                         radius: 2
+                        // A click is the same as the key: F9 opens the
+                        // Commands list.
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                commander.key(Qt.Key_F1 + modelData.number - 1, "", Qt.NoModifier)
+                                keys.forceActiveFocus()
+                            }
+                        }
                         Row {
                             anchors.verticalCenter: parent.verticalCenter
                             x: 4

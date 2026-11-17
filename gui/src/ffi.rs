@@ -17,7 +17,6 @@ pub mod qobject {
         #[qobject]
         #[qml_element]
         #[qproperty(QString, screen)]
-        #[qproperty(QString, menus)]
         #[qproperty(bool, running)]
         #[qproperty(QString, screenshot)]
         #[qproperty(i32, window_width)]

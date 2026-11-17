@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use sc_app::AppContext;
 use sc_config::{AppPaths, Key};
-use sc_frontend::view::{OverlayView, Screen, menus};
+use sc_frontend::view::{OverlayView, Screen};
 use sc_frontend::{App, AppEvent, KeyPress};
 use sc_vfs::VfsPath;
 use tempfile::TempDir;
@@ -92,16 +92,6 @@ async fn dialogs_are_described() {
     assert_eq!(copy.unwrap()["name"], "Files/Copy");
     assert_eq!(copy.unwrap()["keys"], "F5");
     assert_eq!(json["panels"][0]["rows"][0]["size"], "UP");
-}
-
-#[tokio::test]
-async fn menus_list_every_command_with_its_shortcut() {
-    let (app, _events, _dir) = app().await;
-    let menus = menus(&app);
-    let copy = menus.iter().flat_map(|m| &m.items).find(|i| i.id == "files.copy").unwrap();
-    assert_eq!(copy.shortcut, "F5");
-    let total: usize = menus.iter().map(|m| m.items.len()).sum();
-    assert_eq!(total, sc_config::Action::ALL.len());
 }
 
 /// Tools, "Write a script with AI…" asks what the script should do (the

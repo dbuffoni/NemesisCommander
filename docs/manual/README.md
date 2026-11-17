@@ -84,7 +84,8 @@ shortcuts on the right.
 
 ![Finding a command](images/commands-find.png)
 
-In the window the menu bar has the same commands, one menu per category.
+In the window there is no menu bar: this list is the menu. Clicking **F9
+Commands** in the bar at the bottom opens it too.
 
 ## The panels
 

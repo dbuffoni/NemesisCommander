@@ -13,7 +13,7 @@ use sc_vfs::Entry;
 use serde::Serialize;
 
 use crate::app::{App, display_location, side_index};
-use crate::commands::{ALL, CommandPalette};
+use crate::commands::CommandPalette;
 use crate::dialogs::Overlay;
 use crate::settings::SettingsScreen;
 use crate::viewer::Viewer;
@@ -213,26 +213,6 @@ pub struct HelpGroup {
     pub title: String,
     /// `(keys, label)` rows.
     pub rows: Vec<(String, String)>,
-}
-
-/// A menu of the menu bar.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct MenuView {
-    /// Title (`Files`).
-    pub title: String,
-    /// Commands.
-    pub items: Vec<MenuItem>,
-}
-
-/// A command in a menu.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct MenuItem {
-    /// Command id, for [`App::run_command`].
-    pub id: String,
-    /// Label.
-    pub label: String,
-    /// First shortcut, empty when none.
-    pub shortcut: String,
 }
 
 /// The command list (F9).
@@ -442,36 +422,6 @@ impl Screen {
             conflict,
         }
     }
-}
-
-/// The menus of the GUI's menu bar: one per category of the command list
-/// (built-in, plugins, scripts), each command with its first shortcut.
-pub fn menus(app: &App) -> Vec<MenuView> {
-    let palette = CommandPalette::new(app.commands());
-    palette
-        .categories
-        .iter()
-        .filter(|c| *c != ALL)
-        .map(|category| MenuView {
-            title: category.clone(),
-            items: palette
-                .entries
-                .iter()
-                .filter(|e| e.category == *category && e.can_have_keys())
-                .map(|e| MenuItem {
-                    id: e.id.clone(),
-                    label: e.label.clone(),
-                    shortcut: app
-                        .context()
-                        .keymap
-                        .chords_for_id(&e.id)
-                        .first()
-                        .map(ToString::to_string)
-                        .unwrap_or_default(),
-                })
-                .collect(),
-        })
-        .collect()
 }
 
 /// Describes the command list.

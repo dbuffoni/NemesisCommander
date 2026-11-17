@@ -1,6 +1,6 @@
 //! The `Commander` QML object: the shared [`App`] behind the window.
 //!
-//! QML forwards every key press and menu choice here; after each change the
+//! QML forwards every key press and command choice here; after each change the
 //! object publishes the whole screen as JSON (see [`sc_frontend::view`]) in
 //! its `screen` property, which the QML files only draw. Background results
 //! (listings, transfer progress) arrive on a tokio runtime and are moved to
@@ -15,7 +15,7 @@ use std::time::Duration;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use sc_app::AppContext;
-use sc_frontend::view::{Screen, menus};
+use sc_frontend::view::Screen;
 use sc_frontend::{App, AppEvent, External, KeyPress, resolve_location};
 use sc_vfs::VfsPath;
 use tokio::runtime::Runtime;
@@ -60,7 +60,6 @@ pub static ENDED_EARLY: AtomicBool = AtomicBool::new(false);
 /// The Rust side of [`qobject::Commander`].
 pub struct CommanderRust {
     pub(crate) screen: QString,
-    pub(crate) menus: QString,
     pub(crate) running: bool,
     pub(crate) screenshot: QString,
     /// The window's size when it opens.
@@ -83,7 +82,6 @@ impl Default for CommanderRust {
     fn default() -> Self {
         CommanderRust {
             screen: QString::default(),
-            menus: QString::default(),
             running: true,
             screenshot: QString::default(),
             window_width: STARTUP.get().and_then(|s| s.size).map_or(1200, |(w, _)| w),
@@ -147,12 +145,10 @@ impl qobject::Commander {
             }
         });
 
-        let menus = serde_json::to_string(&menus(&app)).unwrap_or_default();
         let mut rust = self.as_mut().rust_mut();
         rust.runtime = Some(runtime);
         rust.app = Some(app);
         rust.test = startup.self_test;
-        self.as_mut().set_menus(QString::from(&menus));
         self.as_mut().refresh();
     }
 
