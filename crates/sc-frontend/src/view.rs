@@ -739,6 +739,7 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
                 "Enter: type a value   ← →: one less / more   r: default   Esc: close"
             }
             FieldKind::Text => "Enter: type a value   r: default   Esc: close",
+            FieldKind::Font => "Enter: choose an installed font   r: default   Esc: close",
         }
         .to_owned(),
         _ => "Enter: run   Esc: close".to_owned(),

@@ -67,6 +67,8 @@ pub enum FieldKind {
     Number(u64, u64),
     /// Free text: Enter types.
     Text,
+    /// A font family: Enter lists the installed fonts.
+    Font,
 }
 
 const SORTS: [(SortKey, &str); 4] = [
@@ -153,9 +155,9 @@ impl Field {
             Wrap => "Wrap long lines",
             TabWidth => "Spaces per tab",
             HexAbove => "Open as hex above (MiB)",
-            FontFamily => "Font (empty: the system's)",
+            FontFamily => "Font",
             FontSize => "Font size in points (0: the system's)",
-            FixedFontFamily => "Fixed-width font (empty: monospace)",
+            FixedFontFamily => "Fixed-width font",
         }
     }
 
@@ -166,7 +168,8 @@ impl Field {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
             | GitStatus | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
-            Editor | FontFamily | FixedFontFamily => FieldKind::Text,
+            Editor => FieldKind::Text,
+            FontFamily | FixedFontFamily => FieldKind::Font,
             FontSize => FieldKind::Number(0, 48),
             ParallelJobs => FieldKind::Number(1, 64),
             ParallelFiles => FieldKind::Number(1, 64),
@@ -268,7 +271,7 @@ impl Field {
         let defaults = Config::default();
         let value = self.value(&defaults);
         match self.kind() {
-            FieldKind::Number(..) | FieldKind::Text => {
+            FieldKind::Number(..) | FieldKind::Text | FieldKind::Font => {
                 let _ = self.set(config, &value);
             }
             _ => {

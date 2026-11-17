@@ -1733,36 +1733,41 @@ async fn names_from_the_editor_are_checked() {
 }
 
 #[tokio::test]
-async fn jump_goes_to_the_most_used_matching_folder() {
+async fn bookmarks_filter_as_you_type_and_list_recent_folders() {
     let mut h = Harness::new().await;
-    // Open docs twice and right once: both are remembered.
-    for _ in 0..2 {
-        h.focus("docs");
-        h.key("Enter");
-        h.settle().await;
-        h.key("Backspace");
-        h.settle().await;
-    }
-    h.key("Alt+J");
-    h.type_text("zzz");
+    // Visit docs so it is remembered, then go back.
+    h.focus("docs");
     h.key("Enter");
-    assert!(h.status().contains("No frequent folder"), "{}", h.status());
-
-    h.key("Alt+J");
-    h.type_text("doc");
-    h.key("Enter"); // one match: straight there
     h.settle().await;
-    assert!(h.app.workspace().active().location().to_string().ends_with("/left/docs"));
-
-    // Without words: a list, and the choice is opened.
-    h.key("Alt+J");
+    h.key("Backspace");
+    h.settle().await;
+    h.key("Ctrl+Shift+D");
+    h.focus("docs");
     h.key("Enter");
+    h.settle().await;
+    h.key("Ctrl+D");
     let rows = results(&h);
-    assert!(rows.iter().any(|r| r.ends_with("left")), "{rows:?}");
-    assert!(!rows.iter().any(|r| r.ends_with("docs")), "not the folder we are in: {rows:?}");
+    assert!(rows.iter().any(|r| r.contains("Recent folders")), "{rows:?}");
+    // Typing narrows the bookmarks (case does not matter) and the recent folders.
+    h.type_text("ZZZ");
+    assert!(results(&h).is_empty(), "nothing matches ZZZ");
+    h.key("Backspace");
+    h.key("Backspace");
+    h.key("Backspace");
+    h.type_text("LEF");
+    let rows = results(&h);
+    assert!(rows.iter().any(|r| r.contains("left")), "{rows:?}");
+    // Enter on the first bookmark opens it.
     h.key("Enter");
     h.settle().await;
     assert!(h.app.workspace().active().location().to_string().ends_with("/left"));
+    // The recent folders can be chosen too (the header cannot).
+    h.key("Ctrl+D");
+    h.key("Down"); // the title of the recent folders
+    h.key("Down");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.workspace().active().location().to_string().ends_with("/left/docs"));
 }
 
 #[tokio::test]
@@ -1960,4 +1965,45 @@ async fn synchronizing_shows_the_plan_and_runs_it_on_enter() {
     h.settle().await;
     let Some(Overlay::Viewer(viewer)) = h.app.overlay() else { panic!("the plan") };
     assert!(viewer.sync.is_none(), "nothing to run");
+}
+
+#[tokio::test]
+async fn fonts_are_picked_from_the_installed_ones() {
+    use sc_frontend::settings::{Field, Row};
+    let mut h = Harness::new().await;
+    h.app.set_fonts(vec!["Fira Sans".into(), "DejaVu Sans".into(), "Fira Code".into()]);
+    h.key("Ctrl+,");
+    for _ in 0..60 {
+        let Some(Overlay::Settings(screen)) = h.app.overlay() else { panic!("settings expected") };
+        if screen.current() == Row::Option(Field::FontFamily) {
+            break;
+        }
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert_eq!(results(&h)[0], "(system default)");
+    assert_eq!(results(&h).len(), 4);
+    h.type_text("FIRA");
+    assert_eq!(results(&h), ["Fira Code", "Fira Sans"], "sorted, case-insensitive match");
+    h.key("Down");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.appearance.font_family, "Fira Sans");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))), "back to the settings");
+}
+
+#[tokio::test]
+async fn the_terminal_has_no_font_list() {
+    use sc_frontend::settings::{Field, Row};
+    let mut h = Harness::new().await;
+    h.key("Ctrl+,");
+    for _ in 0..60 {
+        let Some(Overlay::Settings(screen)) = h.app.overlay() else { panic!("settings expected") };
+        if screen.current() == Row::Option(Field::FontFamily) {
+            break;
+        }
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))));
+    assert!(h.status().contains("terminal uses its own font"), "{}", h.status());
 }

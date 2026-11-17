@@ -100,8 +100,6 @@ pub enum InputPurpose {
     },
     /// The name a search is saved under.
     NameSearch,
-    /// Part of the name of a frequent folder to jump to.
-    Jump,
     /// Where to write the listing (empty: the clipboard).
     ExportTo {
         /// The format chosen before.
@@ -210,8 +208,9 @@ pub struct ConfirmDialog {
 /// What a [`ChooseDialog`] is for.
 #[derive(Debug)]
 pub enum ChoosePurpose {
-    /// Open a bookmark (Delete removes it).
-    Bookmarks,
+    /// Bookmarks, then recent folders, filtered by what is typed (Enter
+    /// opens the row, Delete removes a bookmark).
+    Bookmarks(Vec<JumpRow>),
     /// Open one of a bookmark's target folders in the other panel.
     BookmarkTarget(Vec<String>),
     /// Open a drive or saved connection, one per row (the last row asks
@@ -232,17 +231,36 @@ pub enum ChoosePurpose {
     },
     /// Make the chosen kind of link to these items in the other panel.
     LinkKind(Vec<VfsPath>),
-    /// Go to one of these frequent folders (as VFS URIs).
-    Jump(Vec<String>),
     /// Run a saved search (Delete forgets it).
     SavedSearches,
     /// The basket: Enter shows the item in the panel.
     Basket(Vec<VfsPath>),
     /// How to synchronize the two folders.
     SyncMode,
+    /// A font family for a setting (the first name may be empty: the
+    /// system's), back to the settings screen afterwards.
+    Font {
+        /// The option.
+        field: Field,
+        /// The screen to go back to.
+        screen: Box<SettingsScreen>,
+        /// The rows' font families.
+        names: Vec<String>,
+    },
     /// Groups of similar pictures, after a row that puts the extra copies
     /// in the basket.
     Similar(Vec<Vec<crate::similar::Picture>>),
+}
+
+/// What a row of the bookmarks list stands for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JumpRow {
+    /// The bookmark at this index of the configuration.
+    Bookmark(usize),
+    /// A recently opened folder (as a VFS URI).
+    Recent(String),
+    /// The title of the recent folders; cannot be chosen.
+    Header,
 }
 
 /// Pick one item from a list.
@@ -258,12 +276,21 @@ pub struct ChooseDialog {
     pub purpose: ChoosePurpose,
     /// Shown below the list (e.g. "searching…").
     pub footer: String,
+    /// What was typed to filter the rows, for lists that filter.
+    pub query: Option<String>,
 }
 
 impl ChooseDialog {
     /// A list with the cursor on the first row.
     pub fn new(title: &str, items: Vec<String>, purpose: ChoosePurpose) -> Self {
-        ChooseDialog { title: title.to_owned(), items, cursor: 0, purpose, footer: String::new() }
+        ChooseDialog {
+            title: title.to_owned(),
+            items,
+            cursor: 0,
+            purpose,
+            footer: String::new(),
+            query: None,
+        }
     }
 
     /// Moves the cursor by `delta`, clamped to the list.
@@ -328,8 +355,11 @@ mod tests {
 
     #[test]
     fn choose_cursor_is_clamped() {
-        let mut dialog =
-            ChooseDialog::new("t", vec!["a".into(), "b".into()], ChoosePurpose::Bookmarks);
+        let mut dialog = ChooseDialog::new(
+            "t",
+            vec!["a".into(), "b".into()],
+            ChoosePurpose::Bookmarks(Vec::new()),
+        );
         dialog.move_cursor(5);
         assert_eq!(dialog.cursor, 1);
         dialog.move_cursor(-5);

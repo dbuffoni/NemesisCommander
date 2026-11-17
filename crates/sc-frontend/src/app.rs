@@ -29,7 +29,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
-    JobsView, MessageDialog, Overlay, PendingConflict,
+    JobsView, JumpRow, MessageDialog, Overlay, PendingConflict,
 };
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
@@ -235,6 +235,8 @@ pub struct App {
     clipboard: Option<String>,
     /// How often and how recently folders were opened (the jump command).
     frecency: crate::frecency::Frecency,
+    /// The installed font families, for the font settings (empty in a terminal).
+    fonts: Vec<String>,
     /// The folder last recorded for each side.
     visited: [Option<String>; 2],
     /// The last search, to save it.
@@ -350,7 +352,7 @@ pub fn side_index(side: SideId) -> usize {
 
 /// One row of the bookmark list: name, folder and its targets for the
 /// other panel (`→ target`, or `→ 3 targets` when there are several).
-fn bookmark_row(bookmark: &Bookmark) -> String {
+pub(crate) fn bookmark_row(bookmark: &Bookmark) -> String {
     let row = format!("{:<20} {}", bookmark.name, bookmark.path);
     match bookmark.targets.as_slice() {
         [] => row,
@@ -446,6 +448,7 @@ impl App {
             basket: Vec::new(),
             clipboard: None,
             frecency,
+            fonts: Vec::new(),
             visited: [None, None],
             last_search: None,
             target_override: None,
@@ -498,6 +501,14 @@ impl App {
     /// The status line message.
     pub fn status(&self) -> Option<&Status> {
         self.status.as_ref()
+    }
+
+    /// Tells the font settings which font families are installed (the
+    /// window does; a terminal has no list and uses its own font).
+    pub fn set_fonts(&mut self, mut fonts: Vec<String>) {
+        fonts.sort_by_key(|f| f.to_lowercase());
+        fonts.dedup();
+        self.fonts = fonts;
     }
 
     /// The settings and key map in use.
@@ -932,6 +943,9 @@ impl App {
                         if let Some(cancel) = self.search_cancel.take() {
                             cancel.cancel();
                         }
+                        if let ChoosePurpose::Font { screen, .. } = dialog.purpose {
+                            return Some(Overlay::Settings(*screen));
+                        }
                         return None;
                     }
                     Some(Key::F(4)) => {
@@ -968,15 +982,6 @@ impl App {
                                 .connections
                                 .retain(|c| !(c.name == drive.name && c.uri == drive.location));
                         }
-                        dialog.items.remove(dialog.cursor);
-                        dialog.move_cursor(0);
-                        self.save_settings();
-                    }
-                    Some(Key::Delete)
-                        if matches!(dialog.purpose, ChoosePurpose::Bookmarks)
-                            && dialog.cursor < self.context.config.bookmarks.len() =>
-                    {
-                        self.context.config.bookmarks.remove(dialog.cursor);
                         dialog.items.remove(dialog.cursor);
                         dialog.move_cursor(0);
                         self.save_settings();
@@ -1254,7 +1259,6 @@ impl App {
             Action::BulkRename => self.bulk_rename(),
             Action::BasketAdd => self.add_selection_to_basket(),
             Action::Basket => self.open_basket(),
-            Action::Jump => self.ask_jump(),
             Action::CompareHash => self.compare_by_hash(),
             Action::Sync => self.ask_sync(),
             Action::SimilarImages => self.find_similar(),
@@ -1304,17 +1308,7 @@ impl App {
                 let request = self.workspace.active_mut().forward();
                 self.load_opt(request);
             }
-            Action::Bookmarks => {
-                let bookmarks = &self.context.config.bookmarks;
-                if bookmarks.is_empty() {
-                    let key = self.context.keymap.shortcut_text(Action::AddBookmark);
-                    return self.set_status(format!("No bookmarks yet ({key} adds this folder)"));
-                }
-                let items = bookmarks.iter().map(bookmark_row).collect();
-                let mut dialog = ChooseDialog::new("Bookmarks", items, ChoosePurpose::Bookmarks);
-                dialog.footer = "Enter: open   Delete: remove".into();
-                self.overlay = Some(Overlay::Choose(dialog));
-            }
+            Action::Bookmarks => self.open_bookmarks(),
             Action::AddBookmark => self.add_bookmark(false),
             Action::AddBookmarkTarget => self.add_bookmark(true),
             Action::NewTab => {
@@ -1630,7 +1624,6 @@ impl App {
                 self.start_search(&mask, &content, &text)
             }
             InputPurpose::NameSearch => self.save_search_as(&text),
-            InputPurpose::Jump => self.jump(&text),
             InputPurpose::ExportTo { format, selection_only } => {
                 self.export_listing(format, selection_only, &text)
             }
@@ -1783,11 +1776,15 @@ impl App {
         let here = self.workspace.active().location().clone();
         let cursor = dialog.cursor;
         match dialog.purpose {
-            ChoosePurpose::Bookmarks => {
-                if let Some(bookmark) = self.context.config.bookmarks.get(cursor).cloned() {
-                    self.open_bookmark(bookmark);
+            ChoosePurpose::Bookmarks(rows) => match rows.get(cursor) {
+                Some(JumpRow::Bookmark(index)) => {
+                    if let Some(bookmark) = self.context.config.bookmarks.get(*index).cloned() {
+                        self.open_bookmark(bookmark);
+                    }
                 }
-            }
+                Some(JumpRow::Recent(uri)) => self.open_location(uri.clone()),
+                Some(JumpRow::Header) | None => {}
+            },
             ChoosePurpose::BookmarkTarget(targets) => {
                 if let Some(target) = targets.get(cursor) {
                     self.open_in_other(target);
@@ -1825,11 +1822,16 @@ impl App {
             purpose @ (ChoosePurpose::CopyPath(_)
             | ChoosePurpose::ExportFormat { .. }
             | ChoosePurpose::LinkKind(_)
-            | ChoosePurpose::Jump(_)
             | ChoosePurpose::SavedSearches
             | ChoosePurpose::Basket(_)
             | ChoosePurpose::SyncMode
             | ChoosePurpose::Similar(_)) => self.chosen_feature(purpose, cursor),
+            ChoosePurpose::Font { field, screen, names } => {
+                if let Some(name) = names.get(cursor) {
+                    self.setting_typed(field, name);
+                }
+                self.overlay = Some(Overlay::Settings(*screen));
+            }
             ChoosePurpose::ImportMode(bundle) => {
                 let mode = if cursor == 0 { ImportMode::Replace } else { ImportMode::Merge };
                 self.context.config = bundle.apply(&self.context.config, mode);

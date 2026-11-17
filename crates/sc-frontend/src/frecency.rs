@@ -80,21 +80,13 @@ impl Frecency {
         self.save();
     }
 
-    /// The folders whose path holds every word of `query` (the last word in
-    /// the folder's own name), best first.
-    pub fn find(&self, query: &str, now: u64, limit: usize) -> Vec<&Visit> {
-        let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
-        let mut found: Vec<&Visit> = self
-            .visits
-            .iter()
-            .filter(|visit| {
-                let path = visit.path.to_lowercase();
-                let name = path.trim_end_matches('/').rsplit('/').next().unwrap_or("");
-                words.iter().all(|w| path.contains(w.as_str()))
-                    && words.last().is_none_or(|w| name.contains(w.as_str()))
-            })
-            .collect();
-        found.sort_by(|a, b| b.score(now).total_cmp(&a.score(now)).then(b.last.cmp(&a.last)));
+    /// The most recently opened folders whose location holds `query`
+    /// (case does not matter), newest first.
+    pub fn recent(&self, query: &str, limit: usize) -> Vec<&Visit> {
+        let needle = query.to_lowercase();
+        let mut found: Vec<&Visit> =
+            self.visits.iter().filter(|v| v.path.to_lowercase().contains(&needle)).collect();
+        found.sort_by(|a, b| b.last.cmp(&a.last).then(b.visits.cmp(&a.visits)));
         found.truncate(limit);
         found
     }
@@ -117,35 +109,16 @@ mod tests {
     const DAY: u64 = 86_400;
 
     #[test]
-    fn frequent_and_recent_folders_come_first() {
+    fn recent_folders_match_the_text_and_come_newest_first() {
         let mut f = Frecency::in_memory();
-        let now = 100 * DAY;
-        for _ in 0..3 {
-            f.record("file:///home/ada/projects/app", now - 30 * DAY);
-        }
-        f.record("file:///home/ada/projects/app-docs", now - 10);
-        f.record("file:///srv/app", now - 5 * DAY);
-        let found: Vec<&str> = f.find("app", now, 10).iter().map(|v| v.path.as_str()).collect();
-        assert_eq!(
-            found,
-            [
-                "file:///home/ada/projects/app-docs",
-                "file:///home/ada/projects/app",
-                "file:///srv/app"
-            ]
-        );
-    }
-
-    #[test]
-    fn the_last_word_must_be_in_the_folder_name() {
-        let mut f = Frecency::in_memory();
-        f.record("sftp://box/srv/www/blog", 10);
-        f.record("sftp://box/srv/blog/www", 10);
-        let found = f.find("blog www", 10, 10);
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].path, "sftp://box/srv/blog/www");
-        assert!(f.find("nothing", 10, 10).is_empty());
-        assert_eq!(f.find("", 10, 10).len(), 2, "no words: everything");
+        f.record("file:///home/ada/projects/App", 10);
+        f.record("file:///home/ada/projects/app-docs", 30);
+        f.record("file:///srv/app", 20);
+        f.record("file:///srv/other", 40);
+        let found: Vec<&str> = f.recent("APP", 2).iter().map(|v| v.path.as_str()).collect();
+        assert_eq!(found, ["file:///home/ada/projects/app-docs", "file:///srv/app"]);
+        assert_eq!(f.recent("", 10).len(), 4, "no text: everything");
+        assert!(f.recent("nothing", 10).is_empty());
     }
 
     #[test]
@@ -156,13 +129,13 @@ mod tests {
         f.record("file:///a", 5);
         f.record("file:///a", 6);
         let again = Frecency::load(&file);
-        assert_eq!(again.find("a", 7, 5)[0].visits, 2);
+        assert_eq!(again.recent("a", 5)[0].visits, 2);
         let mut f = Frecency::in_memory();
         for i in 0..MAX_ENTRIES + 20 {
             f.record(&format!("file:///d{i}"), 5);
         }
         assert_eq!(f.visits.len(), MAX_ENTRIES);
         f.forget("file:///d0");
-        assert!(f.find("d0", 5, 5).iter().all(|v| v.path != "file:///d0"));
+        assert!(f.recent("d0", 5).iter().all(|v| v.path != "file:///d0"));
     }
 }

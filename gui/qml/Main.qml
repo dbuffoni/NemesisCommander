@@ -85,7 +85,7 @@ ApplicationWindow {
         }
     }
 
-    Component.onCompleted: commander.start()
+    Component.onCompleted: commander.start(Qt.fontFamilies().join("\n"))
 
     // Rows that fit: tell the application, which scrolls and pages with it.
     function reportSize() {
