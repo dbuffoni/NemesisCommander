@@ -36,4 +36,5 @@ pub use dialogs::{
     JobsView, MessageDialog, Overlay, PendingConflict, menu_actions,
 };
 pub use input::{KeyPress, TextField};
+pub use sc_panel::SideId;
 pub use viewer::Viewer;

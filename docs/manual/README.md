@@ -114,6 +114,17 @@ permissions, link target) or shows the last message. The bottom row lists
 what F1–F10 do.
 
 
+### The mouse
+
+Everything works from the keyboard, and the mouse works too, in the window
+and in the terminal (if your terminal passes mouse events to programs):
+click a row to put the cursor there, double-click to open it, turn the wheel
+to scroll. **Drag a row onto the other panel** to copy it (or the selection,
+if the row is part of it): you are asked where to copy to, as with F5.
+In the window you can also drag files **to and from other programs**
+(local files only): drop them on a panel to copy them into its folder, or
+drag a row out to your desktop or another application.
+
 ### Git marks
 
 Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:

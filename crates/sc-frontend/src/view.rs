@@ -108,6 +108,9 @@ pub struct RowView {
     pub cursor: bool,
     /// Git mark: `M` changed, `?` untracked, `!` ignored, empty for none.
     pub git: String,
+    /// The file as a `file://` URL, for dragging it to other programs;
+    /// empty for anything that is not on this disk.
+    pub url: String,
 }
 
 /// The status line.
@@ -575,6 +578,16 @@ fn row_view(
         selected: panel.is_selected(&entry.name),
         cursor,
         git: git_mark(git, &entry.name),
+        url: if entry.name == PARENT {
+            String::new()
+        } else {
+            panel
+                .location()
+                .join(&entry.name)
+                .to_local_path()
+                .map(|p| file_url(&p))
+                .unwrap_or_default()
+        },
     }
 }
 

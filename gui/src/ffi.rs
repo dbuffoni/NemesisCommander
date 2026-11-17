@@ -39,6 +39,23 @@ pub mod qobject {
         #[qinvokable]
         fn pick(self: Pin<&mut Commander>, what: &QString, index: i32);
 
+        /// A click on a row of a panel (side 0 or 1, row from the first shown).
+        #[qinvokable]
+        fn click_row(self: Pin<&mut Commander>, side: i32, row: i32);
+
+        /// The wheel over a panel.
+        #[qinvokable]
+        fn scroll_rows(self: Pin<&mut Commander>, side: i32, lines: i32);
+
+        /// A row dragged from one panel onto the other.
+        #[qinvokable]
+        fn drag_rows(self: Pin<&mut Commander>, from: i32, row: i32, to: i32);
+
+        /// Files dropped on a panel from another program (`file:` URLs, one
+        /// per line).
+        #[qinvokable]
+        fn drop_files(self: Pin<&mut Commander>, side: i32, urls: &QString);
+
         /// The file picked for the open question (a `file:` URL).
         #[qinvokable]
         fn fill(self: Pin<&mut Commander>, url: &QString);

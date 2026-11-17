@@ -31,6 +31,22 @@ Rectangle {
         text: "2026-12-31 23:59"
     }
 
+    // Files dropped here, from the other panel or from another program, are
+    // offered for copying into this folder.
+    DropArea {
+        anchors.fill: parent
+        onDropped: (drop) => {
+            if (drop.formats.indexOf("application/x-supercommander") >= 0) {
+                const part = drop.getDataAsString("application/x-supercommander").split(":")
+                panel.theme.app.drag_rows(parseInt(part[0]), parseInt(part[1]), panel.side)
+            } else if (drop.hasUrls) {
+                panel.theme.app.drop_files(panel.side, drop.urls.join("\n"))
+            }
+            drop.accept(Qt.CopyAction)
+            panel.theme.focusKeys()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 4
@@ -136,6 +152,11 @@ Rectangle {
             clip: true
             visible: panel.view !== null && !panel.view.quick_view
 
+            WheelHandler {
+                onWheel: (event) => panel.theme.app.scroll_rows(panel.side,
+                                                                event.angleDelta.y > 0 ? -3 : 3)
+            }
+
             Column {
                 width: parent.width
                 Repeater {
@@ -147,6 +168,32 @@ Rectangle {
                         // The cursor is a bar (strong in the active panel, faint in
                         // the other); selected entries are tinted and bold.
                         readonly property bool strong: modelData.cursor && panel.view.active
+                        // Drag a row to the other panel, or out to another
+                        // program (local files only), and click or double
+                        // click it.
+                        Drag.active: rowDrag.active
+                        Drag.dragType: Drag.Automatic
+                        Drag.supportedActions: Qt.CopyAction
+                        Drag.mimeData: modelData.url !== ""
+                            ? { "application/x-supercommander": panel.side + ":" + index,
+                                "text/uri-list": modelData.url }
+                            : { "application/x-supercommander": panel.side + ":" + index }
+                        DragHandler {
+                            id: rowDrag
+                            target: null
+                            acceptedButtons: Qt.LeftButton
+                        }
+                        TapHandler {
+                            onTapped: {
+                                panel.theme.app.click_row(panel.side, index)
+                                panel.theme.focusKeys()
+                            }
+                            onDoubleTapped: {
+                                panel.theme.app.click_row(panel.side, index)
+                                panel.theme.app.perform("nav.open")
+                                panel.theme.focusKeys()
+                            }
+                        }
                         color: strong ? palette.highlight
                              : modelData.cursor ? panel.theme.lineColor
                              : modelData.selected ? panel.theme.selectionTint

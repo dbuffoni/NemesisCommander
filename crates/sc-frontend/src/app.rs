@@ -35,6 +35,7 @@ use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
 mod palette;
 mod plugins;
+mod pointer;
 mod settings_screen;
 
 pub use plugins::PluginChoice;

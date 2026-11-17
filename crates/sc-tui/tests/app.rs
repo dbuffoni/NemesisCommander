@@ -1491,3 +1491,44 @@ async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
     h.key("Esc");
     assert!(h.app.overlay().is_none());
 }
+
+#[tokio::test]
+async fn the_mouse_clicks_scrolls_and_drags_between_panels() {
+    use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::layout::Rect;
+    use sc_tui::Pointer;
+    let mut h = Harness::new().await;
+    let screen = Rect::new(0, 0, 80, 24);
+    let event = |kind, column, row| MouseEvent { kind, column, row, modifiers: KeyModifiers::NONE };
+    let mut pointer = Pointer::default();
+    // The panels have been drawn once, so the scroll offsets are known.
+    h.screen();
+
+    // Rows of the left panel: .., docs, a.txt, notes.txt. A click on the
+    // fourth row (cells start two lines below the top) moves the cursor.
+    pointer.handle(&mut h.app, event(MouseEventKind::Down(MouseButton::Left), 3, 5), screen);
+    assert_eq!(h.current(), "notes.txt");
+    pointer.handle(&mut h.app, event(MouseEventKind::Up(MouseButton::Left), 3, 5), screen);
+    pointer.handle(&mut h.app, event(MouseEventKind::ScrollUp, 3, 5), screen);
+    assert_eq!(h.current(), "..", "the wheel moves three rows, up to the first");
+
+    // A double click on a folder opens it.
+    for _ in 0..2 {
+        pointer.handle(&mut h.app, event(MouseEventKind::Down(MouseButton::Left), 3, 3), screen);
+        pointer.handle(&mut h.app, event(MouseEventKind::Up(MouseButton::Left), 3, 3), screen);
+    }
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "readme.md"]);
+    // Back up with the keyboard, then drag a.txt over to the right panel.
+    h.key("Backspace");
+    h.settle().await;
+    h.screen();
+    pointer.handle(&mut h.app, event(MouseEventKind::Down(MouseButton::Left), 3, 4), screen);
+    assert_eq!(h.current(), "a.txt");
+    pointer.handle(&mut h.app, event(MouseEventKind::Up(MouseButton::Left), 60, 4), screen);
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("copy question") };
+    assert!(dialog.field.text().ends_with("right"), "{}", dialog.field.text());
+    h.key("Enter");
+    h.settle_until(|app| !app.is_busy() && app.jobs.iter().all(|j| j.state.is_final())).await;
+    assert!(h.path("right/a.txt").exists());
+}
