@@ -19,6 +19,6 @@ mod tuning;
 
 pub use job::{JobEvent, JobId, JobInfo, JobKind, JobOptions, JobSpec, JobState};
 pub use journal::{Journal, JournalError};
-pub use manager::{ManagerOptions, TransferManager};
+pub use manager::{ManagerOptions, ServerCopier, ServerCopyReport, TransferManager};
 pub use throttle::TokenBucket;
 pub use tuning::{MAX_PARALLELISM, MIN_PARALLELISM, Tuner};

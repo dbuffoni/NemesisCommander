@@ -70,7 +70,8 @@ impl AppContext {
             max_concurrent_jobs: self.config.transfers.parallel_jobs,
             global_bandwidth_limit: self.config.transfers.bandwidth_limit_kib * 1024,
         };
-        let manager = TransferManager::new(self.registry.clone(), journal, options)?;
+        let manager = TransferManager::new(self.registry.clone(), journal, options)?
+            .with_server_copier(Arc::new(ServerCopies { tls_dir: self.paths.tls_dir() }));
         Ok(match resolver {
             Some(resolver) => manager.with_resolver(resolver),
             None => manager,
@@ -103,6 +104,44 @@ impl AppContext {
             auto_parallelism: settings.auto_parallelism,
             retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
             bandwidth_limit: settings.bandwidth_limit_kib * 1024,
+        }
+    }
+}
+
+/// Copies between two `nmc serve` servers directly (or in reverse), through
+/// `nmc_agent::route`; anything else is left to the normal copy.
+struct ServerCopies {
+    tls_dir: std::path::PathBuf,
+}
+
+#[async_trait::async_trait]
+impl nmc_transfer::ServerCopier for ServerCopies {
+    async fn copy(
+        &self,
+        sources: &[nmc_vfs::VfsPath],
+        destination: &nmc_vfs::VfsPath,
+        conflict: ConflictPolicy,
+        progress: &(dyn Fn(u64, u64) + Send + Sync),
+    ) -> Option<Result<nmc_transfer::ServerCopyReport, String>> {
+        use nmc_agent::route::{Outcome, Route, ServerCopy, copy_between_servers};
+        let copy = ServerCopy { sources, destination, conflict };
+        if !copy.is_between_servers() {
+            return None;
+        }
+        let identity = nmc_agent::ServeFactory::new(self.tls_dir.clone()).identity().ok()?;
+        let outcome =
+            copy_between_servers(&identity, &copy, &[Route::Direct, Route::Reverse], |m| {
+                progress(m.bytes_done, m.bytes_total)
+            })
+            .await;
+        match outcome {
+            Ok(Outcome::Copied(route, last)) => Some(Ok(nmc_transfer::ServerCopyReport {
+                route: route.to_string(),
+                bytes: last.bytes_done,
+                failures: last.failures,
+            })),
+            Ok(Outcome::UseController(_)) => None,
+            Err(e) => Some(Err(e)),
         }
     }
 }

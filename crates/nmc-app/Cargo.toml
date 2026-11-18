@@ -15,6 +15,7 @@ nmc-config.workspace = true
 nmc-ops.workspace = true
 nmc-transfer.workspace = true
 nmc-agent.workspace = true
+async-trait.workspace = true
 nmc-ssh.workspace = true
 nmc-sftp = { workspace = true, optional = true }
 nmc-webdav = { workspace = true, optional = true }
