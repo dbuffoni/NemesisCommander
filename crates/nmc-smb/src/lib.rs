@@ -130,6 +130,11 @@ fn error(error: smb2::Error, path: &VfsPath) -> VfsError {
         ErrorKind::IsADirectory => VfsError::IsADirectory(path.clone()),
         ErrorKind::NotADirectory => VfsError::NotADirectory(path.clone()),
         ErrorKind::Cancelled => VfsError::Cancelled,
+        // Worded so that the transfer engine opens the connection again
+        // (and the shares with it) before retrying.
+        ErrorKind::ConnectionLost | ErrorKind::TimedOut | ErrorKind::SessionExpired => {
+            VfsError::Other(format!("{path}: smb connection lost: {error}"))
+        }
         _ if error.to_string().contains("DIRECTORY_NOT_EMPTY") => {
             VfsError::DirectoryNotEmpty(path.clone())
         }

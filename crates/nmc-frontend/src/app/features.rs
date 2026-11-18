@@ -917,7 +917,9 @@ impl App {
         let mut files = 0;
         for (sources, destination) in copies {
             files += sources.len();
-            let options = self.context.job_options(Some(nmc_ops::ConflictPolicy::Overwrite));
+            let options = self
+                .context
+                .job_options_to(Some(nmc_ops::ConflictPolicy::Overwrite), Some(&destination));
             let spec = JobSpec {
                 kind: JobKind::Copy,
                 sources,

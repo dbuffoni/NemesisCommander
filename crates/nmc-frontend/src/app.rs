@@ -1516,7 +1516,7 @@ impl App {
         sources: Vec<VfsPath>,
         destination: VfsPath,
     ) -> Option<JobId> {
-        let options = self.context.job_options(None);
+        let options = self.context.job_options_to(None, Some(&destination));
         let spec = JobSpec { kind, sources, destination: Some(destination), options, priority: 0 };
         let title = spec.title();
         let id = match self.manager.submit(spec) {
@@ -2242,7 +2242,7 @@ impl App {
         let destination = self.workspace.inactive().location().clone();
         let registry = self.context.registry.clone();
         let manager = self.manager.clone();
-        let options = self.context.job_options(None);
+        let options = self.context.job_options_to(None, Some(&destination));
         self.spawn_task(async move {
             let result = async {
                 let provider = registry.provider_for(&root).await?;

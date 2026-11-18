@@ -118,6 +118,10 @@ pub struct TransferSettings {
     pub auto_parallelism: bool,
     /// Verification after copying.
     pub verify: VerifyMode,
+    /// When `verify` is "same size", check by XXH3 content hash when the
+    /// destination is an agent or `nmc serve` server, which computes it
+    /// there at no cost in traffic.
+    pub verify_remote_fast: bool,
     /// What to do when a file exists.
     pub conflict: ConflictPolicy,
     /// Global bandwidth limit in KiB/s (0 = unlimited).
@@ -133,6 +137,7 @@ impl Default for TransferSettings {
             parallel_files: 4,
             auto_parallelism: true,
             verify: VerifyMode::Size,
+            verify_remote_fast: true,
             conflict: ConflictPolicy::Ask,
             bandwidth_limit_kib: 0,
             retries: 3,
