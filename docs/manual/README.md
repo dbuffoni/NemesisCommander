@@ -547,6 +547,17 @@ checksums and copies between folders of that server run on the server.
   certificate authority once; `nmc tls server NAME --out DIR` issues a bundle
   for each server, which runs `nmc serve --tls DIR`. Connections use mutual
   TLS; `--root` limits what is served and `--read-only` refuses changes.
+- **Installed for you**: `nmc serve install me@host` does all of that over
+  SSH: it creates the authority if needed, copies `nmc` to `~/.local/bin`,
+  issues and copies the server certificate, starts a systemd user service
+  (it keeps running after you log out) and checks the connection. Options:
+  `--name`, `--port`, `--root DIR`, `--read-only`, `--renew`. Run it again to
+  update; `nmc serve uninstall me@host` removes it. In the window or the
+  terminal use **Install nmc serve on a server…** in the commands list (F9);
+  you can give it a key with Ctrl+K.
+
+The drive list (Alt+F1) shows how each remote place is reached, for example
+`[agent over SSH]` or `[nmc serve, TLS]`.
 
 Copies between two `scs://` servers go directly from one to the other when
 they can reach each other (each authorised by a one-time token that expires
@@ -557,8 +568,9 @@ route taken; `--route` chooses one.
 
 Copies and moves run in the background as jobs. **Ctrl+J** shows the queue:
 progress, speed and errors of each job, with keys to pause (`p`), resume or
-retry (`r`), cancel (`c`), change priority (`+`/`-`) and clear finished jobs
-(`x`).
+retry (`r`), cancel (`c`), change priority (`+`/`-`), change how many files
+are copied at once (`[`/`]`), switch the automatic choice of that number on or
+off for the job (`a`) and clear finished jobs (`x`).
 
 While jobs run, a thin line above the status line shows their progress and,
 next to it, the numbers: `2 jobs · 40% · 12.4 MiB/s · 0:42 left · 3 queued`
@@ -572,6 +584,18 @@ Jobs are written to a journal, so a copy interrupted by a crash or a lost
 connection can be resumed. After copying, files are checked (by size by
 default, or by a full XXH3 or BLAKE3 hash); settings choose the number of
 parallel jobs and files, retries, and a bandwidth limit.
+
+Each job shows `[4 at once, auto]`. With the automatic mode (on by default,
+a setting), the number of files copied at once starts from the setting and is
+adjusted every few seconds from the measured speed: more files while that
+makes the copy faster, fewer when it does not or when errors appear. Choosing
+a number by hand with `[` and `]` turns it off for that job.
+
+Connections over SSH are probed every 15 seconds, so a dead link is noticed
+in about 45 seconds. When a step fails because the connection was lost, the
+job opens it again (a new agent or SFTP session) and retries after a pause,
+up to the number of retries in the settings; the part of the file already
+copied is kept. S3 requests are retried the same way.
 
 ## Bookmarks, tabs and history
 

@@ -113,7 +113,7 @@ async fn start(authority: &str) -> std::result::Result<AgentProvider, StartError
 /// The Linux `nmc` binary to install on servers: `$NMC_AGENT_BINARY`, then
 /// `nmc-agent-linux-<arch>` or `nmc` next to this program, then this program
 /// itself when it is `nmc`.
-fn agent_binary() -> Option<PathBuf> {
+pub(crate) fn agent_binary() -> Option<PathBuf> {
     if let Ok(path) = std::env::var(AGENT_BINARY_VAR) {
         return Some(PathBuf::from(path));
     }
@@ -131,7 +131,7 @@ fn agent_binary() -> Option<PathBuf> {
 }
 
 /// Runs a one-off command on `target` and returns its standard output.
-async fn ssh_run(
+pub(crate) async fn ssh_run(
     target: &Target,
     script: &str,
     input: Option<PathBuf>,

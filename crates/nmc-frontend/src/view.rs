@@ -8,7 +8,7 @@
 use nmc_config::{Action, Key, KeyChord};
 use nmc_panel::format::{human_size, local_time, permissions};
 use nmc_panel::{PARENT, Panel, SideId};
-use nmc_transfer::{JobInfo, JobState};
+use nmc_transfer::{JobInfo, JobKind, JobState};
 use nmc_vfs::Entry;
 use serde::Serialize;
 
@@ -1063,6 +1063,13 @@ pub fn job_line(job: &JobInfo, app: &App) -> String {
         job.spec.priority,
         job.spec.title()
     );
+    if matches!(job.state, JobState::Queued | JobState::Running | JobState::Paused)
+        && job.spec.kind != JobKind::Delete
+        && let Ok(files) = app.manager.job_parallelism(job.id)
+    {
+        let mode = if job.spec.options.auto_parallelism { "auto" } else { "fixed" };
+        text.push_str(&format!("  [{files} at once, {mode}]"));
+    }
     if let Some(error) = job.errors.first() {
         text.push_str(&format!("  ({error})"));
     }

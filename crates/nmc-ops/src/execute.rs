@@ -1,9 +1,11 @@
 //! Running a [`Plan`].
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures::StreamExt;
+use futures::stream::FuturesUnordered;
 use nmc_vfs::{
     Capabilities, EntryKind, Provider, ProviderRegistry, Result, SetAttributes, VfsError, VfsPath,
 };
@@ -24,6 +26,18 @@ pub enum OpEvent {
     },
     /// Bytes were written (any step).
     Bytes(u64),
+    /// A step failed with a transient error and will be tried again after a
+    /// pause. For lost connections the providers involved are reopened.
+    Retrying {
+        /// Index into [`Plan::steps`].
+        index: usize,
+        /// The attempt about to start (the first retry is 1).
+        attempt: u32,
+        /// The most retries allowed.
+        attempts: u32,
+        /// Why the step failed.
+        message: String,
+    },
     /// A step ended.
     StepFinished {
         /// Index into [`Plan::steps`].
@@ -65,6 +79,10 @@ pub struct ExecuteOptions {
     pub verify: VerifyMode,
     /// How many files may be copied at the same time.
     pub parallelism: usize,
+    /// When set, the number of files copied at the same time is read from
+    /// here before each file starts instead of from `parallelism`, so it can
+    /// be changed while the plan runs (it applies to files not yet started).
+    pub live_parallelism: Option<Arc<AtomicUsize>>,
     /// Continue interrupted copies from their part files.
     pub resume: bool,
     /// Keep going after a failed step (the failure is reported) instead of
@@ -110,12 +128,39 @@ fn is_transient(error: &VfsError) -> bool {
     matches!(error, VfsError::Io { .. } | VfsError::Other(_))
 }
 
+/// `true` if `message` looks like a lost or stalled connection, so that
+/// retrying only helps after the provider has been opened again.
+pub fn is_connection_error(message: &str) -> bool {
+    let message = message.to_lowercase();
+    [
+        "connection lost",
+        "connection closed",
+        "connection reset",
+        "connection aborted",
+        "broken pipe",
+        "unexpected eof",
+        "timed out",
+        "timeout",
+        "unavailable",
+        "channel closed",
+        "was closed",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+}
+
+/// How long to wait before retrying a lost connection at least.
+const CONNECTION_RETRY_DELAY: Duration = Duration::from_secs(2);
+/// The longest pause between two retries.
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(30);
+
 impl Default for ExecuteOptions {
     fn default() -> Self {
         ExecuteOptions {
             conflict: ConflictPolicy::Ask,
             verify: VerifyMode::Size,
             parallelism: 4,
+            live_parallelism: None,
             resume: true,
             continue_on_error: true,
             throttle: None,
@@ -214,12 +259,29 @@ impl Executor {
             } else {
                 index + 1
             };
-            let pending = (index..end).filter(|&i| !tracker.is_some_and(|t| t.is_finished(i)));
-            let batch = futures::stream::iter(pending)
-                .map(|i| async move { (i, self.run_step_with_retry(i, &plan.steps[i]).await) })
-                .buffer_unordered(self.options.parallelism.max(1))
-                .collect::<Vec<_>>()
-                .await;
+            let mut pending = (index..end).filter(|&i| !tracker.is_some_and(|t| t.is_finished(i)));
+            let mut running = FuturesUnordered::new();
+            let mut batch = Vec::new();
+            loop {
+                while running.len() < self.parallelism_now() {
+                    match pending.next() {
+                        Some(i) => running.push(self.run_indexed(plan, i)),
+                        None => break,
+                    }
+                }
+                if running.is_empty() {
+                    break;
+                }
+                if self.options.live_parallelism.is_some() {
+                    // Look at the limit again now and then: it may have been raised.
+                    tokio::select! {
+                        done = running.next() => batch.extend(done),
+                        _ = tokio::time::sleep(Duration::from_millis(250)) => {}
+                    }
+                } else {
+                    batch.extend(running.next().await);
+                }
+            }
             for (i, result) in batch {
                 let outcome = match result {
                     Ok(outcome) => outcome,
@@ -250,16 +312,33 @@ impl Executor {
         Ok(report)
     }
 
+    /// How many parallel steps may run now.
+    fn parallelism_now(&self) -> usize {
+        match &self.options.live_parallelism {
+            Some(live) => live.load(Ordering::Relaxed),
+            None => self.options.parallelism,
+        }
+        .max(1)
+    }
+
+    async fn run_indexed(&self, plan: &Plan, index: usize) -> (usize, Result<StepOutcome>) {
+        (index, self.run_step_with_retry(index, &plan.steps[index]).await)
+    }
+
     /// Runs a step, retrying transient failures per [`ExecuteOptions::retry`].
+    ///
+    /// After a lost connection the providers of the step are forgotten, so
+    /// the next attempt opens them again (a new agent, a new SFTP session),
+    /// and the pause is at least [`CONNECTION_RETRY_DELAY`].
     async fn run_step_with_retry(&self, index: usize, step: &Step) -> Result<StepOutcome> {
         let mut delay = self.options.retry.initial_delay;
         let mut attempt = 0;
         loop {
             let result = self.run_step(index, step).await;
-            let retryable = match &result {
-                Ok(StepOutcome::Failed(_)) => true,
-                Err(e) => is_transient(e),
-                Ok(_) => false,
+            let (retryable, message) = match &result {
+                Ok(StepOutcome::Failed(message)) => (true, message.clone()),
+                Err(e) if is_transient(e) => (true, e.to_string()),
+                _ => (false, String::new()),
             };
             if !retryable
                 || attempt >= self.options.retry.attempts
@@ -268,11 +347,23 @@ impl Executor {
                 return result;
             }
             attempt += 1;
+            if is_connection_error(&message) {
+                for path in step.paths() {
+                    self.registry.forget(path);
+                }
+                delay = delay.max(CONNECTION_RETRY_DELAY);
+            }
+            self.emit(OpEvent::Retrying {
+                index,
+                attempt,
+                attempts: self.options.retry.attempts,
+                message,
+            });
             tokio::select! {
                 _ = tokio::time::sleep(delay) => {}
                 _ = self.options.cancel.cancelled() => return Err(VfsError::Cancelled),
             }
-            delay *= 2;
+            delay = (delay * 2).min(MAX_RETRY_DELAY);
         }
     }
 
@@ -798,6 +889,7 @@ mod tests {
     struct Flaky {
         inner: MemoryProvider,
         failures: AtomicUsize,
+        message: &'static str,
     }
 
     #[async_trait]
@@ -817,7 +909,7 @@ mod tests {
         async fn read(&self, p: &VfsPath, offset: u64) -> Result<nmc_vfs::ReadStream> {
             if self.failures.load(Ordering::SeqCst) > 0 {
                 self.failures.fetch_sub(1, Ordering::SeqCst);
-                return Err(VfsError::Other("connection reset".into()));
+                return Err(VfsError::Other(self.message.into()));
             }
             self.inner.read(p, offset).await
         }
@@ -830,7 +922,11 @@ mod tests {
         let dst = MemoryProvider::new();
         registry.insert(
             &p("a", "/"),
-            Arc::new(Flaky { inner: src, failures: AtomicUsize::new(failures) }),
+            Arc::new(Flaky {
+                inner: src,
+                failures: AtomicUsize::new(failures),
+                message: "disk glitch",
+            }),
         );
         registry.insert(&p("b", "/"), Arc::new(dst.clone()));
         (Arc::new(registry), dst)
@@ -866,6 +962,90 @@ mod tests {
             ExecuteOptions { conflict: ConflictPolicy::Fail, retry, ..Default::default() };
         let report = Executor::new(registry, options).run(&copy_f_plan()).await.unwrap();
         assert_eq!(report.failed.len(), 1);
+    }
+
+    /// Opens a provider whose first read reports a lost connection.
+    struct ReopeningFactory {
+        opened: Arc<AtomicUsize>,
+        destination: MemoryProvider,
+    }
+
+    #[async_trait]
+    impl nmc_vfs::ProviderFactory for ReopeningFactory {
+        fn scheme(&self) -> &str {
+            "mem"
+        }
+        async fn create(&self, path: &VfsPath, _: &ProviderRegistry) -> Result<Arc<dyn Provider>> {
+            if path.authority() == "b" {
+                return Ok(Arc::new(self.destination.clone()));
+            }
+            let first = self.opened.fetch_add(1, Ordering::SeqCst) == 0;
+            let inner = MemoryProvider::new();
+            inner.put_file("/f", "data");
+            Ok(Arc::new(Flaky {
+                inner,
+                failures: AtomicUsize::new(if first { 1 } else { 0 }),
+                message: "agent connection lost: transport error",
+            }) as Arc<dyn Provider>)
+        }
+    }
+
+    #[test]
+    fn recognises_lost_connections() {
+        assert!(is_connection_error("agent connection lost: transport error"));
+        assert!(is_connection_error("sftp://h: Broken pipe"));
+        assert!(is_connection_error("operation timed out"));
+        assert!(!is_connection_error("permission denied"));
+        assert!(!is_connection_error("disk glitch"));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn lost_connections_are_reopened_before_retrying() {
+        // A failure that is not a connection error would keep the dead
+        // provider; "connection lost" makes the executor forget it so the
+        // factory opens a fresh one.
+        let opened = Arc::new(AtomicUsize::new(0));
+        let destination = MemoryProvider::new();
+        let mut registry = ProviderRegistry::new();
+        registry.register(ReopeningFactory {
+            opened: opened.clone(),
+            destination: destination.clone(),
+        });
+        let registry = Arc::new(registry);
+        let retry = RetryPolicy { attempts: 2, initial_delay: Duration::from_millis(1) };
+        let options =
+            ExecuteOptions { conflict: ConflictPolicy::Fail, retry, ..Default::default() };
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let seen = events.clone();
+        let executor = Executor::new(registry, options)
+            .with_observer(Arc::new(move |e| seen.lock().unwrap().push(e)));
+        let report = executor.run(&copy_f_plan()).await.unwrap();
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        assert_eq!(destination.get_file("/f").unwrap(), b"data");
+        assert_eq!(opened.load(Ordering::SeqCst), 2, "the provider was opened again");
+        assert!(events.lock().unwrap().iter().any(|e| matches!(e, OpEvent::Retrying { .. })));
+    }
+
+    #[tokio::test]
+    async fn parallelism_can_change_while_running() {
+        let (registry, a, b) = setup();
+        for i in 0..6 {
+            a.put_file(&format!("/f{i}"), "x");
+        }
+        let sources: Vec<_> = (0..6).map(|i| p("a", &format!("/f{i}"))).collect();
+        let plan =
+            plan_copy(&registry, &sources, &p("b", "/"), PlanOptions::default()).await.unwrap();
+        let live = Arc::new(AtomicUsize::new(1));
+        let options = ExecuteOptions {
+            conflict: ConflictPolicy::Fail,
+            live_parallelism: Some(live.clone()),
+            ..Default::default()
+        };
+        let executor = Executor::new(registry, options);
+        live.store(3, Ordering::Relaxed);
+        let report = executor.run(&plan).await.unwrap();
+        assert_eq!(report.done, plan.steps.len());
+        assert_eq!(b.get_file("/f5").unwrap(), b"x");
     }
 
     struct Recorder(Mutex<Vec<(usize, StepOutcome)>>, usize);

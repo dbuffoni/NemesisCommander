@@ -110,8 +110,12 @@ impl PanelSettings {
 pub struct TransferSettings {
     /// Jobs running at the same time.
     pub parallel_jobs: usize,
-    /// Files copied at the same time within a job.
+    /// Files copied at the same time within a job (the starting level when
+    /// `auto_parallelism` is on).
     pub parallel_files: usize,
+    /// Adjust the files copied at the same time while a job runs, from the
+    /// measured speed. Can be turned off per job in the job monitor.
+    pub auto_parallelism: bool,
     /// Verification after copying.
     pub verify: VerifyMode,
     /// What to do when a file exists.
@@ -127,6 +131,7 @@ impl Default for TransferSettings {
         TransferSettings {
             parallel_jobs: 2,
             parallel_files: 4,
+            auto_parallelism: true,
             verify: VerifyMode::Size,
             conflict: ConflictPolicy::Ask,
             bandwidth_limit_kib: 0,

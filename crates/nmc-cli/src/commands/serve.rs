@@ -7,12 +7,18 @@ use nmc_app::AppContext;
 use nmc_tls::ControllerIdentity;
 
 use super::CmdResult;
-use crate::cli::{ServeArgs, TlsAction, TlsArgs};
+use crate::cli::{ServeAction, ServeArgs, ServeInstallArgs, TlsAction, TlsArgs};
 
 /// `nmc serve`: serve this machine over mutual TLS until stopped.
 #[cfg(target_os = "linux")]
-pub async fn serve(args: ServeArgs) -> CmdResult {
-    let identity = nmc_tls::ServerIdentity::load(Path::new(&args.tls))?;
+pub async fn serve(context: &AppContext, args: ServeArgs) -> CmdResult {
+    match args.action {
+        Some(ServeAction::Install(install)) => return install_serve(context, install).await,
+        Some(ServeAction::Uninstall { host }) => return uninstall_serve(&host).await,
+        None => {}
+    }
+    let tls = args.tls.ok_or("--tls is required")?;
+    let identity = nmc_tls::ServerIdentity::load(Path::new(&tls))?;
     let limits = nmc_agent::Limits {
         roots: args.roots.iter().map(std::path::PathBuf::from).collect(),
         read_only: args.read_only,
@@ -31,8 +37,38 @@ pub async fn serve(args: ServeArgs) -> CmdResult {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub async fn serve(_args: ServeArgs) -> CmdResult {
+pub async fn serve(context: &AppContext, args: ServeArgs) -> CmdResult {
+    match args.action {
+        Some(ServeAction::Install(install)) => return install_serve(context, install).await,
+        Some(ServeAction::Uninstall { host }) => return uninstall_serve(&host).await,
+        None => {}
+    }
     Err("nmc serve runs on Linux only; on this system use nmc as a controller".into())
+}
+
+/// `nmc serve install HOST`: set `nmc serve` up on a server.
+async fn install_serve(context: &AppContext, args: ServeInstallArgs) -> CmdResult {
+    let mut options =
+        nmc_agent::provision::InstallOptions::new(&args.host, context.paths.tls_dir());
+    options.name = args.name;
+    options.port = args.port;
+    options.roots = args.roots;
+    options.read_only = args.read_only;
+    options.renew = args.renew;
+    let location = nmc_agent::provision::install_serve(&options, |step| {
+        eprintln!("nmc: {step}…");
+    })
+    .await?;
+    crate::out!("nmc serve is running; open {location}");
+    crate::out!("add it with F4 in the drive list, or copy to it: nmc cp FILE {location}DIR");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `nmc serve uninstall HOST`.
+async fn uninstall_serve(host: &str) -> CmdResult {
+    nmc_agent::provision::uninstall_serve(host, |step| eprintln!("nmc: {step}…")).await?;
+    crate::out!("nmc serve was removed from {host} (the nmc program stays)");
+    Ok(ExitCode::SUCCESS)
 }
 
 /// `nmc tls ...`.

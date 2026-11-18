@@ -37,6 +37,7 @@ taken while implementing it.
 | 0024 | [Multi-rename always previews, and refuses names that exist](0024-multi-rename-preview.md) | Accepted |
 | 0025 | [Saved connections can log in with their own private key file](0025-connection-private-key.md) | Accepted |
 | 0029 | [The product is renamed NemesisCommander, the program `nmc`](0029-rename-to-nemesiscommander.md) | Accepted |
+| 0030 | [Remote connections are probed and reopened; jobs tune their parallelism; `nmc serve install`](0030-remote-resilience-and-parallelism.md) | Accepted |
 
 Template:
 

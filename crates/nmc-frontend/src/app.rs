@@ -667,6 +667,16 @@ impl App {
                     self.update_quick_view();
                 }
             }
+            AppEvent::Job(JobEvent::Retrying { id, attempt, attempts, message }) => {
+                let title = self
+                    .jobs
+                    .iter()
+                    .find(|j| j.id == id)
+                    .map(|j| j.spec.title())
+                    .unwrap_or_default();
+                self.set_status(format!("Retrying {title} ({attempt}/{attempts}): {message}…"));
+            }
+            AppEvent::Job(JobEvent::ParallelismChanged { .. }) => self.refresh_jobs(),
             AppEvent::Job(JobEvent::Progress { id, bytes }) => {
                 *self.live_bytes.entry(id).or_default() += bytes;
                 self.speed.record(std::time::Instant::now(), bytes);
@@ -1087,6 +1097,18 @@ impl App {
                         let priority = self.jobs[view.cursor].spec.priority - 1;
                         self.manager.set_priority(id, priority)
                     }
+                    (_, Some(']'), Some(id)) => self
+                        .manager
+                        .job_parallelism(id)
+                        .and_then(|n| self.manager.set_parallelism(id, n + 1)),
+                    (_, Some('['), Some(id)) => self
+                        .manager
+                        .job_parallelism(id)
+                        .and_then(|n| self.manager.set_parallelism(id, n.saturating_sub(1))),
+                    (_, Some('a'), Some(id)) => {
+                        let auto = self.jobs[view.cursor].spec.options.auto_parallelism;
+                        self.manager.set_auto_parallelism(id, !auto)
+                    }
                     (_, Some('x'), _) => self.manager.purge_finished().map(|_| ()),
                     _ => Ok(()),
                 };
@@ -1332,7 +1354,7 @@ impl App {
                 let here = display_location(self.workspace.active().location());
                 self.ask(
                     "Go to",
-                    "Folder, archive or URI (sftp://, smb://, davs://, s3://, agent://, zip://…):",
+                    "Folder, archive or URI (sftp://, smb://, davs://, s3://, agent://, scs://, zip://…):",
                     &here,
                     InputPurpose::GoTo,
                 );
@@ -1420,6 +1442,12 @@ impl App {
             }
             Action::RunScript => self.choose_plugin_command(),
             Action::AiScript => self.ask_ai_script(),
+            Action::InstallServe => self.ask(
+                "Install nmc serve",
+                "Server over SSH: [user@]host[:port] [--root DIR] [--read-only] [--port N] [--renew]:",
+                "",
+                InputPurpose::InstallServe,
+            ),
             Action::Help => self.overlay = Some(Overlay::Help),
             Action::Menu => self.open_commands(),
             Action::Settings => self.open_settings(),
@@ -1699,6 +1727,7 @@ impl App {
             InputPurpose::SendSettings(_) => self.send_settings(&text),
             InputPurpose::FetchSettings(_) => self.fetch_settings(&text),
             InputPurpose::AiScript => self.write_script_with_ai(text),
+            InputPurpose::InstallServe => self.install_serve(&text),
         }
     }
 
@@ -1839,7 +1868,7 @@ impl App {
                 },
                 None => self.ask(
                     "New connection",
-                    "Location (sftp://user@host/path, davs://host/path, s3://bucket/path, smb://host/share, agent://host/path, …):",
+                    "Location (sftp://user@host/path, davs://host/path, s3://bucket/path, smb://host/share, agent://host/path, scs://host:7443/path, …):",
                     "sftp://",
                     InputPurpose::NewConnection,
                 ),

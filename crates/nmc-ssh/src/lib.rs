@@ -150,6 +150,13 @@ pub enum Remote<'a> {
     Subsystem(&'a str),
 }
 
+/// Options for every `ssh` connection: batch mode, a limit for connecting,
+/// and a keepalive probe every 15 s so that a dead link ends the session
+/// after about 45 s (the program then fails with a connection error)
+/// instead of hanging.
+const KEEPALIVE_OPTIONS: &[&str] =
+    &["BatchMode=yes", "ConnectTimeout=30", "ServerAliveInterval=15", "ServerAliveCountMax=3"];
+
 /// The `ssh` arguments that start `remote` on `target`.
 ///
 /// Batch mode: keys or an SSH agent are required, because a password prompt
@@ -158,7 +165,11 @@ pub enum Remote<'a> {
 /// login ([`set_identity_files`]), ssh uses that key only; an error explains
 /// a missing key file or one that others can read.
 pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, String> {
-    let mut args = vec!["-T".to_owned(), "-o".to_owned(), "BatchMode=yes".to_owned()];
+    let mut args = vec!["-T".to_owned()];
+    for option in KEEPALIVE_OPTIONS {
+        args.push("-o".to_owned());
+        args.push((*option).to_owned());
+    }
     if let Some(file) = identity_file(target) {
         let path = expand_home(&file);
         check_identity_file(&path)?;
@@ -239,11 +250,39 @@ mod tests {
         let target = Target::parse("me@h:2200").unwrap();
         assert_eq!(
             ssh_args(&target, Remote::Script("echo hi")).unwrap(),
-            ["-T", "-o", "BatchMode=yes", "-p", "2200", "me@h", "--", "sh -c 'echo hi'"]
+            [
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=30",
+                "-o",
+                "ServerAliveInterval=15",
+                "-o",
+                "ServerAliveCountMax=3",
+                "-p",
+                "2200",
+                "me@h",
+                "--",
+                "sh -c 'echo hi'"
+            ]
         );
         assert_eq!(
             ssh_args(&Target::parse("h").unwrap(), Remote::Subsystem("sftp")).unwrap(),
-            ["-T", "-o", "BatchMode=yes", "-s", "h", "sftp"]
+            [
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=30",
+                "-o",
+                "ServerAliveInterval=15",
+                "-o",
+                "ServerAliveCountMax=3",
+                "-s",
+                "h",
+                "sftp"
+            ]
         );
     }
 
@@ -270,10 +309,24 @@ mod tests {
         let args = ssh_args(&Target::parse("me@KeyHost").unwrap(), Remote::Subsystem("sftp"));
         assert_eq!(
             args.unwrap(),
-            ["-T", "-o", "BatchMode=yes", "-i", &key_text, "-o", "IdentitiesOnly=yes"]
-                .into_iter()
-                .chain(["-s", "me@KeyHost", "sftp"])
-                .collect::<Vec<_>>()
+            [
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=30",
+                "-o",
+                "ServerAliveInterval=15",
+                "-o",
+                "ServerAliveCountMax=3",
+                "-i",
+                &key_text,
+                "-o",
+                "IdentitiesOnly=yes",
+            ]
+            .into_iter()
+            .chain(["-s", "me@KeyHost", "sftp"])
+            .collect::<Vec<_>>()
         );
         // Another user or port: the user's usual setup.
         for other in ["you@keyhost", "me@keyhost:2222", "keyhost"] {

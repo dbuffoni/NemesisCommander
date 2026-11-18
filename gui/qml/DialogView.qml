@@ -356,7 +356,7 @@ Item {
         Box {
             title: "Transfers"
             hint: "p: pause    r: resume/retry    c: cancel    +/-: priority    "
-                  + "x: remove finished    Esc: close"
+                  + "[/]: files at once    a: auto    x: remove finished    Esc: close"
             Label {
                 visible: dialogs.view.rows.length === 0
                 text: "No transfers."

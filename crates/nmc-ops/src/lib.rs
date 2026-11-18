@@ -36,6 +36,7 @@ pub use copy::{
 pub use delete::{DeleteOptions, delete_paths};
 pub use execute::{
     ExecuteOptions, Executor, Observer, OpEvent, Report, RetryPolicy, StepOutcome, StepTracker,
+    is_connection_error,
 };
 pub use link::{LinkKind, LinkReport, create_links, relative_path};
 pub use plan::{Plan, PlanOptions, Step, plan_copy, plan_delete, plan_move};

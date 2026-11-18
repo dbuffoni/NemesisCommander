@@ -52,13 +52,25 @@ pub struct S3Provider {
     path_prefix: String,
 }
 
+/// How long a connection may stay silent before a request fails.
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+/// Extra attempts of a request that failed in a way that may pass.
+const REQUEST_RETRIES: u32 = 3;
+/// The pause before the first retry (doubled each time).
+const RETRY_PAUSE: Duration = Duration::from_millis(400);
+
+/// `true` for answers that mean "try again": throttling and server errors.
+fn is_retryable_status(status: StatusCode) -> bool {
+    status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
 /// One S3 request being built.
 struct Call<'a> {
     method: Method,
     key: &'a str,
     query: Vec<(String, String)>,
     headers: Vec<(String, String)>,
-    body: Option<reqwest::Body>,
+    body: Option<Bytes>,
 }
 
 impl<'a> Call<'a> {
@@ -77,7 +89,7 @@ impl<'a> Call<'a> {
         self
     }
 
-    fn body(mut self, body: impl Into<reqwest::Body>) -> Self {
+    fn body(mut self, body: impl Into<Bytes>) -> Self {
         self.body = Some(body.into());
         self
     }
@@ -94,6 +106,9 @@ impl S3Provider {
         let client = reqwest::Client::builder()
             .user_agent(concat!("NemesisCommander/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(30))
+            // No data for this long (stalled download or upload): fail, so
+            // the request or the job is retried instead of hanging.
+            .read_timeout(READ_TIMEOUT)
             .build()
             .map_err(|e| VfsError::Other(format!("cannot start the HTTP client: {e}")))?;
         // Custom endpoints get path-style requests, which every
@@ -125,8 +140,32 @@ impl S3Provider {
         if key.is_empty() { String::new() } else { format!("{key}/") }
     }
 
-    /// Signs and sends a request.
+    /// Signs and sends a request, trying again (with growing pauses) after a
+    /// network error, a timeout, a 5xx answer (including 503 `SlowDown`) or
+    /// 429. Bodies are in memory (at most one part), so they can be resent.
     async fn send(&self, call: Call<'_>) -> std::result::Result<Response, reqwest::Error> {
+        let mut pause = RETRY_PAUSE;
+        for _ in 0..REQUEST_RETRIES {
+            let attempt = Call {
+                method: call.method.clone(),
+                key: call.key,
+                query: call.query.clone(),
+                headers: call.headers.clone(),
+                body: call.body.clone(),
+            };
+            match self.send_once(attempt).await {
+                Ok(response) if !is_retryable_status(response.status()) => return Ok(response),
+                Err(e) if !(e.is_timeout() || e.is_connect() || e.is_request()) => return Err(e),
+                Ok(_) | Err(_) => {}
+            }
+            tokio::time::sleep(pause).await;
+            pause = (pause * 2).min(Duration::from_secs(8));
+        }
+        self.send_once(call).await
+    }
+
+    /// Signs and sends a request once.
+    async fn send_once(&self, call: Call<'_>) -> std::result::Result<Response, reqwest::Error> {
         let path = format!("{}/{}", self.path_prefix, sigv4::encode_key(call.key));
         let mut url = format!("{}{path}", self.origin);
         if !call.query.is_empty() {

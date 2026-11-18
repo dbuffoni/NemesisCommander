@@ -17,6 +17,7 @@ nmc-archive.workspace = true
 nmc-config.workspace = true
 nmc-panel.workspace = true
 nmc-app.workspace = true
+nmc-agent.workspace = true
 nmc-ssh.workspace = true
 nmc-preview.workspace = true
 async-trait.workspace = true

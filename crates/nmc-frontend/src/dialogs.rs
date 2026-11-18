@@ -127,6 +127,8 @@ pub enum InputPurpose {
     FetchSettings(Box<SettingsScreen>),
     /// Have Claude write a script that does what was typed.
     AiScript,
+    /// Install `nmc serve` on the typed server.
+    InstallServe,
 }
 
 impl InputPurpose {

@@ -11,11 +11,14 @@
 //!   `~/.cache/nmc/` when the server does not have it.
 //! * [`serve`]: `nmc serve`, the permanent agent over mutual TLS, and the
 //!   `scs://host:port/path` provider that connects to it.
+//! * [`provision`]: `nmc serve install HOST`, which sets up `nmc serve` on a
+//!   server over SSH (program, certificates, systemd unit).
 //! * [`route`]: the controller's side of server-to-server copies.
 //! * `transfer`: server-to-server copies run by `nmc serve`.
 
 pub mod client;
 pub mod launch;
+pub mod provision;
 pub mod route;
 pub mod serve;
 pub mod server;

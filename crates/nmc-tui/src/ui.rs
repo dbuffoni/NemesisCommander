@@ -721,7 +721,7 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
     frame.render_widget(Clear, rect);
     let block = Block::bordered().title(Line::styled(" Transfer queue ", bold())).title_bottom(
         Line::styled(
-            " p: pause  r: resume/retry  c: cancel  +/-: priority  x: remove finished  Esc: close ",
+            " p: pause  r: resume  c: cancel  +/-: priority  [/]: files at once  a: auto  x: clear  Esc ",
             dim(),
         ),
     );
