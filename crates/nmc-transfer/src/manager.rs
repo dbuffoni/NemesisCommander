@@ -10,7 +10,7 @@ use nmc_ops::{
     ConflictPolicy, ConflictResolver, ExecuteOptions, Executor, OpEvent, StepOutcome, StepTracker,
     Throttle, plan_copy, plan_delete, plan_move,
 };
-use nmc_vfs::{ProviderRegistry, VfsError};
+use nmc_vfs::{ProviderRegistry, VfsError, VfsPath};
 use tokio::sync::{Notify, broadcast};
 use tokio_util::sync::CancellationToken;
 
@@ -32,6 +32,35 @@ impl Default for ManagerOptions {
     fn default() -> Self {
         ManagerOptions { max_concurrent_jobs: 2, global_bandwidth_limit: 0 }
     }
+}
+
+/// Copies between two `nmc serve` servers without passing the data through
+/// this machine. `nmc-app` implements it with `nmc-agent`'s routes (direct,
+/// then reverse); `nmc-transfer` does not depend on the agent.
+#[async_trait]
+pub trait ServerCopier: Send + Sync {
+    /// Tries to copy `sources` to `destination` between servers. `None`:
+    /// not applicable here (not two servers, no certificates, no server can
+    /// reach the other): the job then copies through this machine. `progress`
+    /// takes the bytes done and the total.
+    async fn copy(
+        &self,
+        sources: &[VfsPath],
+        destination: &VfsPath,
+        conflict: ConflictPolicy,
+        progress: &(dyn Fn(u64, u64) + Send + Sync),
+    ) -> Option<Result<ServerCopyReport, String>>;
+}
+
+/// The outcome of a copy between servers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerCopyReport {
+    /// How the data travelled: `direct` or `reverse`.
+    pub route: String,
+    /// Bytes copied.
+    pub bytes: u64,
+    /// Files that failed, with the reason.
+    pub failures: Vec<String>,
 }
 
 /// How often the automatic tuning looks at a job's throughput.
@@ -57,6 +86,7 @@ struct Inner {
     /// Jobs allowed to run at once; changeable while running.
     max_jobs: std::sync::atomic::AtomicUsize,
     resolver: Option<Arc<dyn ConflictResolver>>,
+    server_copier: Option<Arc<dyn ServerCopier>>,
     global_throttle: Arc<TokenBucket>,
     running: Mutex<HashMap<JobId, CancellationToken>>,
     /// Live parallelism of the jobs that are copying now.
@@ -81,6 +111,7 @@ impl TransferManager {
                 journal,
                 max_jobs: std::sync::atomic::AtomicUsize::new(options.max_concurrent_jobs),
                 resolver: None,
+                server_copier: None,
                 global_throttle: Arc::new(TokenBucket::new(options.global_bandwidth_limit)),
                 running: Mutex::new(HashMap::new()),
                 controls: Mutex::new(HashMap::new()),
@@ -97,6 +128,16 @@ impl TransferManager {
         Arc::get_mut(&mut self.inner)
             .expect("with_resolver must be called before cloning")
             .resolver = Some(resolver);
+        self
+    }
+
+    /// Sets how copies between two `nmc serve` servers are done without
+    /// passing through this machine. Must be called before the manager is
+    /// shared.
+    pub fn with_server_copier(mut self, copier: Arc<dyn ServerCopier>) -> Self {
+        Arc::get_mut(&mut self.inner)
+            .expect("with_server_copier must be called before cloning")
+            .server_copier = Some(copier);
         self
     }
 
@@ -321,6 +362,47 @@ impl Inner {
         cancel: CancellationToken,
     ) -> Result<bool, JobError> {
         let spec = self.journal.job(id)?.spec;
+        if spec.kind == JobKind::Copy
+            && let (Some(copier), Some(destination), None) =
+                (&self.server_copier, &spec.destination, self.journal.load_plan(id)?)
+        {
+            let conflict = match spec.options.conflict {
+                ConflictPolicy::Ask => ConflictPolicy::Skip,
+                other => other,
+            };
+            let shown = AtomicU64::new(0);
+            let progress = |done: u64, _total: u64| {
+                let before = shown.fetch_max(done, Ordering::Relaxed);
+                if done > before {
+                    self.emit(JobEvent::Progress { id, bytes: done - before });
+                }
+            };
+            let attempt = copier.copy(&spec.sources, destination, conflict, &progress);
+            let outcome = tokio::select! {
+                outcome = attempt => outcome,
+                _ = cancel.cancelled() => return Err(JobError::Stopped),
+            };
+            match outcome {
+                None => {} // not between servers, or they cannot reach each other
+                Some(Err(message)) => return Err(JobError::Failed(message)),
+                Some(Ok(report)) => {
+                    self.emit(JobEvent::Route { id, route: report.route.clone() });
+                    self.journal.store_plan(
+                        id,
+                        &nmc_ops::Plan {
+                            steps: Vec::new(),
+                            total_bytes: report.bytes,
+                            total_files: 0,
+                            warnings: Vec::new(),
+                        },
+                    )?;
+                    if !report.failures.is_empty() {
+                        self.journal.set_error(id, &report.failures.join("; "))?;
+                    }
+                    return Ok(report.failures.is_empty());
+                }
+            }
+        }
         let plan = match self.journal.load_plan(id)? {
             Some(plan) => plan,
             None => {
@@ -530,6 +612,104 @@ mod tests {
             options: JobOptions::default(),
             priority,
         }
+    }
+
+    /// A copier that answers with a fixed result.
+    struct FixedCopier(Option<Result<ServerCopyReport, String>>);
+
+    #[async_trait]
+    impl ServerCopier for FixedCopier {
+        async fn copy(
+            &self,
+            _: &[VfsPath],
+            _: &VfsPath,
+            _: ConflictPolicy,
+            progress: &(dyn Fn(u64, u64) + Send + Sync),
+        ) -> Option<Result<ServerCopyReport, String>> {
+            progress(5, 10);
+            progress(10, 10);
+            self.0.clone()
+        }
+    }
+
+    async fn run_with_copier(copier: FixedCopier) -> (JobInfo, MemoryProvider, Vec<JobEvent>) {
+        let (registry, a, b) = setup();
+        a.put_file("/src/x", "1");
+        let manager = TransferManager::new(
+            registry,
+            Journal::open_in_memory().unwrap(),
+            ManagerOptions::default(),
+        )
+        .unwrap()
+        .with_server_copier(Arc::new(copier));
+        let mut events = manager.subscribe();
+        let id = manager.submit(copy_spec(0)).unwrap();
+        manager.run_until_idle().await;
+        let mut seen = Vec::new();
+        while let Ok(event) = events.try_recv() {
+            seen.push(event);
+        }
+        (manager.job(id).unwrap(), b, seen)
+    }
+
+    #[tokio::test]
+    async fn a_copy_between_servers_skips_the_local_copy() {
+        let report = ServerCopyReport { route: "direct".into(), bytes: 10, failures: vec![] };
+        let (info, b, events) = run_with_copier(FixedCopier(Some(Ok(report)))).await;
+        assert_eq!(info.state, JobState::Completed);
+        assert!(b.get_file("/src/x").is_none(), "nothing was copied through here");
+        assert!(events.contains(&JobEvent::Route { id: info.id, route: "direct".into() }));
+        let bytes: u64 = events
+            .iter()
+            .filter_map(|e| match e {
+                JobEvent::Progress { bytes, .. } => Some(*bytes),
+                _ => None,
+            })
+            .sum();
+        assert_eq!(bytes, 10);
+    }
+
+    #[tokio::test]
+    async fn failures_between_servers_fail_the_job() {
+        let report = ServerCopyReport {
+            route: "reverse".into(),
+            bytes: 4,
+            failures: vec!["a.txt: permission denied".into()],
+        };
+        let (info, _, _) = run_with_copier(FixedCopier(Some(Ok(report)))).await;
+        assert_eq!(info.state, JobState::Failed);
+        assert!(info.errors.iter().any(|e| e.contains("permission denied")), "{:?}", info.errors);
+        let (info, _, _) = run_with_copier(FixedCopier(Some(Err("no route".into())))).await;
+        assert_eq!(info.state, JobState::Failed);
+    }
+
+    #[tokio::test]
+    async fn without_a_route_the_job_copies_through_here() {
+        let (info, b, _) = run_with_copier(FixedCopier(None)).await;
+        assert_eq!(info.state, JobState::Completed);
+        assert_eq!(b.get_file("/src/x").unwrap(), b"1");
+    }
+
+    #[tokio::test]
+    async fn parallelism_is_stored_with_the_job() {
+        let (registry, _, _) = setup();
+        let manager = TransferManager::new(
+            registry,
+            Journal::open_in_memory().unwrap(),
+            ManagerOptions::default(),
+        )
+        .unwrap();
+        let id = manager.submit(copy_spec(0)).unwrap();
+        assert_eq!(manager.job_parallelism(id).unwrap(), 4);
+        manager.set_parallelism(id, 7).unwrap();
+        assert_eq!(manager.job_parallelism(id).unwrap(), 7);
+        let options = manager.job(id).unwrap().spec.options;
+        assert_eq!(options.parallelism, 7);
+        assert!(!options.auto_parallelism, "a level chosen by hand turns the tuning off");
+        manager.set_auto_parallelism(id, true).unwrap();
+        assert!(manager.job(id).unwrap().spec.options.auto_parallelism);
+        manager.set_parallelism(id, 1000).unwrap();
+        assert_eq!(manager.job_parallelism(id).unwrap(), crate::MAX_PARALLELISM);
     }
 
     #[tokio::test]

@@ -3694,6 +3694,7 @@ dependencies = [
 name = "nmc-app"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "nmc-agent",
  "nmc-archive",
  "nmc-config",

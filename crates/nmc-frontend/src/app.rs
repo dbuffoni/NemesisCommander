@@ -684,6 +684,9 @@ impl App {
                 self.set_status(format!("Retrying {title} ({attempt}/{attempts}): {message}…"));
             }
             AppEvent::Job(JobEvent::ParallelismChanged { .. }) => self.refresh_jobs(),
+            AppEvent::Job(JobEvent::Route { route, .. }) => {
+                self.set_status(format!("Copying {route} between the servers (not through here)"));
+            }
             AppEvent::Job(JobEvent::Progress { id, bytes }) => {
                 *self.live_bytes.entry(id).or_default() += bytes;
                 self.speed.record(std::time::Instant::now(), bytes);
