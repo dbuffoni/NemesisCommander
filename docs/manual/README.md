@@ -79,6 +79,10 @@ shortcuts on the right.
   (Esc cancels). If another command had that key, it loses it and the status
   line says which one. **Delete** removes the command's shortcuts. The
   change is saved at once, as on the settings screen.
+- **F1** explains the highlighted command in a sentence or two; F1 or Esc
+  hides the explanation.
+
+  ![F1 explains a command](images/commands-help.png)
 - **Esc** empties the filter, or closes the list.
 
 ![One category](images/commands-category.png)
@@ -100,10 +104,15 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
 - **Enter** opens a folder (or an archive), **Backspace** goes to the parent.
 - **Ctrl+L** goes to any location: a path, `~/…`, or a URI such as
   `sftp://host/dir`.
-- **Ctrl+F3 / Ctrl+F4 / Ctrl+F6 / Ctrl+F5** sort by name, extension, size or
-  date; pressing the same one again reverses the order.
+- **Ctrl+F3 / Ctrl+F4 / Ctrl+F5** sort by name, extension or date; pressing
+  the same one again reverses the order. (There is no "sort by size": count
+  the folder sizes with **Alt+S** instead, below.)
 - **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
-- **Ctrl+S** filters the listing as you type (`*.pdf`, `report`).
+- **Ctrl+S** filters the listing as you type (`*.pdf`, `report`). While a
+  filter is on, the line under the panel says `filter: … (Esc clears)`.
+- **Esc** clears the filter; with no filter it clears the selection (and,
+  right after **Alt+C** compared two folders, the differences it selected in
+  both panels).
 - **Ctrl+↓** (or **Ctrl+U**) swaps the panels, **Ctrl+↑** (or **Alt+O**) opens
   this folder in the other one.
   **Ctrl+←** and **Ctrl+→** open the folder under the cursor in the left or
@@ -131,7 +140,12 @@ A folder shows `<DIR>` instead of a size because counting is slow on big
 trees. **Alt+S** counts the selected folders (all the folders of the panel when
 nothing is selected) in the background and shows their sizes in the size
 column; the status line adds up what was counted. The sizes stay until the
-folder is listed again (Ctrl+R, or opening it again).
+folder is listed again (Ctrl+R, or opening it again). Once some are counted,
+every row gets a small bar showing how big it is next to the biggest item of
+the folder, from green (small) to red (the biggest): in the window a
+bar before the size, in the terminal a block (▁ to █) in the same colours.
+Files are drawn on the same scale as the folders, so you see at a glance
+what takes the space.
 
 **Alt+U** (Disk usage) lists the items of this folder by size, biggest first,
 with a bar relative to the biggest, its share of the total and its size. Enter
@@ -150,7 +164,13 @@ does not tell is shown as `-`.
 
 The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
-what F1–F10 do.
+what F1–F10 do, and it follows the keys you hold: with **Alt** down it shows
+what Alt+F1…F10 do (`Pack` at F5, `Unpack` at F9), with **Ctrl**, **Shift** or
+a combination likewise, and nothing for the keys that are not bound. In the
+window this follows the keyboard live (clicking a label with a modifier held
+runs that combination). In the terminal it works only where the terminal
+reports Ctrl, Alt and Shift on their own (terminals with the "kitty keyboard
+protocol" turned on by the program; NemesisCommander does not turn it on).
 
 
 ### The mouse
@@ -285,7 +305,7 @@ leave the name empty to copy it to the clipboard.
 The basket collects items from several folders and drives to act on together.
 **Alt+B** adds the selection; **Ctrl+B** opens the basket. In it, **Enter**
 shows an item in the panel, **F5** copies, **F6** moves, **F8** deletes,
-**Alt+F5** packs and **Ctrl+M** renames everything in the basket, **Delete**
+**Alt+F5** packs (into `basket.zip` unless you type another name) and **Ctrl+M** renames everything in the basket, **Delete**
 removes one item from the list (the file stays) and **Shift+Delete** empties it.
 Moved and deleted items leave the basket by themselves. The basket is kept
 until you quit.
@@ -362,6 +382,13 @@ The viewer works on every location, remote ones and archives included.
 **Ctrl+Q** turns the other panel into a preview of the entry under the
 cursor, and keeps following the cursor as you move. It shows everything the
 viewer shows; Ctrl+Q again closes it.
+
+Plain **↑ ↓ PgUp PgDn** keep moving the cursor of the panel, and the preview
+follows. To read the preview itself use **Shift+↑ / ↓** (a line),
+**Shift+PgUp / PgDn** (a page; the pages of a PDF) and **Shift+Home / End**;
+the mouse wheel over the preview scrolls it too. **Ctrl+U** (swap panels)
+exchanges the file panel and the preview, and the focus goes with the file
+panel.
 
 | PDF | Model | Markdown |
 |---|---|---|
@@ -510,29 +537,14 @@ panel show. It starts as the host name: type something you will recognise, such
 as `Office NAS`. To change it later, select the connection in the drive list and
 press **F2**.
 
-### Private key files (`.pem`)
+### Private keys
 
-An SFTP or agent connection can log in with a private key file of its own,
-such as the `.pem` key a cloud provider gives you, without touching
-`~/.ssh/config`. A new SFTP or agent connection asks for it after its name;
-for a saved one, select it in the drive list and press **F4**. Type the
-path (`~/` works) or, in the window, click **Browse…** to pick the file.
-Leave it empty to go back to the SSH agent and `~/.ssh/config`.
-
-The key is passed to `ssh` as `-i FILE -o IdentitiesOnly=yes` for every
-connection to that login (same user, host and port), so the agent's other
-keys are not tried first. The file must exist and, on Linux and macOS, be
-readable by you only: if not, connecting stops with a message that says
-so (fix it with `chmod 600 FILE`). Keys with a passphrase need the SSH
-agent (`ssh-add FILE`), since NemesisCommander never asks for passwords. In
-the settings file the key is the `identity_file` of the connection:
-
-```toml
-[[connections]]
-name = "web"
-uri = "sftp://ubuntu@203.0.113.10/var/www"
-identity_file = "~/.ssh/aws-web.pem"
-```
+There is nothing to set: SFTP and agent connections use the `ssh` of your
+system, which finds keys the way it does in a terminal (`~/.ssh/config`, the
+default key files, the SSH agent). For a `.pem` file, add it to
+`~/.ssh/config` (`IdentityFile ~/.ssh/aws-web.pem`) or load it with
+`ssh-add`. A connection no longer asks for a key file (older versions did);
+an `identity_file` left in an old settings file is read and ignored.
 
 ## Servers: the agent and `nmc serve`
 
@@ -721,15 +733,20 @@ nmc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
 ## Settings
 
 **Ctrl+,** opens the settings screen. It lists every option and the
-commands to share settings. Shortcuts are set in the command list (**F9**,
+commands to share settings. **Type** to find a setting (`font`, `retries`):
+only the rows whose section or name contain every word are left, under their
+headers; Backspace erases a letter and **Esc** empties the filter before it
+closes the screen. Shortcuts are set in the command list (**F9**,
 then **Ctrl+K**). Changes are saved
 and applied at once; values that differ from the built-in ones are marked
 with a dot.
 
 ![Settings](images/settings.png)
 
+![Finding a setting by typing](images/settings-find.png)
+
 - **Options**: Enter or ← → change on/off and choice options; numbers and
-  text are typed after Enter (← → also step numbers). **r** puts the
+  text are typed after Enter (← → also step numbers). **Delete** puts the
   default back.
   - General: confirm before deleting, use the recycle bin, the editor.
   - Panels: hidden files, sort order, human-readable sizes, ← and → to move
@@ -811,7 +828,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| D, Alt+F1, Ctrl+N | Drives and connections (on a connection: F2 rename, F4 private key) |
+| D, Alt+F1, Ctrl+N | Drives and connections (on a connection: F2 rename) |
 | Ctrl+D | Bookmarks and recent folders (type to filter) |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |
@@ -828,7 +845,7 @@ on the settings screen (Ctrl+,).
 | Ctrl+R | Refresh |
 | Ctrl+H | Show hidden files |
 | Ctrl+S | Quick filter |
-| Ctrl+F3, Ctrl+F4, Ctrl+F6, Ctrl+F5 | Sort by name, extension, size, date |
+| Ctrl+F3, Ctrl+F4, Ctrl+F5 | Sort by name, extension, date |
 | Ctrl+Q | Quick view in the other panel |
 | Alt+S | Count folder sizes |
 

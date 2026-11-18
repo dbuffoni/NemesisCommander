@@ -24,7 +24,10 @@ impl App {
         press: KeyPress,
     ) -> Option<Overlay> {
         let key = press.plain();
-        match (key, press.text) {
+        let typed = press.text.filter(|c| !press.chord.ctrl && !press.chord.alt && !c.is_control());
+        match (key, typed) {
+            // Esc clears what was typed first, then closes.
+            (Some(Key::Esc), _) if !screen.filter.is_empty() => screen.set_filter(""),
             (Some(Key::Esc), _) => return None,
             (Some(Key::Up), _) => screen.move_cursor(-1),
             (Some(Key::Down), _) => screen.move_cursor(1),
@@ -34,8 +37,20 @@ impl App {
             (Some(Key::End), _) => screen.move_cursor(10_000),
             (Some(Key::Left), _) => self.step_option(screen.current(), -1),
             (Some(Key::Right), _) => self.step_option(screen.current(), 1),
-            (Some(Key::Enter | Key::Space), _) => return self.settings_enter(screen),
-            (_, Some('r')) => self.reset_row(screen.current()),
+            (Some(Key::Enter), _) => return self.settings_enter(screen),
+            (Some(Key::Space), _) if screen.filter.is_empty() => {
+                return self.settings_enter(screen);
+            }
+            (Some(Key::Delete), _) => self.reset_row(screen.current()),
+            (Some(Key::Backspace), _) => {
+                let mut filter = screen.filter.clone();
+                filter.pop();
+                screen.set_filter(&filter);
+            }
+            (_, Some(c)) => {
+                let filter = format!("{}{c}", screen.filter);
+                screen.set_filter(&filter);
+            }
             _ => {}
         }
         Some(Overlay::Settings(screen))

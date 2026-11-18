@@ -40,6 +40,7 @@ taken while implementing it.
 | 0030 | [Remote connections are probed and reopened; jobs tune their parallelism; `nmc serve install`](0030-remote-resilience-and-parallelism.md) | Accepted |
 | 0031 | [Server-to-server copies in the queue, S3 upload resume, content checks on servers](0031-remote-followups.md) | Accepted |
 | 0032 | [Remote features tested against real servers, panel connection state](0032-tested-against-real-servers.md) | Accepted |
+| 0033 | [Release 0.1.0, fourth batch: small fixes and the key bar](0033-card-batch-d.md) | Accepted |
 
 Template:
 

@@ -33,6 +33,9 @@ impl App {
         }
         let typed = press.text.filter(|_| !chord.ctrl && !chord.alt);
         match (key, typed) {
+            // F1 explains the highlighted command; F1 or Esc hides it again.
+            (Some(Key::F(1)), _) => palette.help = !palette.help,
+            (Some(Key::Esc), _) if palette.help => palette.help = false,
             (Some(Key::Esc), _) if !palette.filter.is_empty() => palette.clear_filter(),
             (Some(Key::Esc | Key::F(9) | Key::F(10)), _) => return None,
             (Some(Key::Left), _) => palette.move_category(-1),

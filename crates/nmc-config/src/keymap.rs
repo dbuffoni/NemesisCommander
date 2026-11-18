@@ -145,7 +145,6 @@ actions! {
     QuickFilter   = "view.filter",          View, true,  "Quick filter…",             ["Ctrl+S"];
     SortName      = "view.sort-name",       View, false, "Sort by name",              ["Ctrl+F3"];
     SortExtension = "view.sort-ext",        View, false, "Sort by extension",         ["Ctrl+F4"];
-    SortSize      = "view.sort-size",       View, false, "Sort by size",              ["Ctrl+F6"];
     SortModified  = "view.sort-date",       View, false, "Sort by date",              ["Ctrl+F5"];
     QuickView     = "view.quick-view",      View, false, "Quick view in other panel", ["Ctrl+Q"];
     // Tools
@@ -171,6 +170,178 @@ actions! {
     ExportConfig  = "app.export-config",    App, false, "Export settings to file…",   [];
     ImportConfig  = "app.import-config",    App, false, "Import settings from file…", [];
     Quit          = "app.quit",             App, true,  "Quit",                       ["F10"];
+}
+
+impl Action {
+    /// What the command does, in a sentence or two, for the command list's
+    /// help (F1 there).
+    pub fn help(self) -> &'static str {
+        match self {
+            Action::View => {
+                "Opens the file under the cursor in the viewer: text, hex, pictures, PDF, Office documents, Markdown and 3D models. Esc closes it."
+            }
+            Action::Edit => {
+                "Opens the file under the cursor in your editor (set in Settings; $EDITOR by default)."
+            }
+            Action::Copy => {
+                "Copies the selected items (or the one under the cursor) to the other panel's folder, or to the folder you type. Runs in the transfer queue."
+            }
+            Action::Move => {
+                "Moves the selected items (or the one under the cursor) to the other panel's folder, or to the folder you type. Undo (Ctrl+Z) can bring them back."
+            }
+            Action::Rename => "Renames the item under the cursor.",
+            Action::MultiRename => {
+                "Renames many items at once with a template ([N] name, [E] extension, [C] counter...). The new names are shown live, and a full preview before anything changes."
+            }
+            Action::AiRename => {
+                "Describe in words how the selected files should be renamed; the AI writes the rule and you see the preview before it is applied. Needs an Anthropic key."
+            }
+            Action::MakeDir => "Creates a new folder in the active panel.",
+            Action::Delete => {
+                "Deletes the selected items (or the one under the cursor), to the trash when the system has one."
+            }
+            Action::DeleteForever => "Deletes the selected items for good, without the trash.",
+            Action::Pack => {
+                "Packs the selected items into an archive (zip, 7z, tar.zst...); the type comes from the extension you type. Works on the basket too."
+            }
+            Action::Unpack => "Unpacks the archive under the cursor into the other panel's folder.",
+            Action::Properties => {
+                "Shows size, dates, owner and permissions of the item under the cursor, and lets you change the permissions."
+            }
+            Action::Undo => {
+                "Undoes the last rename, new folder or move, up to 50 steps in this session."
+            }
+            Action::Attributes => {
+                "Changes dates and permissions of the selected items: a date, a time, `now`, `mode=644`, `-r` for folders inside."
+            }
+            Action::Checksum => {
+                "Computes the checksum (SHA-256 and others) of the file under the cursor and can copy it or compare it with one you paste."
+            }
+            Action::CopyPath => {
+                "Copies the path of the selected items to the clipboard, in the form you choose (full, name only, URL...)."
+            }
+            Action::Export => {
+                "Writes the listing of the panel (or the selection) to a file or the clipboard as text, CSV, JSON or Markdown."
+            }
+            Action::Link => {
+                "Creates a symbolic or hard link to the item under the cursor in the other panel's folder."
+            }
+            Action::BulkRename => {
+                "Opens the names of the selected items in your editor; save and close it to rename them."
+            }
+            Action::BasketAdd => {
+                "Adds the selected items to the basket, a list that collects files from many folders so they can be copied, moved, deleted or packed together (Ctrl+B)."
+            }
+            Action::ToggleSelect => {
+                "Selects or unselects the item under the cursor and moves down."
+            }
+            Action::SelectMask => "Selects the items whose names match a mask such as *.jpg.",
+            Action::UnselectMask => "Unselects the items whose names match a mask.",
+            Action::InvertSelect => "Selects what is not selected and unselects what is.",
+            Action::SelectAll => "Selects every item of the active panel.",
+            Action::Open => {
+                "Enters the folder or archive under the cursor, or opens the file with the system's program."
+            }
+            Action::Parent => "Goes up to the parent folder.",
+            Action::SwitchPanel => "Moves the focus to the other panel.",
+            Action::GoTo => {
+                "Goes to any location: a path, ~/..., or a URI such as sftp://host/dir."
+            }
+            Action::Back => "Goes back to the previous folder of this panel.",
+            Action::Forward => "Goes forward again after Back.",
+            Action::Drives => {
+                "Lists the local drives and your saved connections (SFTP, agent, WebDAV, S3, SMB), and lets you add a new connection."
+            }
+            Action::Bookmarks => {
+                "Lists your bookmarks and the recent folders; type to filter. A bookmark can also open the other panel."
+            }
+            Action::AddBookmark => "Bookmarks the folder of the active panel.",
+            Action::AddBookmarkTarget => {
+                "Bookmarks this folder together with the other panel's folder: opening it later opens both."
+            }
+            Action::NewTab => "Opens a new tab in the active panel.",
+            Action::CloseTab => "Closes the current tab of the active panel.",
+            Action::NextTab => "Goes to the next tab of the active panel.",
+            Action::PrevTab => "Goes to the previous tab of the active panel.",
+            Action::SamePath => {
+                "Shows this folder (or the one under the cursor) in the other panel."
+            }
+            Action::OpenInLeft => "Shows the folder under the cursor in the left panel.",
+            Action::OpenInRight => "Shows the folder under the cursor in the right panel.",
+            Action::Basket => {
+                "Opens the basket: the items collected from several folders. From there you can copy, move, delete, pack or rename them together."
+            }
+            Action::SwapPanels => {
+                "Swaps the two panels. With the quick view open, the file panel and the quick view trade places."
+            }
+            Action::Refresh => "Reads the folders of both panels again.",
+            Action::ToggleHidden => "Shows or hides hidden files.",
+            Action::QuickFilter => {
+                "Narrows the listing as you type (`*.pdf`, `report`). Esc clears the filter."
+            }
+            Action::SortName => "Sorts by name; pressing it again reverses the order.",
+            Action::SortExtension => "Sorts by extension; pressing it again reverses the order.",
+            Action::SortModified => {
+                "Sorts by modification date; pressing it again reverses the order."
+            }
+            Action::QuickView => {
+                "Shows a preview of the file under the cursor in the other panel. Shift+arrows and Shift+PgUp/PgDn scroll it."
+            }
+            Action::Search => {
+                "Searches files by name and, if you want, by content, in this folder and below, also on remote locations."
+            }
+            Action::Compare => {
+                "Compares the two files under the cursors (line by line), or the two folders by name, size and date: the differences are selected, and Esc clears them."
+            }
+            Action::CompareHash => {
+                "Compares the two folders by the checksum of each file, so equal names with different content are found."
+            }
+            Action::Sync => {
+                "Plans how to make one folder match the other (mirror, update or two-way), shows what would change, and runs it only when you confirm."
+            }
+            Action::Duplicates => {
+                "Finds files with the same content in this folder and below; the extra copies can go to the basket."
+            }
+            Action::FolderSizes => {
+                "Counts the size of the folders of the panel (or the selected ones) and shows it in the size column, with a small bar from green to red for the biggest."
+            }
+            Action::DiskUsage => {
+                "Lists what takes the space in this folder, biggest first, and lets you go into the folders."
+            }
+            Action::Disks => "Lists the disks and partitions with size, type, file system and use.",
+            Action::SimilarImages => {
+                "Finds pictures that look alike, even when resized or saved in another format."
+            }
+            Action::SavedSearches => "Lists the searches you saved and runs the one you choose.",
+            Action::SaveSearch => "Saves the last search under a name so you can run it again.",
+            Action::Jobs => {
+                "Shows the transfer queue: progress, speed, pause, resume, cancel and priority of each copy or move."
+            }
+            Action::RunScript => {
+                "Lists the installed plugins and your scripts and runs the one you choose."
+            }
+            Action::AiScript => {
+                "Describe what you want in words; the AI writes a TypeScript script, tests it in a scratch copy and saves it. Needs an Anthropic key."
+            }
+            Action::InstallServe => {
+                "Installs `nmc serve` on a server over SSH, with certificates, so that you can connect to it securely and copy straight between servers."
+            }
+            Action::Help => "Shows the main shortcuts.",
+            Action::Menu => {
+                "Lists every command with its shortcut; type to find one, Ctrl+K gives it a shortcut, F1 explains it."
+            }
+            Action::Settings => {
+                "Opens the settings: panels, fonts, transfers, viewer and shortcuts. Type to find a setting."
+            }
+            Action::ExportConfig => {
+                "Writes settings, bookmarks and connections to a file you can take to another machine."
+            }
+            Action::ImportConfig => {
+                "Reads settings, bookmarks and connections from a file written by Export, replacing or merging."
+            }
+            Action::Quit => "Closes the application.",
+        }
+    }
 }
 
 impl Action {

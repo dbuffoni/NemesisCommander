@@ -12,7 +12,7 @@ use std::sync::Arc;
 use nmc_config::{AppPaths, Config, ConfigError, Keymap};
 use nmc_ops::{ConflictPolicy, ConflictResolver, PlanOptions, RetryPolicy};
 use nmc_transfer::{JobOptions, Journal, JournalError, ManagerOptions, TransferManager};
-use nmc_vfs::{ProviderRegistry, VfsPath};
+use nmc_vfs::ProviderRegistry;
 
 /// Everything a front end needs to start.
 pub struct AppContext {
@@ -39,15 +39,11 @@ impl AppContext {
         let config = Config::load(&paths.config_file())?;
         let (keymap, warnings) = Keymap::with_overrides(&config.keys);
         let registry = Arc::new(build_registry_for(&paths));
-        use_connection_keys(&config);
         Ok(AppContext { paths, config, keymap, warnings, registry })
     }
 
     /// Saves the settings back to the settings file.
-    /// Saves the settings back to the settings file, and starts using the
-    /// private keys of the saved connections.
     pub fn save_config(&self) -> Result<(), ConfigError> {
-        use_connection_keys(&self.config);
         self.config.save(&self.paths.config_file())
     }
 
@@ -163,32 +159,6 @@ pub fn effective_verify(
     }
 }
 
-/// Whether connections to `uri` go through `ssh` (SFTP and the agent),
-/// so a private key file applies to them.
-pub fn uses_ssh(uri: &str) -> bool {
-    VfsPath::parse(uri).is_ok_and(|p| matches!(p.scheme(), "sftp" | "agent"))
-}
-
-/// Makes `ssh` use the private key file of each saved SFTP or agent
-/// connection for its login.
-pub fn use_connection_keys(config: &Config) {
-    nmc_ssh::set_identity_files(connection_keys(config));
-}
-
-/// Login (URI authority) and key file of each saved SFTP or agent
-/// connection that has a private key file.
-fn connection_keys(config: &Config) -> Vec<(String, String)> {
-    config
-        .connections
-        .iter()
-        .filter_map(|c| {
-            let file = c.identity_file.as_deref().map(str::trim).filter(|f| !f.is_empty())?;
-            let path = VfsPath::parse(&c.uri).ok().filter(|_| uses_ssh(&c.uri))?;
-            Some((path.authority().to_owned(), file.to_owned()))
-        })
-        .collect()
-}
-
 /// A registry with every provider compiled into this build, using the
 /// default locations for certificates.
 pub fn build_registry() -> ProviderRegistry {
@@ -231,34 +201,6 @@ mod tests {
     }
 
     use super::*;
-
-    #[test]
-    fn private_keys_of_ssh_connections() {
-        let mut config = Config::default();
-        for (uri, key) in [
-            ("sftp://me@nas:2222/srv", Some("~/.ssh/nas.pem")),
-            ("agent://build01/", Some(" /keys/build.pem ")),
-            ("sftp://other/", None),
-            ("sftp://blank/", Some("  ")),
-            ("s3://bucket/", Some("~/.ssh/ignored.pem")),
-        ] {
-            config.connections.push(nmc_config::Connection {
-                name: uri.into(),
-                uri: uri.into(),
-                identity_file: key.map(Into::into),
-                options: Default::default(),
-            });
-        }
-        assert_eq!(
-            connection_keys(&config),
-            [
-                ("me@nas:2222".to_owned(), "~/.ssh/nas.pem".to_owned()),
-                ("build01".to_owned(), "/keys/build.pem".to_owned())
-            ]
-        );
-        assert!(uses_ssh("sftp://h/") && uses_ssh("agent://h/"));
-        assert!(!uses_ssh("davs://h/") && !uses_ssh("/tmp"));
-    }
 
     #[test]
     fn loads_defaults_and_reports_key_warnings() {

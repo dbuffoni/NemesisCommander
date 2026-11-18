@@ -52,6 +52,8 @@ shot help 1280x800 "F1" "$left" "$right"
 shot commands 1280x800 "F9" "$left" "$right"
 shot commands-category 1280x800 "F9 Right Down Down" "$left" "$right"
 shot commands-find 1280x800 "F9 s e t" "$left" "$right"
+# F1 explains the highlighted command.
+shot commands-help 1280x800 "F9 s w a p F1" "$left" "$right"
 shot copy 1280x800 "Down Insert Down Insert F5" "$left" "$right"
 shot mkdir 1280x800 "F7" "$left" "$right"
 shot delete 1280x800 "Down F8" "$left" "$right"
@@ -83,6 +85,8 @@ shot quick-view-pdf 1280x800 "Down Down Down Down Down Ctrl+Q" "$docs" "$right"
 shot quick-view-model 1280x800 "Down Ctrl+Q" "$models" "$right"
 shot quick-view-markdown 1280x800 "Down Ctrl+Q" "$demo/home/Projects/notes" "$right"
 shot settings 1280x800 "Ctrl+," "$left" "$right"
+# Typing finds a setting.
+shot settings-find 1280x800 "Ctrl+, f o n t" "$left" "$right"
 # Synchronize: the plan of a mirror, before anything is run.
 shot sync 1280x800 "F9 s y n c Enter Enter" "$left" "$right"
 # The basket with two items from the left panel.

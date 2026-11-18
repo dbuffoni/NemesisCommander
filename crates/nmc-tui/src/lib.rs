@@ -18,7 +18,10 @@ mod ui;
 
 use std::io;
 
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEventKind,
+    KeyModifiers,
+};
 use futures::StreamExt;
 use nmc_app::AppContext;
 use nmc_vfs::VfsPath;
@@ -67,8 +70,20 @@ pub async fn run(
         tokio::select! {
             key = keys.next() => match key {
                 Some(Ok(Event::Key(event))) => {
-                    if let Some(press) = key_press(&event) {
+                    if let KeyCode::Modifier(_) = event.code {
+                        // Terminals with the keyboard protocol report
+                        // Ctrl, Alt and Shift on their own: the function key
+                        // bar follows them.
+                        let held = event.kind != KeyEventKind::Release;
+                        let mods = event.modifiers;
+                        app.set_modifiers(
+                            held && mods.contains(KeyModifiers::CONTROL),
+                            held && mods.contains(KeyModifiers::ALT),
+                            held && mods.contains(KeyModifiers::SHIFT),
+                        );
+                    } else if let Some(press) = key_press(&event) {
                         app.handle_key(press);
+                        app.set_modifiers(false, false, false);
                     }
                 }
                 Some(Ok(Event::Mouse(event))) => {

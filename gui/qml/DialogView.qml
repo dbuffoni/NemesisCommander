@@ -6,7 +6,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 
 Item {
     id: dialogs
@@ -40,17 +39,6 @@ Item {
             default: return null
             }
         }
-    }
-
-    // Fills the open question with a picked file.
-    FileDialog {
-        id: filePicker
-        title: "Choose a file"
-        onAccepted: {
-            dialogs.theme.app.fill(selectedFile.toString())
-            dialogs.theme.focusKeys()
-        }
-        onRejected: dialogs.theme.focusKeys()
     }
 
     // A list with a highlighted row that stays in sight.
@@ -240,6 +228,15 @@ Item {
                 text: "Nothing matches"
                 color: dialogs.theme.dim
             }
+            // F1: what the highlighted command does.
+            Label {
+                visible: dialogs.view.help !== ""
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                text: dialogs.view.help
+                wrapMode: Text.Wrap
+                color: dialogs.theme.accent
+            }
         }
     }
 
@@ -278,27 +275,6 @@ Item {
                     width: 2
                     height: dialogs.theme.rowHeight
                     color: palette.text
-                }
-            }
-            // The answer is a local file (a private key): pick it. Drawn
-            // like the command list's buttons (a MouseArea, so the keyboard
-            // stays with the window, and no native style to draw).
-            Rectangle {
-                visible: dialogs.view.browse === true
-                implicitWidth: browseLabel.implicitWidth + 20
-                implicitHeight: browseLabel.implicitHeight + 8
-                radius: 3
-                color: "transparent"
-                border.color: dialogs.theme.lineColor
-                Label {
-                    id: browseLabel
-                    anchors.centerIn: parent
-                    text: "Browse…"
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: filePicker.open()
                 }
             }
             // Multi-rename: the new names, following the template.

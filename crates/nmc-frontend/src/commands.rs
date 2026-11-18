@@ -59,6 +59,26 @@ impl CommandEntry {
         format!("{}/{}", self.category, self.label)
     }
 
+    /// What it does, in a sentence or two (F1 in the command list).
+    pub fn help(&self) -> String {
+        match &self.target {
+            Target::Action(action) => action.help().to_owned(),
+            Target::Search(name) => format!("Runs the saved search \"{name}\" again."),
+            Target::Plugin(PluginChoice::Command { dir, command }) => format!(
+                "Runs the command \"{command}\" of the plugin in {}. Its plugin.json describes it.",
+                dir.display()
+            ),
+            Target::Plugin(PluginChoice::UserScript(path)) => format!(
+                "Runs your script {} on the folders and the selection of the panels.",
+                path.file_name().unwrap_or_default().to_string_lossy()
+            ),
+            Target::Plugin(PluginChoice::Script(_)) => {
+                "Runs the script under the cursor on the folders and the selection of the panels."
+                    .to_owned()
+            }
+        }
+    }
+
     /// Whether shortcuts can be given to it.
     pub fn can_have_keys(&self) -> bool {
         !self.id.is_empty()
@@ -99,6 +119,8 @@ pub struct CommandPalette {
     pub item: usize,
     /// Waiting for the key to give the highlighted command.
     pub recording: bool,
+    /// The help of the highlighted command is shown (F1).
+    pub help: bool,
 }
 
 impl CommandPalette {
@@ -119,6 +141,7 @@ impl CommandPalette {
             filter: String::new(),
             item: 0,
             recording: false,
+            help: false,
         }
     }
 
@@ -255,6 +278,14 @@ mod tests {
         assert!(copy.matches("FILES cop"));
         assert!(copy.matches("files/copy"));
         assert!(!copy.matches("view cop"));
+    }
+
+    #[test]
+    fn every_command_explains_itself() {
+        for entry in palette().entries {
+            let help = entry.help();
+            assert!(help.len() > 20 && help.ends_with('.'), "{}: {help}", entry.name());
+        }
     }
 
     #[test]

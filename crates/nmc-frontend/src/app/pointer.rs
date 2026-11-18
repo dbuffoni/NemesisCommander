@@ -31,6 +31,14 @@ impl App {
         if self.overlay.is_some() {
             return;
         }
+        // The wheel over the quick view scrolls it; the focus stays put.
+        if self.quick_view.is_some() && side != self.workspace.active_side() {
+            if let Some(Some(viewer)) = &mut self.quick_view {
+                let page = self.page.max(1);
+                viewer.scroll_by(lines, page);
+            }
+            return;
+        }
         self.workspace.set_active(side);
         self.workspace.side_mut(side).panel_mut().move_cursor(lines);
         self.update_quick_view();

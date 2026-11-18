@@ -203,8 +203,10 @@ pub struct Connection {
     pub name: String,
     /// The root URI, e.g. `sftp://me@host:22/srv` or `agent://build01/`.
     pub uri: String,
-    /// Private key file to use instead of the SSH agent's keys.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Not used any more: `ssh` finds its keys as it does in a terminal
+    /// (ADR 0033). Read so that settings written before still load; never
+    /// written back.
+    #[serde(default, skip_serializing)]
     pub identity_file: Option<String>,
     /// Free-form provider options (`compression = "yes"`, ...).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -313,7 +315,7 @@ mod tests {
         config.connections.push(Connection {
             name: "build".into(),
             uri: "agent://build01/".into(),
-            identity_file: Some("~/.ssh/id_ed25519".into()),
+            identity_file: None,
             options: BTreeMap::from([("compression".into(), "yes".into())]),
         });
         assert_eq!(Config::from_toml(&config.to_toml(), "t").unwrap(), config);

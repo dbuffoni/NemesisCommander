@@ -70,6 +70,23 @@ fn the_window_shows_both_panels() {
 }
 
 #[test]
+fn counted_folder_sizes_draw_bars_and_the_key_bar_follows_modifiers() {
+    let home = home();
+    std::fs::create_dir(home.path().join("left/big")).unwrap();
+    std::fs::write(home.path().join("left/big/data.bin"), vec![0u8; 100_000]).unwrap();
+    let run = run(home.path(), "Alt+S", None);
+    assert_no_qml_warnings(&run);
+    let panel = &run.screen["panels"][0];
+    assert_eq!(panel["bars"], true, "{panel}");
+    let bars: Vec<i64> =
+        panel["rows"].as_array().unwrap().iter().map(|r| r["bar"].as_i64().unwrap()).collect();
+    assert!(bars.contains(&100), "the biggest is full: {bars:?}");
+    assert!(bars.contains(&-1), "the parent row has none: {bars:?}");
+    let plain = run.screen["keys"][4]["label"].as_str().unwrap().to_owned();
+    assert_eq!(plain, "Copy");
+}
+
+#[test]
 fn every_dialog_draws_cleanly() {
     let home = home();
     for (keys, kind) in [
@@ -91,6 +108,9 @@ fn every_dialog_draws_cleanly() {
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
         ("Ctrl+,", "settings"),
+        // F1 explains the highlighted command; typing finds a setting.
+        ("F9 s w a p F1", "commands"),
+        ("Ctrl+, f o n t", "settings"),
     ] {
         let run = run(home.path(), keys, None);
         assert_no_qml_warnings(&run);
@@ -205,7 +225,7 @@ fn drives_and_connections_are_one_list() {
 }
 
 #[test]
-fn a_connection_takes_a_private_key_file() {
+fn settings_with_a_key_file_still_load_and_f4_asks_nothing() {
     let home = home();
     std::fs::create_dir_all(home.path().join("config")).unwrap();
     std::fs::write(
@@ -215,13 +235,9 @@ fn a_connection_takes_a_private_key_file() {
     )
     .unwrap();
     // The last row is "New connection…"; nas is just above it.
-    let shot = home.path().join("key.png");
-    let run = run(home.path(), "Alt+F1 End Up F4", Some(&shot));
+    let run = run(home.path(), "Alt+F1 End Up F4", None);
     assert_no_qml_warnings(&run);
     let overlay = &run.screen["overlay"];
-    assert_eq!(overlay["kind"], "input", "{overlay}");
-    assert_eq!(overlay["title"], "Private key");
-    assert_eq!(overlay["text"], "~/.ssh/nas.pem");
-    assert_eq!(overlay["browse"], true);
-    assert!(std::fs::metadata(&shot).expect("screenshot saved").len() > 1000);
+    assert_eq!(overlay["kind"], "choose", "{overlay}");
+    assert_eq!(overlay["title"], "Drives");
 }

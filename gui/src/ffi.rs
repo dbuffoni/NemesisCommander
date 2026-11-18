@@ -34,6 +34,11 @@ pub mod qobject {
         #[qinvokable]
         fn key(self: Pin<&mut Commander>, key: i32, text: &QString, modifiers: i32);
 
+        /// Ctrl, Alt and Shift as held (`Qt::KeyboardModifier` bits): the
+        /// function key bar shows what those combinations do.
+        #[qinvokable]
+        fn modifiers(self: Pin<&mut Commander>, modifiers: i32);
+
         /// A menu command, by command id.
         #[qinvokable]
         fn perform(self: Pin<&mut Commander>, id: &QString);
@@ -58,10 +63,6 @@ pub mod qobject {
         /// per line).
         #[qinvokable]
         fn drop_files(self: Pin<&mut Commander>, side: i32, urls: &QString);
-
-        /// The file picked for the open question (a `file:` URL).
-        #[qinvokable]
-        fn fill(self: Pin<&mut Commander>, url: &QString);
 
         /// Ends the application.
         #[qinvokable]

@@ -10,13 +10,11 @@
 //! standard streams connected, ready to carry a protocol (SFTP or the agent
 //! protocol).
 //!
-//! A saved connection may name a private key file (a `.pem`, an OpenSSH
-//! key, ...). Front ends hand those to [`set_identity_files`]; every `ssh`
-//! command line for that login then passes the key with `-i`.
+//! There is no key setting of its own: `ssh` finds the keys the same way it
+//! does for the user in a terminal (`~/.ssh/config`, the default key files,
+//! the SSH agent). See ADR 0033.
 
-use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::RwLock;
 
 use tokio::process::{Child, Command};
 
@@ -56,13 +54,6 @@ impl Target {
         Ok(Target { user, host, port })
     }
 
-    /// Whether both name the same login (no port = port 22).
-    fn same_login(&self, other: &Target) -> bool {
-        self.user == other.user
-            && self.host.eq_ignore_ascii_case(&other.host)
-            && self.port.unwrap_or(22) == other.port.unwrap_or(22)
-    }
-
     /// The `ssh` destination (`user@host`).
     pub fn destination(&self) -> String {
         match &self.user {
@@ -70,75 +61,6 @@ impl Target {
             None => self.host.clone(),
         }
     }
-}
-
-/// Private key files of saved connections, by login.
-static IDENTITY_FILES: RwLock<Vec<(Target, String)>> = RwLock::new(Vec::new());
-
-/// Replaces the private key files used for logins: pairs of a URI
-/// authority (`user@host:port`) and a key file (`~/` allowed). Authorities
-/// that do not parse are ignored; the first key of a login wins.
-pub fn set_identity_files<I, A, F>(list: I)
-where
-    I: IntoIterator<Item = (A, F)>,
-    A: AsRef<str>,
-    F: Into<String>,
-{
-    let parsed = list
-        .into_iter()
-        .filter_map(|(authority, file)| {
-            Some((Target::parse(authority.as_ref()).ok()?, file.into()))
-        })
-        .collect();
-    *IDENTITY_FILES.write().unwrap_or_else(|e| e.into_inner()) = parsed;
-}
-
-/// The private key file configured for `target`, if any.
-pub fn identity_file(target: &Target) -> Option<String> {
-    let list = IDENTITY_FILES.read().unwrap_or_else(|e| e.into_inner());
-    list.iter().find(|(t, _)| t.same_login(target)).map(|(_, file)| file.clone())
-}
-
-/// `path` with a leading `~/` (or `~` alone) replaced by the home folder.
-pub fn expand_home(path: &str) -> PathBuf {
-    let home = || std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
-    if path == "~" {
-        return home().map(PathBuf::from).unwrap_or_else(|| PathBuf::from(path));
-    }
-    match path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
-        Some(rest) => match home() {
-            Some(home) => PathBuf::from(home).join(rest),
-            None => PathBuf::from(path),
-        },
-        None => PathBuf::from(path),
-    }
-}
-
-/// Checks that `file` (already expanded) can serve as a private key: it
-/// exists, is a file and, on Unix, only its owner can read it (OpenSSH
-/// ignores keys that others can read).
-pub fn check_identity_file(file: &Path) -> Result<(), String> {
-    let metadata = std::fs::metadata(file).map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => format!("private key {} not found", file.display()),
-        _ => format!("private key {}: {e}", file.display()),
-    })?;
-    if !metadata.is_file() {
-        return Err(format!("private key {} is not a file", file.display()));
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = metadata.permissions().mode() & 0o777;
-        if mode & 0o077 != 0 {
-            return Err(format!(
-                "private key {} can be read by other users ({mode:o}) and ssh refuses it: \
-                 run chmod 600 {}",
-                file.display(),
-                file.display()
-            ));
-        }
-    }
-    Ok(())
 }
 
 /// What to start on the server.
@@ -161,22 +83,12 @@ const KEEPALIVE_OPTIONS: &[&str] =
 ///
 /// Batch mode: keys or an SSH agent are required, because a password prompt
 /// would land in the middle of the protocol. `-T`: no terminal, so the
-/// streams carry bytes unchanged. When a private key file is set for the
-/// login ([`set_identity_files`]), ssh uses that key only; an error explains
-/// a missing key file or one that others can read.
+/// streams carry bytes unchanged.
 pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, String> {
     let mut args = vec!["-T".to_owned()];
     for option in KEEPALIVE_OPTIONS {
         args.push("-o".to_owned());
         args.push((*option).to_owned());
-    }
-    if let Some(file) = identity_file(target) {
-        let path = expand_home(&file);
-        check_identity_file(&path)?;
-        args.push("-i".into());
-        args.push(path.display().to_string());
-        args.push("-o".into());
-        args.push("IdentitiesOnly=yes".into());
     }
     if let Some(port) = target.port {
         args.push("-p".into());
@@ -284,83 +196,6 @@ mod tests {
                 "sftp"
             ]
         );
-    }
-
-    /// One test for the global key list, so tests never race on it.
-    #[test]
-    fn private_keys_of_saved_connections() {
-        let dir = std::env::temp_dir().join(format!("nmc-ssh-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let key = dir.join("server.pem");
-        std::fs::write(&key, "key").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600)).unwrap();
-        }
-        let key_text = key.display().to_string();
-        set_identity_files([
-            ("me@keyhost:22", key_text.clone()),
-            ("me@missing", dir.join("nope.pem").display().to_string()),
-            ("not a host:x", "ignored".to_owned()),
-        ]);
-
-        // Same login, port 22 written or not, host in any case.
-        let args = ssh_args(&Target::parse("me@KeyHost").unwrap(), Remote::Subsystem("sftp"));
-        assert_eq!(
-            args.unwrap(),
-            [
-                "-T",
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=30",
-                "-o",
-                "ServerAliveInterval=15",
-                "-o",
-                "ServerAliveCountMax=3",
-                "-i",
-                &key_text,
-                "-o",
-                "IdentitiesOnly=yes",
-            ]
-            .into_iter()
-            .chain(["-s", "me@KeyHost", "sftp"])
-            .collect::<Vec<_>>()
-        );
-        // Another user or port: the user's usual setup.
-        for other in ["you@keyhost", "me@keyhost:2222", "keyhost"] {
-            let args = ssh_args(&Target::parse(other).unwrap(), Remote::Subsystem("sftp"));
-            assert!(!args.unwrap().contains(&"-i".to_owned()), "{other}");
-        }
-        // A key file that is not there.
-        let error =
-            ssh_args(&Target::parse("me@missing").unwrap(), Remote::Subsystem("sftp")).unwrap_err();
-        assert!(error.contains("nope.pem not found"), "{error}");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
-            let error = ssh_args(&Target::parse("me@keyhost").unwrap(), Remote::Script("true"))
-                .unwrap_err();
-            assert!(error.contains("chmod 600"), "{error}");
-        }
-        assert!(check_identity_file(&dir).unwrap_err().contains("not a file"));
-
-        set_identity_files(Vec::<(String, String)>::new());
-        assert_eq!(identity_file(&Target::parse("me@keyhost").unwrap()), None);
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn home_is_expanded() {
-        let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
-        if let Some(home) = home {
-            assert_eq!(expand_home("~/.ssh/a.pem"), PathBuf::from(&home).join(".ssh/a.pem"));
-            assert_eq!(expand_home("~"), PathBuf::from(&home));
-        }
-        assert_eq!(expand_home("/k/a.pem"), PathBuf::from("/k/a.pem"));
-        assert_eq!(expand_home("~other/a.pem"), PathBuf::from("~other/a.pem"));
     }
 
     #[test]
