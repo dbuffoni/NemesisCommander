@@ -3668,6 +3668,453 @@ dependencies = [
 ]
 
 [[package]]
+name = "nmc-agent"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "bytes",
+ "futures",
+ "nmc-hash",
+ "nmc-ops",
+ "nmc-proto",
+ "nmc-providers",
+ "nmc-ssh",
+ "nmc-tls",
+ "nmc-vfs",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tonic",
+]
+
+[[package]]
+name = "nmc-app"
+version = "0.1.0"
+dependencies = [
+ "nmc-agent",
+ "nmc-archive",
+ "nmc-config",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-s3",
+ "nmc-sftp",
+ "nmc-smb",
+ "nmc-ssh",
+ "nmc-transfer",
+ "nmc-vfs",
+ "nmc-webdav",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "nmc-archive"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "bzip2",
+ "flate2",
+ "futures",
+ "liblzma",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
+ "proptest",
+ "serde",
+ "sevenz-rust2",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "unrar",
+ "zip",
+ "zstd",
+]
+
+[[package]]
+name = "nmc-cli"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "async-trait",
+ "clap",
+ "nmc-agent",
+ "nmc-app",
+ "nmc-archive",
+ "nmc-config",
+ "nmc-hash",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-panel",
+ "nmc-script",
+ "nmc-tls",
+ "nmc-transfer",
+ "nmc-tui",
+ "nmc-vfs",
+ "predicates",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-config"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-vfs",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
+name = "nmc-frontend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "directories",
+ "futures",
+ "image",
+ "nmc-app",
+ "nmc-archive",
+ "nmc-config",
+ "nmc-hash",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-panel",
+ "nmc-preview",
+ "nmc-providers",
+ "nmc-script",
+ "nmc-ssh",
+ "nmc-transfer",
+ "nmc-vfs",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-gui"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "cxx-qt",
+ "cxx-qt-build",
+ "cxx-qt-lib",
+ "nmc-app",
+ "nmc-config",
+ "nmc-frontend",
+ "nmc-preview",
+ "nmc-vfs",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "nmc-hash"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "hex",
+ "nmc-vfs",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "nmc-index"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "globset",
+ "memchr",
+ "nmc-providers",
+ "nmc-vfs",
+ "proptest",
+ "regex",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-ops"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "jiff",
+ "nmc-hash",
+ "nmc-providers",
+ "nmc-vfs",
+ "proptest",
+ "regex",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-panel"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "nmc-archive",
+ "nmc-index",
+ "nmc-providers",
+ "nmc-vfs",
+ "tokio",
+]
+
+[[package]]
+name = "nmc-preview"
+version = "0.1.0"
+dependencies = [
+ "calamine",
+ "gltf",
+ "hayro",
+ "image",
+ "pulldown-cmark",
+ "quick-xml",
+ "stl_io",
+ "tobj",
+ "zip",
+]
+
+[[package]]
+name = "nmc-proto"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "hyper-util",
+ "nmc-vfs",
+ "prost",
+ "protox",
+ "tokio",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+ "tower",
+]
+
+[[package]]
+name = "nmc-providers"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "filetime",
+ "futures",
+ "nmc-hash",
+ "nmc-vfs",
+ "reflink-copy",
+ "tempfile",
+ "tokio",
+ "trash",
+]
+
+[[package]]
+name = "nmc-s3"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "directories",
+ "futures",
+ "hex",
+ "hmac",
+ "httpdate",
+ "hyper-util",
+ "jiff",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
+ "percent-encoding",
+ "quick-xml",
+ "reqwest",
+ "rustls",
+ "s3s",
+ "s3s-fs",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-script"
+version = "0.1.0"
+dependencies = [
+ "deno_ast",
+ "deno_core",
+ "deno_error",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
+name = "nmc-sftp"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-ssh",
+ "nmc-vfs",
+ "russh-sftp",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "nmc-smb"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
+ "smb2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-ssh"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
+name = "nmc-tls"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "rcgen",
+ "ring",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
+name = "nmc-transfer"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-tui"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "futures",
+ "image",
+ "nmc-app",
+ "nmc-config",
+ "nmc-frontend",
+ "nmc-ops",
+ "nmc-panel",
+ "nmc-preview",
+ "nmc-providers",
+ "nmc-transfer",
+ "nmc-vfs",
+ "ratatui",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "nmc-vfs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bitflags 2.13.2",
+ "bytes",
+ "directories",
+ "futures",
+ "proptest",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-webdav"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "dav-server",
+ "futures",
+ "httpdate",
+ "hyper",
+ "hyper-util",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
+ "percent-encoding",
+ "quick-xml",
+ "reqwest",
+ "rustls",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5295,453 +5742,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "nmc-agent"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "blake3",
- "bytes",
- "futures",
- "nmc-hash",
- "nmc-ops",
- "nmc-proto",
- "nmc-providers",
- "nmc-ssh",
- "nmc-tls",
- "nmc-vfs",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "tonic",
-]
-
-[[package]]
-name = "nmc-app"
-version = "0.1.0"
-dependencies = [
- "nmc-agent",
- "nmc-archive",
- "nmc-config",
- "nmc-ops",
- "nmc-providers",
- "nmc-s3",
- "nmc-sftp",
- "nmc-smb",
- "nmc-ssh",
- "nmc-transfer",
- "nmc-vfs",
- "nmc-webdav",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-archive"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "bzip2",
- "flate2",
- "futures",
- "liblzma",
- "proptest",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "serde",
- "sevenz-rust2",
- "tar",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "unrar",
- "zip",
- "zstd",
-]
-
-[[package]]
-name = "nmc-cli"
-version = "0.1.0"
-dependencies = [
- "assert_cmd",
- "async-trait",
- "clap",
- "predicates",
- "reqwest",
- "rustls",
- "nmc-agent",
- "nmc-app",
- "nmc-archive",
- "nmc-config",
- "nmc-hash",
- "nmc-index",
- "nmc-ops",
- "nmc-panel",
- "nmc-script",
- "nmc-tls",
- "nmc-transfer",
- "nmc-tui",
- "nmc-vfs",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-config"
-version = "0.1.0"
-dependencies = [
- "directories",
- "nmc-index",
- "nmc-ops",
- "nmc-vfs",
- "serde",
- "tempfile",
- "thiserror 2.0.21",
- "toml",
-]
-
-[[package]]
-name = "nmc-frontend"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "directories",
- "futures",
- "image",
- "nmc-app",
- "nmc-archive",
- "nmc-config",
- "nmc-hash",
- "nmc-index",
- "nmc-ops",
- "nmc-panel",
- "nmc-preview",
- "nmc-providers",
- "nmc-script",
- "nmc-ssh",
- "nmc-transfer",
- "nmc-vfs",
- "serde",
- "serde_json",
- "similar",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-gui"
-version = "0.1.0"
-dependencies = [
- "cxx",
- "cxx-qt",
- "cxx-qt-build",
- "cxx-qt-lib",
- "nmc-app",
- "nmc-config",
- "nmc-frontend",
- "nmc-preview",
- "nmc-vfs",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-hash"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "hex",
- "nmc-vfs",
- "sha2 0.11.1",
- "tempfile",
- "tokio",
- "xxhash-rust",
-]
-
-[[package]]
-name = "nmc-index"
-version = "0.1.0"
-dependencies = [
- "futures",
- "globset",
- "memchr",
- "proptest",
- "regex",
- "nmc-providers",
- "nmc-vfs",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-ops"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "futures",
- "jiff",
- "proptest",
- "regex",
- "nmc-hash",
- "nmc-providers",
- "nmc-vfs",
- "serde",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-panel"
-version = "0.1.0"
-dependencies = [
- "jiff",
- "nmc-archive",
- "nmc-index",
- "nmc-providers",
- "nmc-vfs",
- "tokio",
-]
-
-[[package]]
-name = "nmc-preview"
-version = "0.1.0"
-dependencies = [
- "calamine",
- "gltf",
- "hayro",
- "image",
- "pulldown-cmark",
- "quick-xml",
- "stl_io",
- "tobj",
- "zip",
-]
-
-[[package]]
-name = "nmc-proto"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "hyper-util",
- "prost",
- "protox",
- "nmc-vfs",
- "tokio",
- "tonic",
- "tonic-prost",
- "tonic-prost-build",
- "tower",
-]
-
-[[package]]
-name = "nmc-providers"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "filetime",
- "futures",
- "reflink-copy",
- "nmc-hash",
- "nmc-vfs",
- "tempfile",
- "tokio",
- "trash",
-]
-
-[[package]]
-name = "nmc-s3"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "directories",
- "futures",
- "hex",
- "hmac",
- "httpdate",
- "hyper-util",
- "jiff",
- "percent-encoding",
- "quick-xml",
- "reqwest",
- "rustls",
- "s3s",
- "s3s-fs",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "sha2 0.11.1",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-script"
-version = "0.1.0"
-dependencies = [
- "deno_ast",
- "deno_core",
- "deno_error",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
-]
-
-[[package]]
-name = "nmc-sftp"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "futures",
- "russh-sftp",
- "nmc-ops",
- "nmc-providers",
- "nmc-ssh",
- "nmc-vfs",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-smb"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "futures",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "smb2",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-ssh"
-version = "0.1.0"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "nmc-tls"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "rcgen",
- "ring",
- "rustls",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-rustls",
-]
-
-[[package]]
-name = "nmc-transfer"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "rusqlite",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-tui"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "futures",
- "image",
- "ratatui",
- "nmc-app",
- "nmc-config",
- "nmc-frontend",
- "nmc-ops",
- "nmc-panel",
- "nmc-preview",
- "nmc-providers",
- "nmc-transfer",
- "nmc-vfs",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-vfs"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bitflags 2.13.2",
- "bytes",
- "directories",
- "futures",
- "proptest",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-webdav"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bytes",
- "dav-server",
- "futures",
- "httpdate",
- "hyper",
- "hyper-util",
- "percent-encoding",
- "quick-xml",
- "reqwest",
- "rustls",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "tempfile",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
