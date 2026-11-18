@@ -405,10 +405,13 @@ pub struct AgentArgs {
 }
 
 #[derive(Debug, Args)]
+#[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
 pub struct ServeArgs {
+    #[command(subcommand)]
+    pub action: Option<ServeAction>,
     /// The server's certificate bundle (made by `nmc tls server`).
-    #[arg(long, value_name = "DIR")]
-    pub tls: String,
+    #[arg(long, value_name = "DIR", required = true)]
+    pub tls: Option<String>,
     /// Address and port to listen on.
     #[arg(long, default_value = "0.0.0.0:7443")]
     pub listen: String,
@@ -418,6 +421,42 @@ pub struct ServeArgs {
     /// Refuse every modification.
     #[arg(long)]
     pub read_only: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ServeAction {
+    /// Install and start `nmc serve` on a Linux server over SSH: copies
+    /// nmc, issues and copies the server's certificate, and runs it as a
+    /// systemd user service.
+    Install(ServeInstallArgs),
+    /// Stop and remove `nmc serve` (the service and its certificates) from
+    /// a server.
+    Uninstall {
+        /// The server as for SSH: `[user@]host[:ssh-port]`.
+        host: String,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct ServeInstallArgs {
+    /// The server as for SSH: `[user@]host[:ssh-port]`.
+    pub host: String,
+    /// The name in the server's certificate and in `scs://` locations
+    /// (default: the host).
+    #[arg(long)]
+    pub name: Option<String>,
+    /// TCP port `nmc serve` listens on.
+    #[arg(long, default_value_t = 7443)]
+    pub port: u16,
+    /// Only serve paths below these folders (repeatable). Default: everything.
+    #[arg(long = "root")]
+    pub roots: Vec<String>,
+    /// Refuse every modification.
+    #[arg(long)]
+    pub read_only: bool,
+    /// Issue a new certificate even if the server has one.
+    #[arg(long)]
+    pub renew: bool,
 }
 
 #[derive(Debug, Args)]

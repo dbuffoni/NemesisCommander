@@ -85,6 +85,8 @@ pub async fn copy_or_move(context: &AppContext, args: TransferArgs, is_move: boo
                 verify,
                 plan: plan_options,
                 parallelism,
+                // A level given with --parallel is kept as it is.
+                auto_parallelism: args.parallel.is_none() && settings.auto_parallelism,
                 retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
                 bandwidth_limit: limit,
             },
@@ -118,6 +120,7 @@ pub async fn copy_or_move(context: &AppContext, args: TransferArgs, is_move: boo
         conflict,
         verify,
         parallelism,
+        live_parallelism: None,
         resume: true,
         continue_on_error: true,
         throttle: (limit > 0).then(|| Arc::new(TokenBucket::new(limit)) as _),

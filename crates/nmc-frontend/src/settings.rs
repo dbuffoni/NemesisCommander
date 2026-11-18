@@ -34,6 +34,8 @@ pub enum Field {
     ParallelJobs,
     /// Files copied at once within a job.
     ParallelFiles,
+    /// Tune the files copied at once from the speed.
+    AutoParallelism,
     /// Check after copying.
     Verify,
     /// What to do when a file exists.
@@ -97,7 +99,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 22] = [
+    pub const ALL: [Field; 23] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -110,6 +112,7 @@ impl Field {
         Field::Icons,
         Field::ParallelJobs,
         Field::ParallelFiles,
+        Field::AutoParallelism,
         Field::Verify,
         Field::Conflict,
         Field::BandwidthLimit,
@@ -130,9 +133,8 @@ impl Field {
             ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
                 "Panels"
             }
-            ParallelJobs | ParallelFiles | Verify | Conflict | BandwidthLimit | Retries => {
-                "Transfers"
-            }
+            ParallelJobs | ParallelFiles | AutoParallelism | Verify | Conflict | BandwidthLimit
+            | Retries => "Transfers",
             Wrap | TabWidth | HexAbove => "Viewer",
             FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
         }
@@ -153,7 +155,8 @@ impl Field {
             GitStatus => "Git marks and branch in repositories",
             Icons => "Icons for the kinds of files",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
-            ParallelFiles => "Files at the same time in a job",
+            ParallelFiles => "Files at the same time in a job (starting level)",
+            AutoParallelism => "Adjust files at the same time from the speed",
             Verify => "Check after copying",
             Conflict => "When a file exists",
             BandwidthLimit => "Bandwidth limit in KiB/s (0: none)",
@@ -172,7 +175,7 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Icons | Wrap => FieldKind::Toggle,
+            | GitStatus | Icons | Wrap | AutoParallelism => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
             Editor => FieldKind::Text,
             FontFamily | FixedFontFamily => FieldKind::Font,
@@ -204,6 +207,7 @@ impl Field {
             Icons => on(p.icons),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
+            AutoParallelism => on(t.auto_parallelism),
             Verify => name_of(&VERIFY, t.verify),
             Conflict => name_of(&CONFLICTS, t.conflict),
             BandwidthLimit => t.bandwidth_limit_kib.to_string(),
@@ -230,6 +234,7 @@ impl Field {
             HumanSizes => p.human_sizes ^= true,
             ArrowNavigation => p.arrow_navigation ^= true,
             GitStatus => p.git_status ^= true,
+            AutoParallelism => t.auto_parallelism ^= true,
             Icons => p.icons ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),

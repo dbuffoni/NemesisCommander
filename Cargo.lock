@@ -3789,6 +3789,7 @@ dependencies = [
  "directories",
  "futures",
  "image",
+ "nmc-agent",
  "nmc-app",
  "nmc-archive",
  "nmc-config",

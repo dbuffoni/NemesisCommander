@@ -1,7 +1,9 @@
 //! The [`TransferManager`]: queue, scheduler and job runner.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use nmc_ops::{
@@ -15,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 use crate::job::{JobEvent, JobId, JobInfo, JobKind, JobSpec, JobState};
 use crate::journal::{Journal, JournalError};
 use crate::throttle::TokenBucket;
+use crate::tuning::{MAX_PARALLELISM, MIN_PARALLELISM, Tuner};
 
 /// Global settings of a [`TransferManager`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +32,15 @@ impl Default for ManagerOptions {
     fn default() -> Self {
         ManagerOptions { max_concurrent_jobs: 2, global_bandwidth_limit: 0 }
     }
+}
+
+/// How often the automatic tuning looks at a job's throughput.
+const TUNING_INTERVAL: Duration = Duration::from_secs(3);
+
+/// The parallelism of a running job, shared with its executor and tuner.
+struct ParallelControl {
+    level: Arc<AtomicUsize>,
+    auto: AtomicBool,
 }
 
 /// Runs jobs in the background and keeps the journal up to date.
@@ -47,6 +59,8 @@ struct Inner {
     resolver: Option<Arc<dyn ConflictResolver>>,
     global_throttle: Arc<TokenBucket>,
     running: Mutex<HashMap<JobId, CancellationToken>>,
+    /// Live parallelism of the jobs that are copying now.
+    controls: Mutex<HashMap<JobId, Arc<ParallelControl>>>,
     events: broadcast::Sender<JobEvent>,
     wake: Notify,
 }
@@ -69,6 +83,7 @@ impl TransferManager {
                 resolver: None,
                 global_throttle: Arc::new(TokenBucket::new(options.global_bandwidth_limit)),
                 running: Mutex::new(HashMap::new()),
+                controls: Mutex::new(HashMap::new()),
                 events,
                 wake: Notify::new(),
             }),
@@ -152,6 +167,46 @@ impl TransferManager {
     /// Changes a job's priority (higher runs first).
     pub fn set_priority(&self, id: JobId, priority: i32) -> Result<(), JournalError> {
         self.inner.journal.set_priority(id, priority)
+    }
+
+    /// Sets how many files a job copies at the same time. A running job
+    /// applies it to the files it has not started yet. Choosing a level by
+    /// hand turns the automatic tuning off for this job (see
+    /// [`set_auto_parallelism`](Self::set_auto_parallelism)).
+    pub fn set_parallelism(&self, id: JobId, parallelism: usize) -> Result<(), JournalError> {
+        let parallelism = parallelism.clamp(MIN_PARALLELISM, MAX_PARALLELISM);
+        self.inner.journal.set_parallelism(id, parallelism, false)?;
+        if let Some(control) = self.control(id) {
+            control.level.store(parallelism, Ordering::Relaxed);
+            control.auto.store(false, Ordering::Relaxed);
+        }
+        self.inner.emit(JobEvent::ParallelismChanged { id, parallelism, auto: false });
+        Ok(())
+    }
+
+    /// Turns the automatic tuning of a job's parallelism on or off. Off keeps
+    /// the current level.
+    pub fn set_auto_parallelism(&self, id: JobId, auto: bool) -> Result<(), JournalError> {
+        let current = self.job_parallelism(id)?;
+        self.inner.journal.set_parallelism(id, current, auto)?;
+        if let Some(control) = self.control(id) {
+            control.auto.store(auto, Ordering::Relaxed);
+        }
+        self.inner.emit(JobEvent::ParallelismChanged { id, parallelism: current, auto });
+        Ok(())
+    }
+
+    /// The number of files a job copies at the same time now: the live value
+    /// of a running job, else the one stored with it.
+    pub fn job_parallelism(&self, id: JobId) -> Result<usize, JournalError> {
+        if let Some(control) = self.control(id) {
+            return Ok(control.level.load(Ordering::Relaxed));
+        }
+        Ok(self.inner.journal.job(id)?.spec.options.parallelism)
+    }
+
+    fn control(&self, id: JobId) -> Option<Arc<ParallelControl>> {
+        self.inner.controls.lock().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
     }
 
     /// Changes the global bandwidth limit (bytes/s, 0 = unlimited).
@@ -306,10 +361,17 @@ impl Inner {
             ConflictPolicy::Ask if !has_resolver => ConflictPolicy::Skip,
             other => other,
         };
+        let level = Arc::new(AtomicUsize::new(spec.options.parallelism.max(1)));
+        let control = Arc::new(ParallelControl {
+            level: level.clone(),
+            auto: AtomicBool::new(spec.options.auto_parallelism),
+        });
+        self.controls.lock().unwrap_or_else(|e| e.into_inner()).insert(id, control.clone());
         let options = ExecuteOptions {
             conflict,
             verify: spec.options.verify,
             parallelism: spec.options.parallelism,
+            live_parallelism: Some(level),
             resume: true,
             continue_on_error: true,
             throttle: Some(throttle),
@@ -317,12 +379,24 @@ impl Inner {
             retry: spec.options.retry,
         };
         let events = self.events.clone();
-        let mut executor =
-            Executor::new(self.registry.clone(), options).with_observer(Arc::new(move |e| {
-                if let OpEvent::Bytes(bytes) = e {
+        let written = Arc::new(AtomicU64::new(0));
+        let retries = Arc::new(AtomicU32::new(0));
+        let observer = {
+            let (written, retries) = (written.clone(), retries.clone());
+            move |e| match e {
+                OpEvent::Bytes(bytes) => {
+                    written.fetch_add(bytes, Ordering::Relaxed);
                     let _ = events.send(JobEvent::Progress { id, bytes });
                 }
-            }));
+                OpEvent::Retrying { attempt, attempts, message, .. } => {
+                    retries.fetch_add(1, Ordering::Relaxed);
+                    let _ = events.send(JobEvent::Retrying { id, attempt, attempts, message });
+                }
+                _ => {}
+            }
+        };
+        let mut executor =
+            Executor::new(self.registry.clone(), options).with_observer(Arc::new(observer));
         if let Some(resolver) = &self.resolver {
             executor = executor.with_resolver(resolver.clone());
         }
@@ -331,7 +405,49 @@ impl Inner {
             id,
             finished: self.journal.finished_steps(id)?,
         };
-        match executor.run_tracked(&plan, Some(&tracker)).await {
+        // Only jobs with several files to copy can gain from more parallelism.
+        let copies = plan.steps.iter().filter(|s| s.is_parallel()).count();
+        let tuning = async {
+            if copies < 2 {
+                return std::future::pending::<()>().await;
+            }
+            let mut tuner = Tuner::new(control.level.load(Ordering::Relaxed));
+            let mut last_bytes = 0;
+            let mut shown = control.level.load(Ordering::Relaxed);
+            loop {
+                tokio::time::sleep(TUNING_INTERVAL).await;
+                let bytes = written.load(Ordering::Relaxed);
+                let speed = (bytes - last_bytes) as f64 / TUNING_INTERVAL.as_secs_f64();
+                last_bytes = bytes;
+                let failures = retries.swap(0, Ordering::Relaxed);
+                let current = control.level.load(Ordering::Relaxed);
+                if !control.auto.load(Ordering::Relaxed) {
+                    tuner.reset(current);
+                    continue;
+                }
+                if current != shown {
+                    tuner.reset(current); // changed from outside (settings, by hand)
+                }
+                let next = tuner.next(speed, failures);
+                control.level.store(next, Ordering::Relaxed);
+                shown = next;
+                if next != current {
+                    self.emit(JobEvent::ParallelismChanged { id, parallelism: next, auto: true });
+                }
+            }
+        };
+        let result = tokio::select! {
+            result = executor.run_tracked(&plan, Some(&tracker)) => result,
+            _ = tuning => unreachable!("the tuning never ends"),
+        };
+        // Keep the level the job ended with (hand or automatic) for a resume.
+        let _ = self.journal.set_parallelism(
+            id,
+            control.level.load(Ordering::Relaxed),
+            control.auto.load(Ordering::Relaxed),
+        );
+        self.controls.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+        match result {
             Ok(_) => Ok(self.journal.job(id)?.errors.is_empty()),
             Err(VfsError::Cancelled) => Err(JobError::Stopped),
             Err(e) => Err(JobError::Failed(e.to_string())),

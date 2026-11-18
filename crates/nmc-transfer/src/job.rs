@@ -27,6 +27,10 @@ pub enum JobKind {
     Delete,
 }
 
+fn default_auto() -> bool {
+    true
+}
+
 /// Tunables of a job, stored with it in the journal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobOptions {
@@ -37,8 +41,13 @@ pub struct JobOptions {
     pub verify: VerifyMode,
     /// What to preserve.
     pub plan: PlanOptions,
-    /// Files copied in parallel within the job.
+    /// Files copied in parallel within the job (the starting level when
+    /// `auto_parallelism` is on).
     pub parallelism: usize,
+    /// Let the manager adjust `parallelism` while the job runs, from the
+    /// measured throughput. Turned off by choosing a level by hand.
+    #[serde(default = "default_auto")]
+    pub auto_parallelism: bool,
     /// Retries for transient errors.
     pub retry: RetryPolicy,
     /// Per-job bandwidth limit in bytes/s (0 = only the global limit).
@@ -52,6 +61,7 @@ impl Default for JobOptions {
             verify: VerifyMode::Size,
             plan: PlanOptions::default(),
             parallelism: 4,
+            auto_parallelism: true,
             retry: RetryPolicy { attempts: 3, ..Default::default() },
             bandwidth_limit: 0,
         }
@@ -171,6 +181,27 @@ pub enum JobEvent {
         id: JobId,
         /// New state.
         state: JobState,
+    },
+    /// A step failed with a transient error and is about to be tried again.
+    Retrying {
+        /// Which job.
+        id: JobId,
+        /// The attempt about to start (the first retry is 1).
+        attempt: u32,
+        /// The most retries allowed.
+        attempts: u32,
+        /// Why the step failed.
+        message: String,
+    },
+    /// The number of files a running job copies at once changed (by hand or
+    /// by the automatic tuning).
+    ParallelismChanged {
+        /// Which job.
+        id: JobId,
+        /// The new level.
+        parallelism: usize,
+        /// Whether the automatic tuning is on.
+        auto: bool,
     },
     /// Bytes were written by a job (live progress, not yet journaled).
     Progress {

@@ -22,7 +22,7 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 nmc-providers.workspace = true
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "test-util"] }
 tempfile.workspace = true
 proptest.workspace = true
 

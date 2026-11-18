@@ -211,7 +211,25 @@ impl Journal {
         Ok(())
     }
 
-    /// Changes a job's priority.
+    /// Changes how many files a job copies at once and whether that is
+    /// adjusted automatically.
+    pub fn set_parallelism(&self, id: JobId, parallelism: usize, auto: bool) -> Result<()> {
+        let conn = self.conn();
+        let spec_json: String = conn
+            .query_row("SELECT spec FROM jobs WHERE id = ?1", [id.0], |r| r.get(0))
+            .optional()?
+            .ok_or(JournalError::NoSuchJob(id))?;
+        let mut spec: JobSpec = serde_json::from_str(&spec_json)?;
+        spec.options.parallelism = parallelism;
+        spec.options.auto_parallelism = auto;
+        conn.execute(
+            "UPDATE jobs SET spec = ?2 WHERE id = ?1",
+            params![id.0, serde_json::to_string(&spec)?],
+        )?;
+        Ok(())
+    }
+
+    /// Changes a job's priority (higher runs first).
     pub fn set_priority(&self, id: JobId, priority: i32) -> Result<()> {
         let conn = self.conn();
         let spec_json: String = conn

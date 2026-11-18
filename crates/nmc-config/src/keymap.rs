@@ -163,6 +163,7 @@ actions! {
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           ["Ctrl+J"];
     RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Alt+X"];
     AiScript      = "tools.ai-script",      Tools, false, "Write a script with AI…",  [];
+    InstallServe  = "tools.install-serve",  Tools, false, "Install nmc serve on a server…", [];
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        ["F1"];
     Menu          = "app.commands",         App, true,  "Commands",                   ["F9"];

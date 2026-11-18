@@ -45,7 +45,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Config(args) => settings::config(context, args).await,
         Command::Keys => settings::keys(&context),
         Command::Agent(args) => agent(context, args).await,
-        Command::Serve(args) => serve::serve(args).await,
+        Command::Serve(args) => serve::serve(&context, args).await,
         Command::Tls(args) => serve::tls(&context, args),
         Command::Run(args) => script::run(&context, args).await,
         Command::Plugin(args) => script::plugin(&context, args).await,

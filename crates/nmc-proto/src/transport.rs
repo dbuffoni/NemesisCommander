@@ -164,6 +164,11 @@ impl<T> tonic::codegen::tokio_stream::Stream for OnceThenPending<T> {
     }
 }
 
+/// How often an idle connection is probed.
+const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+/// How long an answer to a probe may take.
+const KEEPALIVE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
 /// A client talking to an agent over `io`.
 ///
 /// The connection cannot be re-established: if it breaks, calls fail with
@@ -173,7 +178,12 @@ where
     IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let slot = Arc::new(Mutex::new(Some(io)));
+    // HTTP/2 PING frames tell a silent dead link from an idle one: after
+    // 20 s without an answer the connection is closed and calls fail.
     let channel = Endpoint::from_static("http://nmc-agent")
+        .http2_keep_alive_interval(KEEPALIVE_INTERVAL)
+        .keep_alive_timeout(KEEPALIVE_TIMEOUT)
+        .keep_alive_while_idle(true)
         .connect_with_connector(tower::service_fn(move |_: tonic::codegen::http::Uri| {
             let io = slot.lock().unwrap_or_else(|e| e.into_inner()).take();
             async move {

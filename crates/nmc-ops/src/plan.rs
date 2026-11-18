@@ -71,6 +71,19 @@ impl Step {
         matches!(self, Step::CopyFile { .. } | Step::CopySymlink { .. })
     }
 
+    /// Every path this step reads or writes (the source first), for
+    /// reopening their providers after a lost connection.
+    pub fn paths(&self) -> Vec<&VfsPath> {
+        match self {
+            Step::CreateDir { path }
+            | Step::SetAttributes { path, .. }
+            | Step::Remove { path, .. } => vec![path],
+            Step::CopyFile { from, to, .. }
+            | Step::CopySymlink { from, to, .. }
+            | Step::Move { from, to } => vec![from, to],
+        }
+    }
+
     /// The path this step writes to or removes, for display.
     pub fn target(&self) -> &VfsPath {
         match self {

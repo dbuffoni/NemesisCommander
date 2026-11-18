@@ -86,6 +86,7 @@ impl AppContext {
             verify: settings.verify,
             plan: PlanOptions { preserve_mtime: true, preserve_permissions: true },
             parallelism: settings.parallel_files.max(1),
+            auto_parallelism: settings.auto_parallelism,
             retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
             bandwidth_limit: settings.bandwidth_limit_kib * 1024,
         }

@@ -59,8 +59,28 @@ impl Drive {
 
     /// The row as the list shows it.
     pub fn row(&self) -> String {
-        format!("{:<8} {:<20} {}", self.category.label(), self.name, self.location)
+        let row = format!("{:<8} {:<20} {}", self.category.label(), self.name, self.location);
+        match connection_kind(&self.location) {
+            Some(kind) => format!("{row}  [{kind}]"),
+            None => row,
+        }
     }
+}
+
+/// How a remote location is reached, in words (`None` for local places and
+/// archives). The agent over SSH and the `nmc serve` daemon both look like
+/// "Remote", so this is what tells them apart.
+pub fn connection_kind(location: &str) -> Option<&'static str> {
+    let (scheme, _) = location.split_once("://")?;
+    Some(match scheme {
+        "agent" => "agent over SSH",
+        "scs" => "nmc serve, TLS",
+        "sftp" => "SFTP over SSH",
+        "s3" => "S3",
+        "smb" => "SMB",
+        "dav" | "davs" | "webdav" | "webdavs" => "WebDAV",
+        _ => return None,
+    })
 }
 
 /// The short name shown above a panel for `location`: the saved connection
@@ -206,6 +226,17 @@ mod tests {
         let name = |uri: &str| suggested_name(&nmc_vfs::VfsPath::parse(uri).unwrap());
         assert_eq!(name("sftp://me@nas.lan:2222/srv"), "nas.lan");
         assert_eq!(name("s3://photos/2026"), "photos");
+    }
+
+    #[test]
+    fn the_connection_kind_tells_agent_and_serve_apart() {
+        assert_eq!(connection_kind("agent://nas/srv"), Some("agent over SSH"));
+        assert_eq!(connection_kind("scs://nas:7443/srv"), Some("nmc serve, TLS"));
+        assert_eq!(connection_kind("sftp://me@nas/srv"), Some("SFTP over SSH"));
+        assert_eq!(connection_kind("/home/me"), None);
+        assert_eq!(connection_kind("zip:///a.zip!/"), None);
+        let drive = Drive::new("nas", "scs://nas:7443/srv");
+        assert!(drive.row().ends_with("[nmc serve, TLS]"), "{}", drive.row());
     }
 
     #[test]
