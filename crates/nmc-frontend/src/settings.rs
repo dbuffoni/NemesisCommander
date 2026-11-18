@@ -38,6 +38,8 @@ pub enum Field {
     AutoParallelism,
     /// Check after copying.
     Verify,
+    /// Content check on agent and `nmc serve` servers.
+    VerifyRemoteFast,
     /// What to do when a file exists.
     Conflict,
     /// Bandwidth limit in KiB/s.
@@ -99,7 +101,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 23] = [
+    pub const ALL: [Field; 24] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -114,6 +116,7 @@ impl Field {
         Field::ParallelFiles,
         Field::AutoParallelism,
         Field::Verify,
+        Field::VerifyRemoteFast,
         Field::Conflict,
         Field::BandwidthLimit,
         Field::Retries,
@@ -133,8 +136,8 @@ impl Field {
             ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
                 "Panels"
             }
-            ParallelJobs | ParallelFiles | AutoParallelism | Verify | Conflict | BandwidthLimit
-            | Retries => "Transfers",
+            ParallelJobs | ParallelFiles | AutoParallelism | Verify | VerifyRemoteFast
+            | Conflict | BandwidthLimit | Retries => "Transfers",
             Wrap | TabWidth | HexAbove => "Viewer",
             FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
         }
@@ -158,6 +161,7 @@ impl Field {
             ParallelFiles => "Files at the same time in a job (starting level)",
             AutoParallelism => "Adjust files at the same time from the speed",
             Verify => "Check after copying",
+            VerifyRemoteFast => "Content check on agent / nmc serve servers",
             Conflict => "When a file exists",
             BandwidthLimit => "Bandwidth limit in KiB/s (0: none)",
             Retries => "Retries after network errors",
@@ -175,7 +179,7 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Icons | Wrap | AutoParallelism => FieldKind::Toggle,
+            | GitStatus | Icons | Wrap | AutoParallelism | VerifyRemoteFast => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
             Editor => FieldKind::Text,
             FontFamily | FixedFontFamily => FieldKind::Font,
@@ -209,6 +213,7 @@ impl Field {
             ParallelFiles => t.parallel_files.to_string(),
             AutoParallelism => on(t.auto_parallelism),
             Verify => name_of(&VERIFY, t.verify),
+            VerifyRemoteFast => on(t.verify_remote_fast),
             Conflict => name_of(&CONFLICTS, t.conflict),
             BandwidthLimit => t.bandwidth_limit_kib.to_string(),
             Retries => t.retries.to_string(),
@@ -235,6 +240,7 @@ impl Field {
             ArrowNavigation => p.arrow_navigation ^= true,
             GitStatus => p.git_status ^= true,
             AutoParallelism => t.auto_parallelism ^= true,
+            VerifyRemoteFast => t.verify_remote_fast ^= true,
             Icons => p.icons ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),

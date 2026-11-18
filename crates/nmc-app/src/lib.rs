@@ -80,16 +80,47 @@ impl AppContext {
     /// Job options from the transfer settings. `conflict` overrides the
     /// configured conflict policy.
     pub fn job_options(&self, conflict: Option<ConflictPolicy>) -> JobOptions {
+        self.job_options_to(conflict, None)
+    }
+
+    /// Like [`job_options`](Self::job_options) for a job that copies to
+    /// `destination`, which decides the default check (see
+    /// [`effective_verify`]).
+    pub fn job_options_to(
+        &self,
+        conflict: Option<ConflictPolicy>,
+        destination: Option<&nmc_vfs::VfsPath>,
+    ) -> JobOptions {
         let settings = &self.config.transfers;
         JobOptions {
             conflict: conflict.unwrap_or(settings.conflict),
-            verify: settings.verify,
+            verify: match destination {
+                Some(destination) => effective_verify(settings, destination),
+                None => settings.verify,
+            },
             plan: PlanOptions { preserve_mtime: true, preserve_permissions: true },
             parallelism: settings.parallel_files.max(1),
             auto_parallelism: settings.auto_parallelism,
             retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
             bandwidth_limit: settings.bandwidth_limit_kib * 1024,
         }
+    }
+}
+
+/// The check after copying to `destination`: the one in the settings, except
+/// that "same size" becomes a XXH3 content check on an agent or `nmc serve`
+/// server (which hashes on the server, so it costs no traffic) unless
+/// `verify_remote_fast` is off.
+pub fn effective_verify(
+    settings: &nmc_config::TransferSettings,
+    destination: &nmc_vfs::VfsPath,
+) -> nmc_ops::VerifyMode {
+    use nmc_ops::VerifyMode;
+    let on_server = matches!(destination.scheme(), "agent" | "scs");
+    if settings.verify == VerifyMode::Size && settings.verify_remote_fast && on_server {
+        VerifyMode::Fast
+    } else {
+        settings.verify
     }
 }
 
@@ -145,6 +176,21 @@ pub fn build_registry_for(paths: &AppPaths) -> ProviderRegistry {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn size_checks_become_content_checks_on_servers() {
+        use nmc_ops::VerifyMode;
+        let mut settings = nmc_config::TransferSettings::default();
+        let path = |u: &str| nmc_vfs::VfsPath::parse(u).unwrap();
+        assert_eq!(super::effective_verify(&settings, &path("agent://h/x")), VerifyMode::Fast);
+        assert_eq!(super::effective_verify(&settings, &path("scs://h/x")), VerifyMode::Fast);
+        assert_eq!(super::effective_verify(&settings, &path("sftp://h/x")), VerifyMode::Size);
+        settings.verify_remote_fast = false;
+        assert_eq!(super::effective_verify(&settings, &path("agent://h/x")), VerifyMode::Size);
+        settings.verify = VerifyMode::Full;
+        settings.verify_remote_fast = true;
+        assert_eq!(super::effective_verify(&settings, &path("agent://h/x")), VerifyMode::Full);
+    }
+
     use super::*;
 
     #[test]
