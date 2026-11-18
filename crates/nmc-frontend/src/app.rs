@@ -661,7 +661,14 @@ impl App {
                     self.refresh_git(&listed);
                     self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
-                        let error = error.to_owned();
+                        let mut error = error.to_owned();
+                        if nmc_ops::is_connection_error(&error) {
+                            // The next listing opens the connection again.
+                            self.context.registry.forget(self.workspace.active().location());
+                            error = format!(
+                                "Connection lost: {error} (it is opened again on the next try)"
+                            );
+                        }
                         self.set_error(error);
                     }
                     self.update_quick_view();
