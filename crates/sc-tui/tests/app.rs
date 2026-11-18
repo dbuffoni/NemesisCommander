@@ -2071,6 +2071,9 @@ async fn no_duplicates_is_said() {
     assert!(h.status().contains("No duplicates among"), "{}", h.status());
 }
 
+// Runs the system's own tool; PowerShell on a Windows runner takes too long
+// to wait for, and the parsers of every system are tested in sc-frontend.
+#[cfg(target_os = "linux")]
 #[tokio::test]
 async fn the_disk_table_opens_or_says_why_not() {
     let mut h = Harness::new().await;
