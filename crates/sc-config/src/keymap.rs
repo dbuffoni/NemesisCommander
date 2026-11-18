@@ -134,12 +134,11 @@ actions! {
     CloseTab      = "nav.close-tab",        Navigate, false, "Close tab",             ["Ctrl+W"];
     NextTab       = "nav.next-tab",         Navigate, false, "Next tab",              ["Ctrl+Tab", "Ctrl+PageDown"];
     PrevTab       = "nav.prev-tab",         Navigate, false, "Previous tab",          ["Ctrl+Shift+Tab", "Ctrl+PageUp"];
-    SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Alt+O"];
+    SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Ctrl+Up", "Alt+O"];
     OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", ["Ctrl+Left"];
     OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", ["Ctrl+Right"];
-    Jump          = "nav.jump",             Navigate, false, "Jump to a frequent folder…", ["Alt+J"];
     Basket        = "nav.basket",           Navigate, false, "Basket…",               ["Ctrl+B"];
-    SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+U"];
+    SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+Down", "Ctrl+U"];
     // View
     Refresh       = "view.refresh",         View, false, "Refresh",                   ["Ctrl+R"];
     ToggleHidden  = "view.hidden",          View, false, "Show hidden files",         ["Ctrl+H"];
@@ -154,6 +153,10 @@ actions! {
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];
+    Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     [];
+    FolderSizes   = "view.folder-sizes",    View, false, "Count folder sizes",        ["Alt+S"];
+    DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", ["Alt+U"];
+    Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    ["Alt+K"];
     SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          [];
     SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    [];
@@ -173,7 +176,11 @@ impl Action {
     /// Finds an action by its [`id`](Self::id).
     pub fn from_id(id: &str) -> Option<Action> {
         // Renamed when the connection list became the drive list (ADR 0019).
-        let id = if id == "tools.connect" { "nav.drives" } else { id };
+        let id = match id {
+            "tools.connect" => "nav.drives",
+            "nav.jump" => "nav.bookmarks",
+            other => other,
+        };
         Action::ALL.iter().copied().find(|a| a.id() == id)
     }
 }

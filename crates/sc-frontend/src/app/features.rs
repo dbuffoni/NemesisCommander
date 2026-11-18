@@ -1,5 +1,5 @@
 //! Commands of release 0.1.0 that work on lists of paths: copy a path,
-//! export a listing, links, renaming in the editor, jumping to frequent
+//! export a listing, links, renaming in the editor, the bookmark list with recent
 //! folders, saved searches, the basket, similar pictures, comparing by
 //! content and synchronizing folders.
 
@@ -15,7 +15,7 @@ use sc_transfer::{JobKind, JobSpec};
 use sc_vfs::{Capabilities, HashAlgorithm, ProviderRegistry, VfsPath};
 
 use super::{App, AppEvent, External, display_location, done, resolve_location};
-use crate::dialogs::{ChooseDialog, ChoosePurpose, InputPurpose, Overlay};
+use crate::dialogs::{ChooseDialog, ChoosePurpose, InputPurpose, JumpRow, Overlay};
 use crate::export::{Format, PathVariant};
 use crate::input::KeyPress;
 use crate::similar::{self, Picture};
@@ -29,8 +29,8 @@ const PICTURE_LIMIT: u64 = 48 << 20;
 const PICTURE_EXTENSIONS: [&str; 9] =
     ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "ico"];
 
-/// Frequent folders listed at most.
-const JUMP_LIMIT: usize = 15;
+/// Recent folders shown under the bookmarks.
+const RECENT_LIMIT: usize = 5;
 
 fn now_seconds() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
@@ -283,44 +283,102 @@ impl App {
         }
     }
 
-    pub(super) fn ask_jump(&mut self) {
-        self.ask(
-            "Jump",
-            "Part of the name of a folder you open often (empty: the most used):",
-            "",
-            InputPurpose::Jump,
-        );
+    /// Opens the bookmarks list: bookmarks first, then the recent folders;
+    /// typing narrows both.
+    pub(super) fn open_bookmarks(&mut self) {
+        let (items, rows) = self.bookmark_rows("");
+        if rows.is_empty() {
+            let key = self.context.keymap.shortcut_text(Action::AddBookmark);
+            return self.set_status(format!("No bookmarks yet ({key} adds this folder)"));
+        }
+        let mut dialog = ChooseDialog::new("Bookmarks", items, ChoosePurpose::Bookmarks(rows));
+        dialog.query = Some(String::new());
+        self.refresh_bookmarks(&mut dialog);
+        self.overlay = Some(Overlay::Choose(dialog));
     }
 
-    pub(super) fn jump(&mut self, query: &str) {
+    /// The rows for `query`: the bookmarks whose name or folder holds it,
+    /// then the most recent folders that do.
+    fn bookmark_rows(&self, query: &str) -> (Vec<String>, Vec<JumpRow>) {
+        let needle = query.to_lowercase();
+        let mut items = Vec::new();
+        let mut rows = Vec::new();
+        for (index, bookmark) in self.context.config.bookmarks.iter().enumerate() {
+            if bookmark.name.to_lowercase().contains(&needle)
+                || bookmark.path.to_lowercase().contains(&needle)
+            {
+                items.push(super::bookmark_row(bookmark));
+                rows.push(JumpRow::Bookmark(index));
+            }
+        }
         let here = self.workspace.active().location().to_string();
-        let found: Vec<String> = self
+        let recent: Vec<String> = self
             .frecency
-            .find(query, now_seconds(), JUMP_LIMIT + 1)
+            .recent(query, RECENT_LIMIT + 1)
             .into_iter()
             .map(|v| v.path.clone())
             .filter(|path| *path != here)
-            .take(JUMP_LIMIT)
+            .take(RECENT_LIMIT)
             .collect();
-        match found.as_slice() {
-            [] => self.set_error(format!("No frequent folder matches \"{query}\"")),
-            [one] if !query.is_empty() => self.open_location(one.clone()),
-            _ => {
-                let items = found
-                    .iter()
-                    .map(|uri| {
-                        VfsPath::parse(uri).map_or_else(|_| uri.clone(), |p| display_location(&p))
-                    })
-                    .collect();
-                let mut dialog =
-                    ChooseDialog::new("Frequent folders", items, ChoosePurpose::Jump(found));
-                dialog.footer = "most used and most recent first".into();
-                self.overlay = Some(Overlay::Choose(dialog));
+        if !recent.is_empty() {
+            items.push("── Recent folders ──".into());
+            rows.push(JumpRow::Header);
+            for uri in recent {
+                items.push(
+                    VfsPath::parse(&uri).map_or_else(|_| uri.clone(), |p| display_location(&p)),
+                );
+                rows.push(JumpRow::Recent(uri));
             }
         }
+        (items, rows)
     }
 
-    fn open_location(&mut self, uri: String) {
+    /// Rebuilds the rows of the bookmarks list from its query, with the
+    /// cursor on the first row that can be chosen.
+    fn refresh_bookmarks(&self, dialog: &mut ChooseDialog) {
+        let query = dialog.query.clone().unwrap_or_default();
+        let (items, rows) = self.bookmark_rows(&query);
+        dialog.cursor = rows.iter().position(|r| *r != JumpRow::Header).unwrap_or(0);
+        dialog.items = items;
+        dialog.purpose = ChoosePurpose::Bookmarks(rows);
+        dialog.footer = if query.is_empty() {
+            "Type to filter   Enter: open   Delete: remove bookmark".into()
+        } else {
+            format!("Filter: {query}_   Enter: open   Backspace: erase")
+        };
+    }
+
+    /// Typing, Backspace and Delete in the bookmarks list; `None` for the
+    /// keys the list handles itself (arrows, Enter, Esc).
+    pub(super) fn bookmarks_key(
+        &mut self,
+        dialog: &mut ChooseDialog,
+        press: &KeyPress,
+    ) -> Option<bool> {
+        let key = press.plain();
+        let mut query = dialog.query.clone().unwrap_or_default();
+        match (key, press.text) {
+            (Some(Key::Delete), _) => {
+                let ChoosePurpose::Bookmarks(rows) = &dialog.purpose else { return None };
+                if let Some(JumpRow::Bookmark(index)) = rows.get(dialog.cursor) {
+                    self.context.config.bookmarks.remove(*index);
+                    self.save_settings();
+                }
+            }
+            (Some(Key::Backspace), _) => {
+                query.pop();
+            }
+            (_, Some(c)) if !press.chord.ctrl && !press.chord.alt && !c.is_control() => {
+                query.push(c);
+            }
+            _ => return None,
+        }
+        dialog.query = Some(query);
+        self.refresh_bookmarks(dialog);
+        Some(true)
+    }
+
+    pub(super) fn open_location(&mut self, uri: String) {
         let here = self.workspace.active().location().clone();
         match resolve_location(&uri, &here) {
             Ok(path) => {
@@ -468,6 +526,9 @@ impl App {
                     }
                 }
             }
+            ChoosePurpose::Bookmarks(_) => self.bookmarks_key(dialog, press),
+            ChoosePurpose::DiskUsage { .. } => self.disk_usage_key(dialog, press),
+            ChoosePurpose::Font { .. } => self.fonts_key(dialog, press),
             ChoosePurpose::SavedSearches if key == Some(Key::Delete) => {
                 let index = dialog.cursor;
                 if index < self.context.config.searches.len() {
@@ -554,11 +615,6 @@ impl App {
                         .copied();
                 if let Some(kind) = kind {
                     self.make_links(paths, kind);
-                }
-            }
-            ChoosePurpose::Jump(found) => {
-                if let Some(uri) = found.get(cursor) {
-                    self.open_location(uri.clone());
                 }
             }
             ChoosePurpose::SavedSearches => {

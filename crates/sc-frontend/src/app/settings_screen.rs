@@ -47,6 +47,7 @@ impl App {
             Row::Header(_) => {}
             Row::Option(field) => match field.kind() {
                 FieldKind::Toggle | FieldKind::Choice => self.step_option(Row::Option(field), 1),
+                FieldKind::Font => return Some(self.font_dialog(field, screen)),
                 FieldKind::Number(..) | FieldKind::Text => {
                     let value = field.value(&self.context.config);
                     return Some(Overlay::Input(InputDialog::new(
@@ -132,6 +133,70 @@ impl App {
     }
 
     /// A typed value for `field`.
+    /// The list of installed fonts for `field`, with "(system default)" on
+    /// top; typing narrows it.
+    fn font_dialog(&mut self, field: Field, screen: SettingsScreen) -> Overlay {
+        if self.fonts.is_empty() {
+            self.set_status("The terminal uses its own font; fonts are chosen in the window");
+            return Overlay::Settings(screen);
+        }
+        let current = field.value(&self.context.config);
+        let mut dialog = ChooseDialog::new(
+            field.label(),
+            Vec::new(),
+            ChoosePurpose::Font { field, screen: Box::new(screen), names: Vec::new() },
+        );
+        dialog.query = Some(String::new());
+        self.refresh_fonts(&mut dialog, &current);
+        Overlay::Choose(dialog)
+    }
+
+    /// Rebuilds the font list from the query, with the cursor on `current`
+    /// when it is there (else on the first row).
+    fn refresh_fonts(&self, dialog: &mut ChooseDialog, current: &str) {
+        let query = dialog.query.clone().unwrap_or_default();
+        let needle = query.to_lowercase();
+        let mut names = vec![String::new()];
+        names.extend(self.fonts.iter().filter(|f| f.to_lowercase().contains(&needle)).cloned());
+        if !query.is_empty() {
+            names.remove(0);
+        }
+        dialog.items = names
+            .iter()
+            .map(|n| if n.is_empty() { "(system default)".to_owned() } else { n.clone() })
+            .collect();
+        dialog.cursor = names.iter().position(|n| n == current).unwrap_or(0);
+        dialog.footer = if query.is_empty() {
+            "Type to filter   Enter: use   Esc: back".into()
+        } else {
+            format!("Filter: {query}_   Enter: use   Backspace: erase")
+        };
+        if let ChoosePurpose::Font { names: list, .. } = &mut dialog.purpose {
+            *list = names;
+        }
+    }
+
+    /// Typing and Backspace in the font list.
+    pub(super) fn fonts_key(
+        &mut self,
+        dialog: &mut ChooseDialog,
+        press: &KeyPress,
+    ) -> Option<bool> {
+        let mut query = dialog.query.clone().unwrap_or_default();
+        match (press.plain(), press.text) {
+            (Some(Key::Backspace), _) => {
+                query.pop();
+            }
+            (_, Some(c)) if !press.chord.ctrl && !press.chord.alt && !c.is_control() => {
+                query.push(c);
+            }
+            _ => return None,
+        }
+        dialog.query = Some(query);
+        self.refresh_fonts(dialog, "");
+        Some(true)
+    }
+
     pub(super) fn setting_typed(&mut self, field: Field, text: &str) {
         match field.set(&mut self.context.config, text) {
             Ok(()) => {

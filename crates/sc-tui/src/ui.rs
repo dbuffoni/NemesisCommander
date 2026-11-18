@@ -13,10 +13,12 @@ use sc_transfer::JobState;
 
 use sc_frontend::commands::CommandPalette;
 use sc_frontend::drives::drive_label;
+use sc_frontend::icons::icon_for;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
-    column_headers, commands_view, describe, entry_details, git_mark, git_of, job_line,
-    jobs_summary, panel_footer, scroll_offset, short_label, size_text, tab_title,
+    column_headers, commands_view, counted_size, describe, entry_details, git_mark, git_of,
+    job_line, jobs_progress, jobs_summary, panel_footer, scroll_offset, short_label,
+    size_text_counted, tab_title,
 };
 use sc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -49,9 +51,15 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if let Some(Some(viewer)) = &mut app.quick_view {
         viewer.layout((width / 2).saturating_sub(2));
     }
-    let [panels, status, keys] =
-        Layout::vertical([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)])
-            .areas(frame.area());
+    // A line for the transfers, only while there are some.
+    let progress = jobs_progress(&app.jobs, app);
+    let [panels, transfers, status, keys] = Layout::vertical([
+        Constraint::Min(3),
+        Constraint::Length(u16::from(progress.is_some())),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(frame.area());
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(panels);
 
@@ -62,6 +70,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         } else {
             draw_panel(frame, app, side, area);
         }
+    }
+    if let Some(progress) = progress {
+        draw_transfers(frame, app, progress, transfers);
     }
     draw_status(frame, app, status);
     draw_key_bar(frame, app, keys);
@@ -157,8 +168,10 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let show_date = width >= 40;
     // Two columns for the git mark when the folder is in a repository.
     let mark_width = if git.is_some() { 2 } else { 0 };
+    // Two more for the icon of the kind of file.
+    let icon_width = if app.context().config.panels.icons { 2 } else { 0 };
     let name_width = width
-        .saturating_sub(SIZE_WIDTH + 1 + mark_width)
+        .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
@@ -186,7 +199,8 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         if entry.is_dir() && entry.name != PARENT {
             name.push('/');
         }
-        let size = size_text(entry, app.context().config.panels.human_sizes);
+        let counted = counted_size(app.folder_sizes(), panel.location(), entry);
+        let size = size_text_counted(entry, app.context().config.panels.human_sizes, counted);
         let date = if show_date {
             format!(" {:<DATE_WIDTH$}", entry.modified.map(local_time).unwrap_or_default())
         } else {
@@ -216,12 +230,41 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
                 style.add_modifier(Modifier::UNDERLINED)
             };
         }
-        lines.push(Line::styled(text, style));
+        let line = if icon_width > 0 && entry.name != PARENT {
+            let icon = icon_for(entry);
+            let mut colour = style;
+            if i != cursor && !panel.is_selected(&entry.name) {
+                colour = colour.fg(hex_colour(icon.color));
+            }
+            // The icon sits after the git mark, before the name.
+            let (mark_text, rest) =
+                text.split_at(text.char_indices().nth(mark_width).map_or(text.len(), |(b, _)| b));
+            Line::from(vec![
+                Span::styled(mark_text.to_owned(), style),
+                Span::styled(format!("{} ", icon.shape.glyph()), colour),
+                Span::styled(rest.to_owned(), style),
+            ])
+        } else if icon_width > 0 {
+            let (mark_text, rest) =
+                text.split_at(text.char_indices().nth(mark_width).map_or(text.len(), |(b, _)| b));
+            Line::styled(format!("{mark_text}  {rest}"), style)
+        } else {
+            Line::styled(text, style)
+        };
+        lines.push(line);
     }
     if panel.is_loading() && panel.entries().is_empty() {
         lines.push(Line::styled("loading…", dim()));
     }
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// The terminal colour for a `#rrggbb` string.
+fn hex_colour(hex: &str) -> Color {
+    let channel = |range: std::ops::Range<usize>| {
+        hex.get(range).and_then(|c| u8::from_str_radix(c, 16).ok()).unwrap_or(128)
+    };
+    Color::Rgb(channel(1..3), channel(3..5), channel(5..7))
 }
 
 /// Pads or cuts `text` to exactly `width` characters (cut text ends in `…`).
@@ -259,20 +302,29 @@ fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
 
 // ------------------------------------------------------- status and keys
 
+/// A thin bar and the numbers of the running transfers.
+fn draw_transfers(frame: &mut Frame, app: &App, progress: f64, area: Rect) {
+    let width = (area.width as usize / 4).clamp(10, 40);
+    let filled = ((progress * width as f64).round() as usize).min(width);
+    let line = Line::from(vec![
+        Span::styled("━".repeat(filled), Style::new().fg(Color::Cyan)),
+        Span::styled("─".repeat(width - filled), dim()),
+        Span::raw("  "),
+        Span::styled(
+            jobs_summary(&app.jobs, app).unwrap_or_default(),
+            Style::new().fg(Color::Cyan),
+        ),
+    ]);
+    frame.render_widget(Paragraph::new(line), area);
+}
+
 fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
-    let right = jobs_summary(&app.jobs, app).unwrap_or_default();
     let (text, style) = match app.status() {
         Some(status) if status.error => (status.text.clone(), Style::new().fg(Color::Red)),
         Some(status) => (status.text.clone(), Style::new()),
         None => (entry_details(app.workspace.active()), dim()),
     };
-    let width = area.width as usize;
-    let left_width = width.saturating_sub(right.chars().count() + 1);
-    let line = Line::from(vec![
-        Span::styled(fit(&text, left_width), style),
-        Span::raw(" "),
-        Span::styled(right, Style::new().fg(Color::Cyan)),
-    ]);
+    let line = Line::from(Span::styled(fit(&text, area.width as usize), style));
     frame.render_widget(Paragraph::new(line), area);
 }
 

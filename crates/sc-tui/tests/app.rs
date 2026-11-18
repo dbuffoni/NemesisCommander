@@ -1494,8 +1494,8 @@ async fn panels_in_a_git_repository_show_marks_and_the_branch() {
     let screen = h.screen();
     assert!(screen.contains("⎇ trunk"), "branch in the title:\n{screen}");
     let line = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap_or("").to_owned();
-    assert!(line("tracked.txt").contains("M tracked.txt"), "{screen}");
-    assert!(line("loose.txt").contains("? loose.txt"), "{screen}");
+    assert!(line("tracked.txt").contains("M ≡ tracked.txt"), "{screen}");
+    assert!(line("loose.txt").contains("? ≡ loose.txt"), "{screen}");
     assert!(h.app.git[1].is_none(), "the other folder is not a repository");
 }
 
@@ -1733,36 +1733,41 @@ async fn names_from_the_editor_are_checked() {
 }
 
 #[tokio::test]
-async fn jump_goes_to_the_most_used_matching_folder() {
+async fn bookmarks_filter_as_you_type_and_list_recent_folders() {
     let mut h = Harness::new().await;
-    // Open docs twice and right once: both are remembered.
-    for _ in 0..2 {
-        h.focus("docs");
-        h.key("Enter");
-        h.settle().await;
-        h.key("Backspace");
-        h.settle().await;
-    }
-    h.key("Alt+J");
-    h.type_text("zzz");
+    // Visit docs so it is remembered, then go back.
+    h.focus("docs");
     h.key("Enter");
-    assert!(h.status().contains("No frequent folder"), "{}", h.status());
-
-    h.key("Alt+J");
-    h.type_text("doc");
-    h.key("Enter"); // one match: straight there
     h.settle().await;
-    assert!(h.app.workspace().active().location().to_string().ends_with("/left/docs"));
-
-    // Without words: a list, and the choice is opened.
-    h.key("Alt+J");
+    h.key("Backspace");
+    h.settle().await;
+    h.key("Ctrl+Shift+D");
+    h.focus("docs");
     h.key("Enter");
+    h.settle().await;
+    h.key("Ctrl+D");
     let rows = results(&h);
-    assert!(rows.iter().any(|r| r.ends_with("left")), "{rows:?}");
-    assert!(!rows.iter().any(|r| r.ends_with("docs")), "not the folder we are in: {rows:?}");
+    assert!(rows.iter().any(|r| r.contains("Recent folders")), "{rows:?}");
+    // Typing narrows the bookmarks (case does not matter) and the recent folders.
+    h.type_text("ZZZ");
+    assert!(results(&h).is_empty(), "nothing matches ZZZ");
+    h.key("Backspace");
+    h.key("Backspace");
+    h.key("Backspace");
+    h.type_text("LEF");
+    let rows = results(&h);
+    assert!(rows.iter().any(|r| r.contains("left")), "{rows:?}");
+    // Enter on the first bookmark opens it.
     h.key("Enter");
     h.settle().await;
     assert!(h.app.workspace().active().location().to_string().ends_with("/left"));
+    // The recent folders can be chosen too (the header cannot).
+    h.key("Ctrl+D");
+    h.key("Down"); // the title of the recent folders
+    h.key("Down");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.workspace().active().location().to_string().ends_with("/left/docs"));
 }
 
 #[tokio::test]
@@ -1960,4 +1965,153 @@ async fn synchronizing_shows_the_plan_and_runs_it_on_enter() {
     h.settle().await;
     let Some(Overlay::Viewer(viewer)) = h.app.overlay() else { panic!("the plan") };
     assert!(viewer.sync.is_none(), "nothing to run");
+}
+
+#[tokio::test]
+async fn fonts_are_picked_from_the_installed_ones() {
+    use sc_frontend::settings::{Field, Row};
+    let mut h = Harness::new().await;
+    h.app.set_fonts(vec!["Fira Sans".into(), "DejaVu Sans".into(), "Fira Code".into()]);
+    h.key("Ctrl+,");
+    for _ in 0..60 {
+        let Some(Overlay::Settings(screen)) = h.app.overlay() else { panic!("settings expected") };
+        if screen.current() == Row::Option(Field::FontFamily) {
+            break;
+        }
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert_eq!(results(&h)[0], "(system default)");
+    assert_eq!(results(&h).len(), 4);
+    h.type_text("FIRA");
+    assert_eq!(results(&h), ["Fira Code", "Fira Sans"], "sorted, case-insensitive match");
+    h.key("Down");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.appearance.font_family, "Fira Sans");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))), "back to the settings");
+}
+
+#[tokio::test]
+async fn the_terminal_has_no_font_list() {
+    use sc_frontend::settings::{Field, Row};
+    let mut h = Harness::new().await;
+    h.key("Ctrl+,");
+    for _ in 0..60 {
+        let Some(Overlay::Settings(screen)) = h.app.overlay() else { panic!("settings expected") };
+        if screen.current() == Row::Option(Field::FontFamily) {
+            break;
+        }
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))));
+    assert!(h.status().contains("terminal uses its own font"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn folder_sizes_replace_dir_until_the_folder_is_listed_again() {
+    let mut h = Harness::new().await;
+    let docs_row = |h: &mut Harness| {
+        h.screen().lines().find(|l| l.contains("docs/")).unwrap_or_default().to_owned()
+    };
+    let row = docs_row(&mut h);
+    assert!(row.contains("<DIR>"), "{row}");
+    h.key("Alt+S");
+    h.settle().await;
+    assert!(h.status().contains("1 folder: 9 B in all"), "{}", h.status());
+    let row = docs_row(&mut h);
+    assert!(row.contains("9 B") && !row.contains("<DIR>"), "{row}");
+    h.key("Ctrl+R");
+    h.settle().await;
+    let row = docs_row(&mut h);
+    assert!(row.contains("<DIR>"), "listing again forgets the count: {row}");
+}
+
+#[tokio::test]
+async fn disk_usage_lists_by_size_and_drills_down() {
+    let mut h = Harness::new().await;
+    h.key("Alt+U");
+    h.settle().await;
+    let rows = results(&h);
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert!(rows[0].ends_with("notes.txt"), "biggest first: {rows:?}");
+    assert!(rows[1].ends_with("docs/"), "{rows:?}");
+    h.key("Down");
+    h.key("Enter");
+    h.settle().await;
+    assert!(results(&h)[0].ends_with("readme.md"));
+    h.key("Backspace");
+    h.settle().await;
+    assert_eq!(results(&h).len(), 3, "back in the first folder");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn duplicates_are_found_by_content_across_both_panels() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/same.txt"), "the needle is here\n").unwrap();
+    fs::write(h.path("right/copy.txt"), "the needle is here\n").unwrap();
+    fs::write(h.path("right/other.txt"), "the needle is HERE\n").unwrap(); // same size, other content
+    h.app.perform(Action::Duplicates);
+    h.settle().await;
+    let rows = results(&h);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(rows[0].starts_with("Put 2 extra copies in the basket"), "{rows:?}");
+    assert!(rows[1].starts_with("3 copies of 19 B"), "{rows:?}");
+    h.key("Enter");
+    assert!(h.status().contains("2 extra copies are in the basket"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn no_duplicates_is_said() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::Duplicates);
+    h.settle().await;
+    assert!(h.status().contains("No duplicates among"), "{}", h.status());
+}
+
+// Runs the system's own tool; PowerShell on a Windows runner takes too long
+// to wait for, and the parsers of every system are tested in sc-frontend.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn the_disk_table_opens_or_says_why_not() {
+    let mut h = Harness::new().await;
+    h.key("Alt+K");
+    h.settle().await;
+    let shown = matches!(h.app.overlay(), Some(Overlay::Choose(_)));
+    assert!(shown || h.status().contains("Disks:"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn running_transfers_show_a_bar_and_their_numbers() {
+    let mut h = Harness::with_settings(|c| c.transfers.conflict = ConflictPolicy::Ask).await;
+    let idle = h.screen();
+    assert!(!idle.contains("1 job"), "idle: no transfer line");
+    fs::write(h.path("right/a.txt"), "old").unwrap();
+    h.focus("a.txt");
+    h.key("F5");
+    h.key("Enter");
+    // The copy waits for the answer, so it is running.
+    h.settle_until(|app| app.pending_conflict().is_some()).await;
+    let screen = h.screen();
+    assert!(screen.contains("1 job ·"), "{screen}");
+    h.press(KeyPress::char('o'));
+    h.settle_until(|app| sc_frontend::view::jobs_progress(&app.jobs, app).is_none()).await;
+    let screen = h.screen();
+    assert!(!screen.contains("1 job"), "the line goes with the job: {screen}");
+}
+
+#[tokio::test]
+async fn files_get_the_icon_of_their_kind_unless_icons_are_off() {
+    let mut h = Harness::new().await;
+    let screen = h.screen();
+    let row = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap_or_default().to_owned();
+    assert!(row("docs/").contains("▸ docs/"), "{}", row("docs/"));
+    assert!(row("a.txt").contains("≡ a.txt"), "{}", row("a.txt"));
+    assert!(!row("..").contains('▸'), "no icon for the parent entry");
+
+    let mut h = Harness::with_settings(|c| c.panels.icons = false).await;
+    let screen = h.screen();
+    assert!(!screen.contains("▸ docs/") && !screen.contains("≡ a.txt"), "{screen}");
 }

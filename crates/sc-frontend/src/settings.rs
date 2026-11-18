@@ -48,6 +48,8 @@ pub enum Field {
     TabWidth,
     /// Files above this size open as hex.
     HexAbove,
+    /// Icons for the kinds of files.
+    Icons,
     /// Font family of the window.
     FontFamily,
     /// Font size of the window.
@@ -67,6 +69,8 @@ pub enum FieldKind {
     Number(u64, u64),
     /// Free text: Enter types.
     Text,
+    /// A font family: Enter lists the installed fonts.
+    Font,
 }
 
 const SORTS: [(SortKey, &str); 4] = [
@@ -93,7 +97,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 21] = [
+    pub const ALL: [Field; 22] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -103,6 +107,7 @@ impl Field {
         Field::HumanSizes,
         Field::ArrowNavigation,
         Field::GitStatus,
+        Field::Icons,
         Field::ParallelJobs,
         Field::ParallelFiles,
         Field::Verify,
@@ -122,7 +127,9 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | Editor => "General",
-            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus => "Panels",
+            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
+                "Panels"
+            }
             ParallelJobs | ParallelFiles | Verify | Conflict | BandwidthLimit | Retries => {
                 "Transfers"
             }
@@ -144,6 +151,7 @@ impl Field {
             HumanSizes => "Sizes as KiB, MiB, GiB",
             ArrowNavigation => "← goes up, → enters a folder",
             GitStatus => "Git marks and branch in repositories",
+            Icons => "Icons for the kinds of files",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
             ParallelFiles => "Files at the same time in a job",
             Verify => "Check after copying",
@@ -153,9 +161,9 @@ impl Field {
             Wrap => "Wrap long lines",
             TabWidth => "Spaces per tab",
             HexAbove => "Open as hex above (MiB)",
-            FontFamily => "Font (empty: the system's)",
+            FontFamily => "Font",
             FontSize => "Font size in points (0: the system's)",
-            FixedFontFamily => "Fixed-width font (empty: monospace)",
+            FixedFontFamily => "Fixed-width font",
         }
     }
 
@@ -164,9 +172,10 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Wrap => FieldKind::Toggle,
+            | GitStatus | Icons | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
-            Editor | FontFamily | FixedFontFamily => FieldKind::Text,
+            Editor => FieldKind::Text,
+            FontFamily | FixedFontFamily => FieldKind::Font,
             FontSize => FieldKind::Number(0, 48),
             ParallelJobs => FieldKind::Number(1, 64),
             ParallelFiles => FieldKind::Number(1, 64),
@@ -192,6 +201,7 @@ impl Field {
             HumanSizes => on(p.human_sizes),
             ArrowNavigation => on(p.arrow_navigation),
             GitStatus => on(p.git_status),
+            Icons => on(p.icons),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
             Verify => name_of(&VERIFY, t.verify),
@@ -220,6 +230,7 @@ impl Field {
             HumanSizes => p.human_sizes ^= true,
             ArrowNavigation => p.arrow_navigation ^= true,
             GitStatus => p.git_status ^= true,
+            Icons => p.icons ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),
@@ -268,7 +279,7 @@ impl Field {
         let defaults = Config::default();
         let value = self.value(&defaults);
         match self.kind() {
-            FieldKind::Number(..) | FieldKind::Text => {
+            FieldKind::Number(..) | FieldKind::Text | FieldKind::Font => {
                 let _ = self.set(config, &value);
             }
             _ => {

@@ -20,6 +20,14 @@ ApplicationWindow {
     readonly property var screen: commander.screen ? JSON.parse(commander.screen) : null
     // The application, for windows drawn in other files (clicks).
     readonly property var app: commander
+    // The outlines of the file type icons, by shape name.
+    readonly property var iconShapes: {
+        var shapes = {}
+        var list = screen ? screen.icons : []
+        for (var i = 0; i < list.length; i++)
+            shapes[list[i].id] = list[i].strokes
+        return shapes
+    }
     // Gives the keyboard back to the application (after a file picker).
     function focusKeys() { keys.forceActiveFocus() }
     readonly property int activeSide: screen && screen.panels[1].active ? 1 : 0
@@ -85,7 +93,7 @@ ApplicationWindow {
         }
     }
 
-    Component.onCompleted: commander.start()
+    Component.onCompleted: commander.start(Qt.fontFamilies().join("\n"))
 
     // Rows that fit: tell the application, which scrolls and pages with it.
     function reportSize() {
@@ -153,6 +161,26 @@ ApplicationWindow {
                 Label {
                     text: window.screen ? window.screen.jobs : ""
                     color: window.accent
+                }
+            }
+
+            // Progress of the transfers: a thin line, only while there are some.
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 3
+                visible: window.screen ? window.screen.progress >= 0 : false
+                color: palette.mid
+                Rectangle {
+                    height: parent.height
+                    width: parent.width * (window.screen ? Math.max(0, window.screen.progress) : 0)
+                    color: window.accent
+                }
+                // A click opens the transfer queue.
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.topMargin: -6
+                    anchors.bottomMargin: -6
+                    onClicked: commander.perform("tools.jobs")
                 }
             }
 

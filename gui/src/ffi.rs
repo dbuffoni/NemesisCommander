@@ -26,8 +26,9 @@ pub mod qobject {
         type Commander = super::CommanderRust;
 
         /// Creates the application; call once, when the window is ready.
+        /// `fonts` are the installed font families, one per line.
         #[qinvokable]
-        fn start(self: Pin<&mut Commander>);
+        fn start(self: Pin<&mut Commander>, fonts: &QString);
 
         /// A key press: `event.key`, `event.text` and `event.modifiers`.
         #[qinvokable]

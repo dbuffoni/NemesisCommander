@@ -116,7 +116,7 @@ impl CommanderRust {
 }
 
 impl qobject::Commander {
-    pub(crate) fn start(mut self: Pin<&mut Self>) {
+    pub(crate) fn start(mut self: Pin<&mut Self>, fonts: &QString) {
         if self.rust().app.is_some() {
             return;
         }
@@ -130,10 +130,11 @@ impl qobject::Commander {
             let _inside = runtime.enter();
             create_app(&startup)
         };
-        let (app, mut events) = match created {
+        let (mut app, mut events) = match created {
             Ok(created) => created,
             Err(e) => return self.fail(&e),
         };
+        app.set_fonts(fonts.to_string().lines().map(str::to_owned).collect());
 
         // Background results go to the Qt thread in batches, at most about
         // sixty times a second, so a fast transfer cannot flood the window.
