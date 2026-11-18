@@ -50,7 +50,23 @@ pub struct S3Provider {
     host: String,
     /// `/bucket` with path-style addressing, empty with virtual hosts.
     path_prefix: String,
+    /// Multipart uploads that failed on the network, by key, so that the
+    /// next attempt at the same file skips the parts already stored.
+    pending: Arc<std::sync::Mutex<Vec<(String, PendingUpload)>>>,
 }
+
+/// A stored part of a multipart upload: SHA-256 of its content and ETag.
+type StoredPart = ([u8; 32], String);
+
+/// A multipart upload that was interrupted.
+struct PendingUpload {
+    id: String,
+    /// The parts that were stored.
+    parts: Vec<StoredPart>,
+}
+
+/// How many interrupted uploads are kept (the oldest is aborted).
+const MAX_PENDING_UPLOADS: usize = 4;
 
 /// How long a connection may stay silent before a request fails.
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
@@ -125,7 +141,15 @@ impl S3Provider {
         };
         let host = origin.split_once("://").map_or(origin.as_str(), |(_, h)| h);
         let host = host.split('/').next().unwrap_or(host).to_owned();
-        Ok(S3Provider { client, settings, bucket: bucket.to_owned(), origin, host, path_prefix })
+        Ok(S3Provider {
+            client,
+            settings,
+            bucket: bucket.to_owned(),
+            origin,
+            host,
+            path_prefix,
+            pending: Arc::new(std::sync::Mutex::new(Vec::new())),
+        })
     }
 
     /// The object key of `path` (no leading slash).
@@ -285,17 +309,38 @@ impl S3Provider {
         mut body: nmc_vfs::UploadBody,
     ) -> Result<()> {
         let mut buffer = BytesMut::new();
-        let mut upload: Option<(String, Vec<String>)> = None;
+        // The upload in progress: its id and the parts stored so far.
+        let mut upload: Option<(String, Vec<StoredPart>)> = None;
+        // Parts stored by an interrupted attempt at this file.
+        let mut known: Vec<StoredPart> = Vec::new();
         let result = async {
             while let Some(chunk) = body.next().await {
                 buffer.extend_from_slice(&chunk.map_err(|e| VfsError::from_io(&path, e))?);
                 if buffer.len() >= PART_SIZE {
                     if upload.is_none() {
-                        upload = Some((self.start_multipart(&key, &path).await?, Vec::new()));
+                        let earlier = self.take_pending(&key);
+                        let id = match earlier {
+                            Some(pending) => {
+                                known = pending.parts;
+                                pending.id
+                            }
+                            None => self.start_multipart(&key, &path).await?,
+                        };
+                        // Recorded from the start, so that the stored parts
+                        // survive an upload that is dropped (the copy was
+                        // interrupted) and not only one that fails.
+                        self.keep_pending(
+                            &key,
+                            PendingUpload { id: id.clone(), parts: known.clone() },
+                        );
+                        upload = Some((id, Vec::new()));
                     }
-                    let (id, etags) = upload.as_mut().expect("started above");
+                    let (id, parts) = upload.as_mut().expect("started above");
                     let part = buffer.split_to(PART_SIZE).freeze();
-                    etags.push(self.upload_part(&key, id, etags.len() + 1, part, &path).await?);
+                    let index = parts.len();
+                    let done = self.store_part(&key, id, index, &known, part, &path).await?;
+                    self.record_part(&key, id, index, &done);
+                    parts.push(done);
                 }
             }
             match upload.as_mut() {
@@ -307,14 +352,18 @@ impl S3Provider {
                     }
                     self.call(call.body(buffer.split().freeze()), &path).await.map(drop)
                 }
-                Some((id, etags)) => {
+                Some((id, parts)) => {
                     if !buffer.is_empty() {
                         let part = buffer.split().freeze();
-                        etags.push(self.upload_part(&key, id, etags.len() + 1, part, &path).await?);
+                        let index = parts.len();
+                        let done = self.store_part(&key, id, index, &known, part, &path).await?;
+                        self.record_part(&key, id, index, &done);
+                        parts.push(done);
                     }
+                    let etags: Vec<String> = parts.iter().map(|(_, etag)| etag.clone()).collect();
                     let call = Call::new(Method::POST, &key)
                         .query("uploadId", id.clone())
-                        .body(xml::complete_body(etags));
+                        .body(xml::complete_body(&etags));
                     let response = self.call(call, &path).await?;
                     let text = response.text().await.map_err(|e| network(e, &path))?;
                     match xml::parse_error(&text) {
@@ -327,13 +376,76 @@ impl S3Provider {
             }
         }
         .await;
-        if result.is_err()
-            && let Some((id, _)) = upload
-        {
-            // Abandoned parts would be billed until deleted.
-            let _ = self.send(Call::new(Method::DELETE, &key).query("uploadId", id)).await;
+        match (&result, upload) {
+            (Ok(()), Some(_)) => {
+                self.take_pending(&key); // done: nothing to resume
+            }
+            (Err(error), Some((id, parts))) => {
+                let transient = matches!(error, VfsError::Io { .. } | VfsError::Other(_));
+                if transient && !parts.is_empty() {
+                    // Keep the stored parts: the next attempt at this file
+                    // skips them (see `keep_pending`).
+                } else {
+                    self.take_pending(&key);
+                    let _ = self.send(Call::new(Method::DELETE, &key).query("uploadId", id)).await;
+                }
+            }
+            _ => {}
         }
         result
+    }
+
+    /// The interrupted upload of `key`, if there is one (removing it).
+    fn take_pending(&self, key: &str) -> Option<PendingUpload> {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let index = pending.iter().position(|(k, _)| k == key)?;
+        Some(pending.remove(index).1)
+    }
+
+    /// Remembers an upload that may be interrupted. At most
+    /// [`MAX_PENDING_UPLOADS`] are kept, since abandoned parts are billed
+    /// until deleted: the oldest is forgotten (the server removes it with a
+    /// lifecycle rule, or it is replaced when that key is uploaded again).
+    fn keep_pending(&self, key: &str, upload: PendingUpload) {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        pending.retain(|(k, _)| k != key);
+        pending.push((key.to_owned(), upload));
+        let excess = pending.len().saturating_sub(MAX_PENDING_UPLOADS);
+        pending.drain(..excess);
+    }
+
+    /// Notes that part `index + 1` of the upload `id` of `key` is stored.
+    fn record_part(&self, key: &str, id: &str, index: usize, part: &StoredPart) {
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, upload)) = pending.iter_mut().find(|(k, u)| k == key && u.id == id) {
+            if index < upload.parts.len() {
+                upload.parts[index] = part.clone();
+            } else {
+                upload.parts.push(part.clone());
+            }
+        }
+    }
+
+    /// Stores part number `index + 1`, unless an interrupted attempt already
+    /// stored identical content for it (same SHA-256): then its ETag is used.
+    async fn store_part(
+        &self,
+        key: &str,
+        id: &str,
+        index: usize,
+        known: &[StoredPart],
+        data: Bytes,
+        path: &VfsPath,
+    ) -> Result<StoredPart> {
+        use sha2::{Digest, Sha256};
+        let digest: [u8; 32] = Sha256::digest(&data).into();
+        if let Some((sha, etag)) = known.get(index)
+            && *sha == digest
+        {
+            return Ok((digest, etag.clone()));
+        }
+        let etag = self.upload_part(key, id, index + 1, data, path).await?;
+        Ok((digest, etag))
     }
 
     async fn start_multipart(&self, key: &str, path: &VfsPath) -> Result<String> {
@@ -582,6 +694,11 @@ impl Provider for S3Provider {
 }
 
 impl S3Provider {
+    /// How many interrupted multipart uploads are remembered for resuming.
+    pub fn interrupted_uploads(&self) -> usize {
+        self.pending.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
     /// Where requests go: the custom endpoint, or the AWS host.
     pub fn endpoint(&self) -> &str {
         &self.origin
@@ -597,6 +714,7 @@ impl S3Provider {
             origin: self.origin.clone(),
             host: self.host.clone(),
             path_prefix: self.path_prefix.clone(),
+            pending: self.pending.clone(),
         })
     }
 }

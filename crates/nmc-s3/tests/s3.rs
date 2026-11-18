@@ -189,6 +189,36 @@ async fn large_files_use_multipart_uploads() {
 }
 
 #[tokio::test]
+async fn an_interrupted_multipart_upload_is_resumed_by_the_next_attempt() {
+    let f = Fixture::new().await;
+    let path = f.remote("resumed.bin");
+    let data: Vec<u8> = (0..19_000_000u32).map(|i| (i % 249) as u8).collect();
+
+    // The first attempt stores two parts and is dropped before it ends.
+    let mut sink = f
+        .provider
+        .write(&path, WriteOptions { mode: WriteMode::CreateNew, size_hint: None })
+        .await
+        .unwrap();
+    sink.write_all(&data[..17_500_000]).await.unwrap();
+    for _ in 0..50 {
+        if f.provider.interrupted_uploads() == 1 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    drop(sink);
+    assert_eq!(f.provider.interrupted_uploads(), 1);
+    assert!(f.provider.stat(&path).await.is_err(), "nothing is visible before the end");
+
+    // The next attempt at the same file reuses the stored parts and completes.
+    write_all(&f.provider, &path, WriteMode::CreateNew, &data).await;
+    assert_eq!(fs::read(f.local("resumed.bin")).unwrap(), data);
+    assert_eq!(f.provider.interrupted_uploads(), 0);
+}
+
+#[tokio::test]
 async fn folders_can_be_created_renamed_and_removed() {
     let f = Fixture::new().await;
     let folder = f.remote("new");
