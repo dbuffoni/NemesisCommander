@@ -226,6 +226,38 @@ Rectangle {
                                      : modelData.git === "?" ? panel.theme.codeColor
                                      : panel.theme.dim
                             }
+                            // The kind of file, as a bold single-colour outline.
+                            Canvas {
+                                id: glyph
+                                visible: modelData.icon !== ""
+                                Layout.preferredWidth: visible ? 16 : 0
+                                Layout.preferredHeight: 16
+                                Layout.rightMargin: -6
+                                Layout.alignment: Qt.AlignVCenter
+                                property string shape: modelData.icon
+                                property string tint: modelData.icon_color
+                                onShapeChanged: requestPaint()
+                                onTintChanged: requestPaint()
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    ctx.reset()
+                                    var strokes = panel.theme.iconShapes[shape]
+                                    if (!strokes)
+                                        return
+                                    ctx.strokeStyle = tint
+                                    ctx.lineWidth = 1.6
+                                    ctx.lineJoin = "round"
+                                    ctx.lineCap = "round"
+                                    for (var i = 0; i < strokes.length; i++) {
+                                        var line = strokes[i]
+                                        ctx.beginPath()
+                                        ctx.moveTo(line[0], line[1])
+                                        for (var j = 2; j + 1 < line.length; j += 2)
+                                            ctx.lineTo(line[j], line[j + 1])
+                                        ctx.stroke()
+                                    }
+                                }
+                            }
                             Label {
                                 Layout.fillWidth: true
                                 text: modelData.name

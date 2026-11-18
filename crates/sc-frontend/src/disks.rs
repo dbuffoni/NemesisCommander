@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(rows[1].mount.as_deref(), Some("/Volumes/My Disk"));
         assert_eq!(
             (rows[1].size, rows[1].used, rows[1].free),
-            (1024_000, Some(409_600), Some(614_400))
+            (1_024_000, Some(409_600), Some(614_400))
         );
     }
 

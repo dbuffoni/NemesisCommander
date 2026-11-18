@@ -14,6 +14,9 @@ use crate::dialogs::{ChooseDialog, ChoosePurpose, Overlay};
 use crate::input::KeyPress;
 use crate::usage::{self, Usage};
 
+/// A file's path and when it was last changed.
+type Copy = (VfsPath, Option<SystemTime>);
+
 impl App {
     // --------------------------------------------------------- folder sizes
 
@@ -143,7 +146,7 @@ impl App {
         self.set_status("Looking for duplicates…");
         self.spawn_task(async move {
             let mut seen = HashSet::new();
-            let mut by_size: BTreeMap<u64, Vec<(VfsPath, Option<SystemTime>)>> = BTreeMap::new();
+            let mut by_size: BTreeMap<u64, Vec<Copy>> = BTreeMap::new();
             let mut files = 0usize;
             for root in &roots {
                 let provider = match registry.provider_for(root).await {
@@ -185,8 +188,7 @@ impl App {
                     .filter_map(|found| async move { found })
                     .collect()
                     .await;
-            let mut grouped: BTreeMap<(u64, String), Vec<(VfsPath, Option<SystemTime>)>> =
-                BTreeMap::new();
+            let mut grouped: BTreeMap<(u64, String), Vec<Copy>> = BTreeMap::new();
             for (size, hash, path, modified) in hashed {
                 grouped.entry((size, hash)).or_default().push((path, modified));
             }

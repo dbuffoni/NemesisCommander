@@ -27,6 +27,7 @@ pub mod drives;
 pub mod export;
 pub mod frecency;
 pub mod git;
+pub mod icons;
 mod input;
 pub mod preview;
 pub mod searches;

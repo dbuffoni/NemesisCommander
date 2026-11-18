@@ -90,7 +90,7 @@ Commands** in the bar at the bottom opens it too.
 
 ## The panels
 
-Each panel lists one folder: name, size and modification date. The title of
+Each panel lists one folder: an icon, name, size and modification date. The title of
 the panel shows the location (your home folder is written `~`); the column
 titles show the sort order with an arrow. Folders are bold and end in `/`;
 `..` goes up.
@@ -104,11 +104,49 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
   date; pressing the same one again reverses the order.
 - **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`).
-- **Ctrl+U** swaps the panels, **Alt+O** opens this folder in the other one.
+- **Ctrl+↓** (or **Ctrl+U**) swaps the panels, **Ctrl+↑** (or **Alt+O**) opens
+  this folder in the other one.
   **Ctrl+←** and **Ctrl+→** open the folder under the cursor in the left or
   right panel (on a file, this panel's folder). With "← goes up, → enters a
   folder" on in the settings, **←** goes to the parent folder and **→** enters
   the folder under the cursor.
+
+### File type icons
+
+Every entry starts with a small icon for its kind: a bold outline in one
+colour with no fill, so it stays quiet next to the name. There are icons for
+folders and for more than thirty kinds of files, in groups: office documents
+(PDF red, Word-like documents blue, spreadsheets green, presentations orange),
+text and Markdown, source code, scripts, data and settings files, pictures,
+audio, video, archives, 3D models and drawings, fonts, programs and
+installers, disc images, keys and certificates, and e-books. The kind comes
+from the name's extension and the entry's type, so files on remote locations
+have icons too. The terminal interface shows one coloured character per kind
+(`▸` folder, `≡` text, `▤` document, `▲` picture…). The setting **Icons for
+the kinds of files** (Panels) turns them off.
+
+### Folder sizes and disk usage
+
+A folder shows `<DIR>` instead of a size because counting is slow on big
+trees. **Alt+S** counts the selected folders (all the folders of the panel when
+nothing is selected) in the background and shows their sizes in the size
+column; the status line adds up what was counted. The sizes stay until the
+folder is listed again (Ctrl+R, or opening it again).
+
+**Alt+U** (Disk usage) lists the items of this folder by size, biggest first,
+with a bar relative to the biggest, its share of the total and its size. Enter
+looks into a folder, Backspace goes up, Esc closes. It works on any location,
+including remote ones.
+
+### Disks and partitions
+
+**Alt+K** (Disks and partitions) shows the disks of this computer with their
+partitions: name, type (disk, partition, LVM, removable…), size, partition table
+(GPT or MBR), file system, a bar with the space used, the free space, where each
+one is mounted and its label or model. Enter opens the mount point in the
+panel. The list comes from the system's own tools (`lsblk` on Linux, `df` on
+macOS, PowerShell on Windows), so nothing needs special rights; what the system
+does not tell is shown as `-`.
 
 The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
@@ -370,6 +408,16 @@ is only on one side. When a side is an agent connection (`agent://`), the agent
 computes the hashes where the files are, so nothing is downloaded: this is the
 way to compare two servers.
 
+### Duplicate files
+
+**Find duplicate files** (F9) looks at the files in both panels' folders and
+below, groups the ones with the same size, and hashes only those groups
+(BLAKE3; on an agent connection the hashes are computed where the files are, so
+nothing is downloaded). Each group keeps its oldest copy. Enter on a group
+shows the copy that is kept; the first row puts every extra copy in the basket
+(Ctrl+B), ready to delete or move. Nothing is deleted by the command itself,
+and empty files are ignored.
+
 ### Similar pictures
 
 **Find similar pictures** (F9) looks at the pictures in this folder and below
@@ -510,7 +558,13 @@ route taken; `--route` chooses one.
 Copies and moves run in the background as jobs. **Ctrl+J** shows the queue:
 progress, speed and errors of each job, with keys to pause (`p`), resume or
 retry (`r`), cancel (`c`), change priority (`+`/`-`) and clear finished jobs
-(`x`). The status line shows how many jobs are running and their progress.
+(`x`).
+
+While jobs run, a thin line above the status line shows their progress and,
+next to it, the numbers: `2 jobs · 40% · 12.4 MiB/s · 0:42 left · 3 queued`
+(the speed is measured over the last few seconds, so the time left appears
+after the first one; the line goes when the jobs end). In the window, a click on
+the line opens the queue.
 
 ![Transfer queue](images/jobs.png)
 
@@ -522,7 +576,10 @@ parallel jobs and files, retries, and a bandwidth limit.
 ## Bookmarks, tabs and history
 
 - **Ctrl+Shift+D** bookmarks the current folder, **Ctrl+D** lists the
-  bookmarks (Enter opens one, Delete removes it).
+  bookmarks and, below them, the recent folders (Enter opens one; Delete
+  removes a bookmark). Move with the arrows, or just type: only the
+  bookmarks whose name or folder contains the text (case does not matter)
+  stay, and the five most recent folders that match are listed below them.
 - **Ctrl+Alt+D** bookmarks the current folder together with the folder
   shown in the other panel, its *target*. Opening the bookmark then sets
   both panels at once. Press Ctrl+Alt+D again on the same folder with
@@ -545,12 +602,13 @@ parallel jobs and files, retries, and a bandwidth limit.
 
 ![Bookmarks](images/bookmarks.png)
 
-### Frequent folders
+### Recent folders
 
-Every folder you open is remembered with how often and how recently. **Alt+J**
-asks for part of a name (every word must be in the path, the last one in the
-folder's name) and opens the best match, or lists the matches; with nothing
-typed it lists the most used. Remote folders count too.
+Every folder you open is remembered, local or remote. The bookmarks list
+(Ctrl+D) shows the most recent ones under the bookmarks, five at a time, so a
+folder you use often is a few keys away without bookmarking it. The old
+"frequent folders" command (Alt+J) is gone: its shortcut, if you set one, now
+opens the bookmarks list.
 
 ## Plugins and scripts
 
@@ -641,14 +699,16 @@ with a dot.
   default back.
   - General: confirm before deleting, use the recycle bin, the editor.
   - Panels: hidden files, sort order, human-readable sizes, ← and → to move
-    between folders, git marks.
+    between folders, git marks, icons for the kinds of files.
   - Transfers: jobs at the same time (1 runs them one after the other, in
     priority order), files at the same time in a job, the check after
     copying, what to do when a file exists, the bandwidth limit, retries.
   - Viewer: wrapping, tab width, when to open files as hex.
   - Window fonts: the font and its size for all text, and the fixed-width
     font of the viewers and lists (empty or 0: the system's). Only the
-    window uses them; the terminal interface uses the terminal's font.
+    window uses them; the terminal interface uses the terminal's font. Enter
+    on a font opens the list of the installed fonts (type to narrow it;
+    "(system default)" is the first row); there is no free text to get wrong.
 
 The same settings serve the window and the terminal interface: a shortcut
 changed in one works in the other.
@@ -718,15 +778,14 @@ on the settings screen (Ctrl+,).
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
 | D, Alt+F1, Ctrl+N | Drives and connections (on a connection: F2 rename, F4 private key) |
-| Ctrl+D | Bookmarks |
+| Ctrl+D | Bookmarks and recent folders (type to filter) |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |
 | Ctrl+T, Ctrl+W | New tab, close tab |
 | Ctrl+Tab, Ctrl+PageDown | Next tab |
 | Ctrl+Shift+Tab, Ctrl+PageUp | Previous tab |
-| Alt+O | Open this folder in the other panel |
-| Ctrl+U | Swap panels |
-| Alt+J | Jump to a frequent folder |
+| Ctrl+↑, Alt+O | Open this folder in the other panel |
+| Ctrl+↓, Ctrl+U | Swap panels |
 | Ctrl+B | Basket |
 | Ctrl+←, Ctrl+→ | Open the folder under the cursor in the left / right panel |
 
@@ -737,12 +796,15 @@ on the settings screen (Ctrl+,).
 | Ctrl+S | Quick filter |
 | Ctrl+F3, Ctrl+F4, Ctrl+F6, Ctrl+F5 | Sort by name, extension, size, date |
 | Ctrl+Q | Quick view in the other panel |
+| Alt+S | Count folder sizes |
 
 | Tools | |
 |---|---|
 | Alt+F7 | Search |
 | Alt+C | Compare files or folders |
-| (F9 only) | Compare folders by content, Synchronize folders, Find similar pictures, Saved searches, Save the last search |
+| Alt+U | Disk usage of this folder |
+| Alt+K | Disks and partitions |
+| (F9 only) | Compare folders by content, Synchronize folders, Find duplicate files, Find similar pictures, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
 | Alt+X | Plugins and scripts |
 | (F9 only) | Write a script with AI |

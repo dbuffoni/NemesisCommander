@@ -37,6 +37,18 @@ pub struct Screen {
     pub conflict: Option<ConflictView>,
     /// The fonts of the window (the terminal ignores them).
     pub fonts: FontsView,
+    /// The outlines of the icons the rows refer to (empty when icons are
+    /// off); the terminal ignores them.
+    pub icons: Vec<IconShape>,
+}
+
+/// The outline of an icon on a 16 × 16 grid.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct IconShape {
+    /// The name rows refer to.
+    pub id: &'static str,
+    /// Lines as `x, y, x, y, …`; one that ends where it began is closed.
+    pub strokes: Vec<Vec<u8>>,
 }
 
 /// The fonts chosen in the settings; empty or 0 means the system's.
@@ -110,6 +122,11 @@ pub struct RowView {
     pub cursor: bool,
     /// Git mark: `M` changed, `?` untracked, `!` ignored, empty for none.
     pub git: String,
+    /// The shape of its icon (see [`crate::icons::Shape::id`]); empty when
+    /// icons are off or for the parent entry.
+    pub icon: String,
+    /// The icon's colour (`#rrggbb`).
+    pub icon_color: String,
     /// The file as a `file://` URL, for dragging it to other programs;
     /// empty for anything that is not on this disk.
     pub url: String,
@@ -447,6 +464,14 @@ impl Screen {
             keys,
             overlay,
             conflict,
+            icons: if app.context().config.panels.icons {
+                crate::icons::Shape::ALL
+                    .iter()
+                    .map(|s| IconShape { id: s.id(), strokes: s.strokes() })
+                    .collect()
+            } else {
+                Vec::new()
+            },
             fonts: FontsView {
                 family: app.context().config.appearance.font_family.clone(),
                 size: app.context().config.appearance.font_size,
@@ -499,6 +524,7 @@ pub fn scroll_offset(offset: usize, cursor: usize, rows: usize, total: usize) ->
 fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
     let index = side_index(side);
     let human = app.context().config.panels.human_sizes;
+    let icons = app.context().config.panels.icons;
     let active = app.workspace.active_side() == side;
     let side_state = app.workspace.side(side);
     let panel = side_state.panel();
@@ -529,7 +555,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .take(rows)
         .map(|(i, entry)| {
             let counted = counted_size(sizes, panel.location(), entry);
-            row_view(panel, entry, i == cursor, human, git.as_deref(), counted)
+            row_view(panel, entry, i == cursor, human, git.as_deref(), counted, icons)
         })
         .collect();
     let view = PanelView {
@@ -586,7 +612,9 @@ fn row_view(
     human: bool,
     git: Option<&crate::git::GitStatus>,
     counted: Option<u64>,
+    icons: bool,
 ) -> RowView {
+    let icon = (icons && entry.name != PARENT).then(|| crate::icons::icon_for(entry));
     let mut name = entry.name.clone();
     if entry.is_dir() && entry.name != PARENT {
         name.push('/');
@@ -600,6 +628,8 @@ fn row_view(
         selected: panel.is_selected(&entry.name),
         cursor,
         git: git_mark(git, &entry.name),
+        icon: icon.map(|i| i.shape.id().to_owned()).unwrap_or_default(),
+        icon_color: icon.map(|i| i.color.to_owned()).unwrap_or_default(),
         url: if entry.name == PARENT {
             String::new()
         } else {

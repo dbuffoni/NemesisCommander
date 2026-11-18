@@ -89,3 +89,10 @@ shot sync 1280x800 "F9 s y n c Enter Enter" "$left" "$right"
 shot basket 1280x800 "Down Insert Down Insert Alt+B Ctrl+B" "$left" "$right"
 # Copy path: the forms offered.
 shot copy-path 1280x800 "Down Alt+P" "$left" "$right"
+# Folder sizes counted in the panel, then the disk usage list.
+shot folder-sizes 1280x800 "Alt+S" "$demo/home" "$right"
+shot disk-usage 1280x800 "Alt+U" "$demo/home" "$right"
+# Disks and partitions of the machine the pictures are taken on.
+shot disks 1280x800 "Alt+K" "$left" "$right"
+# Bookmarks with the recent folders under them, filtered by typing.
+shot bookmarks-filter 1280x800 "Ctrl+Shift+D Down Enter Backspace Ctrl+D w e b" "$left" "$right"

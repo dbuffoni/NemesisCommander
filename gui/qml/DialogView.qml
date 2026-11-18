@@ -62,7 +62,19 @@ Item {
         property bool fixed: false
         Layout.fillWidth: true
         Layout.preferredHeight: Math.min(contentHeight, dialogs.height * 0.6)
-        implicitWidth: 480
+        // Columns in a fixed-width font may need more than the usual width
+        // (the disk table); the dialog is capped by the window.
+        implicitWidth: {
+            var longest = 0
+            var rows = model ? model : []
+            for (var i = 0; i < rows.length; i++)
+                longest = Math.max(longest, rows[i].length)
+            return fixed ? Math.max(480, longest * rowMetrics.averageCharacterWidth + 32) : 480
+        }
+        FontMetrics {
+            id: rowMetrics
+            font: dialogs.theme.fixedFont
+        }
         interactive: false
         clip: true
         onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)

@@ -48,6 +48,8 @@ pub enum Field {
     TabWidth,
     /// Files above this size open as hex.
     HexAbove,
+    /// Icons for the kinds of files.
+    Icons,
     /// Font family of the window.
     FontFamily,
     /// Font size of the window.
@@ -95,7 +97,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 21] = [
+    pub const ALL: [Field; 22] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -105,6 +107,7 @@ impl Field {
         Field::HumanSizes,
         Field::ArrowNavigation,
         Field::GitStatus,
+        Field::Icons,
         Field::ParallelJobs,
         Field::ParallelFiles,
         Field::Verify,
@@ -124,7 +127,9 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | Editor => "General",
-            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus => "Panels",
+            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
+                "Panels"
+            }
             ParallelJobs | ParallelFiles | Verify | Conflict | BandwidthLimit | Retries => {
                 "Transfers"
             }
@@ -146,6 +151,7 @@ impl Field {
             HumanSizes => "Sizes as KiB, MiB, GiB",
             ArrowNavigation => "← goes up, → enters a folder",
             GitStatus => "Git marks and branch in repositories",
+            Icons => "Icons for the kinds of files",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
             ParallelFiles => "Files at the same time in a job",
             Verify => "Check after copying",
@@ -166,7 +172,7 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Wrap => FieldKind::Toggle,
+            | GitStatus | Icons | Wrap => FieldKind::Toggle,
             Sort | Verify | Conflict => FieldKind::Choice,
             Editor => FieldKind::Text,
             FontFamily | FixedFontFamily => FieldKind::Font,
@@ -195,6 +201,7 @@ impl Field {
             HumanSizes => on(p.human_sizes),
             ArrowNavigation => on(p.arrow_navigation),
             GitStatus => on(p.git_status),
+            Icons => on(p.icons),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
             Verify => name_of(&VERIFY, t.verify),
@@ -223,6 +230,7 @@ impl Field {
             HumanSizes => p.human_sizes ^= true,
             ArrowNavigation => p.arrow_navigation ^= true,
             GitStatus => p.git_status ^= true,
+            Icons => p.icons ^= true,
             Wrap => v.wrap ^= true,
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),

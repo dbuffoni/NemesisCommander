@@ -20,6 +20,14 @@ ApplicationWindow {
     readonly property var screen: commander.screen ? JSON.parse(commander.screen) : null
     // The application, for windows drawn in other files (clicks).
     readonly property var app: commander
+    // The outlines of the file type icons, by shape name.
+    readonly property var iconShapes: {
+        var shapes = {}
+        var list = screen ? screen.icons : []
+        for (var i = 0; i < list.length; i++)
+            shapes[list[i].id] = list[i].strokes
+        return shapes
+    }
     // Gives the keyboard back to the application (after a file picker).
     function focusKeys() { keys.forceActiveFocus() }
     readonly property int activeSide: screen && screen.panels[1].active ? 1 : 0

@@ -13,6 +13,7 @@ use sc_transfer::JobState;
 
 use sc_frontend::commands::CommandPalette;
 use sc_frontend::drives::drive_label;
+use sc_frontend::icons::icon_for;
 use sc_frontend::preview::Zoom;
 use sc_frontend::view::{
     column_headers, commands_view, counted_size, describe, entry_details, git_mark, git_of,
@@ -167,8 +168,10 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let show_date = width >= 40;
     // Two columns for the git mark when the folder is in a repository.
     let mark_width = if git.is_some() { 2 } else { 0 };
+    // Two more for the icon of the kind of file.
+    let icon_width = if app.context().config.panels.icons { 2 } else { 0 };
     let name_width = width
-        .saturating_sub(SIZE_WIDTH + 1 + mark_width)
+        .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
@@ -227,12 +230,41 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
                 style.add_modifier(Modifier::UNDERLINED)
             };
         }
-        lines.push(Line::styled(text, style));
+        let line = if icon_width > 0 && entry.name != PARENT {
+            let icon = icon_for(entry);
+            let mut colour = style;
+            if i != cursor && !panel.is_selected(&entry.name) {
+                colour = colour.fg(hex_colour(icon.color));
+            }
+            // The icon sits after the git mark, before the name.
+            let (mark_text, rest) =
+                text.split_at(text.char_indices().nth(mark_width).map_or(text.len(), |(b, _)| b));
+            Line::from(vec![
+                Span::styled(mark_text.to_owned(), style),
+                Span::styled(format!("{} ", icon.shape.glyph()), colour),
+                Span::styled(rest.to_owned(), style),
+            ])
+        } else if icon_width > 0 {
+            let (mark_text, rest) =
+                text.split_at(text.char_indices().nth(mark_width).map_or(text.len(), |(b, _)| b));
+            Line::styled(format!("{mark_text}  {rest}"), style)
+        } else {
+            Line::styled(text, style)
+        };
+        lines.push(line);
     }
     if panel.is_loading() && panel.entries().is_empty() {
         lines.push(Line::styled("loading…", dim()));
     }
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// The terminal colour for a `#rrggbb` string.
+fn hex_colour(hex: &str) -> Color {
+    let channel = |range: std::ops::Range<usize>| {
+        hex.get(range).and_then(|c| u8::from_str_radix(c, 16).ok()).unwrap_or(128)
+    };
+    Color::Rgb(channel(1..3), channel(3..5), channel(5..7))
 }
 
 /// Pads or cuts `text` to exactly `width` characters (cut text ends in `…`).

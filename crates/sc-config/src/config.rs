@@ -79,6 +79,8 @@ pub struct PanelSettings {
     pub arrow_navigation: bool,
     /// Mark changed files and show the branch inside git repositories.
     pub git_status: bool,
+    /// Draw a small outline icon for the kind of each file before its name.
+    pub icons: bool,
 }
 
 impl Default for PanelSettings {
@@ -90,6 +92,7 @@ impl Default for PanelSettings {
             human_sizes: true,
             arrow_navigation: false,
             git_status: true,
+            icons: true,
         }
     }
 }

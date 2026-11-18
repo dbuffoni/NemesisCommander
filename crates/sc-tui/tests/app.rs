@@ -1494,8 +1494,8 @@ async fn panels_in_a_git_repository_show_marks_and_the_branch() {
     let screen = h.screen();
     assert!(screen.contains("⎇ trunk"), "branch in the title:\n{screen}");
     let line = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap_or("").to_owned();
-    assert!(line("tracked.txt").contains("M tracked.txt"), "{screen}");
-    assert!(line("loose.txt").contains("? loose.txt"), "{screen}");
+    assert!(line("tracked.txt").contains("M ≡ tracked.txt"), "{screen}");
+    assert!(line("loose.txt").contains("? ≡ loose.txt"), "{screen}");
     assert!(h.app.git[1].is_none(), "the other folder is not a repository");
 }
 
@@ -2097,4 +2097,18 @@ async fn running_transfers_show_a_bar_and_their_numbers() {
     h.settle_until(|app| sc_frontend::view::jobs_progress(&app.jobs, app).is_none()).await;
     let screen = h.screen();
     assert!(!screen.contains("1 job"), "the line goes with the job: {screen}");
+}
+
+#[tokio::test]
+async fn files_get_the_icon_of_their_kind_unless_icons_are_off() {
+    let mut h = Harness::new().await;
+    let screen = h.screen();
+    let row = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap_or_default().to_owned();
+    assert!(row("docs/").contains("▸ docs/"), "{}", row("docs/"));
+    assert!(row("a.txt").contains("≡ a.txt"), "{}", row("a.txt"));
+    assert!(!row("..").contains('▸'), "no icon for the parent entry");
+
+    let mut h = Harness::with_settings(|c| c.panels.icons = false).await;
+    let screen = h.screen();
+    assert!(!screen.contains("▸ docs/") && !screen.contains("≡ a.txt"), "{screen}");
 }

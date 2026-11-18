@@ -106,8 +106,6 @@ impl Frecency {
 mod tests {
     use super::*;
 
-    const DAY: u64 = 86_400;
-
     #[test]
     fn recent_folders_match_the_text_and_come_newest_first() {
         let mut f = Frecency::in_memory();

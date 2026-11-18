@@ -723,7 +723,13 @@ impl App {
                 }
             }
             AppEvent::Undoable(..) => {}
-            AppEvent::Show(overlay) => self.overlay = Some(*overlay),
+            AppEvent::Show(overlay) => {
+                // "Measuring…" and the like are over once the window is there.
+                if self.status.as_ref().is_some_and(|s| !s.error && s.text.ends_with('…')) {
+                    self.status = None;
+                }
+                self.overlay = Some(*overlay);
+            }
             AppEvent::FolderSizes { sizes } => self.folder_sizes_counted(sizes),
             AppEvent::SyncCopies { copies, deleted, error } => {
                 let files = self.queue_sync_copies(copies);

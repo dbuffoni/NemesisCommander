@@ -109,7 +109,7 @@ pub fn rows(usages: &[Usage]) -> Vec<String> {
     usages
         .iter()
         .map(|u| {
-            let share = if total == 0 { 0 } else { u.bytes * 100 / total };
+            let share = (u.bytes * 100).checked_div(total).unwrap_or(0);
             format!(
                 "{} {share:>3}%  {:>10}  {}{}",
                 bar(u.bytes, biggest, 12),
