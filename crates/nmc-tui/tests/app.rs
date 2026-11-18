@@ -11,7 +11,9 @@ use nmc_config::{Action, AppPaths, Key};
 use nmc_ops::ConflictPolicy;
 use nmc_panel::SideId;
 use nmc_tui::{App, AppEvent, KeyPress, Overlay, draw};
-use nmc_vfs::{Provider, ProviderFactory, ProviderRegistry, VfsPath};
+use nmc_vfs::VfsPath;
+#[cfg(unix)]
+use nmc_vfs::{Provider, ProviderFactory, ProviderRegistry};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use tempfile::TempDir;
