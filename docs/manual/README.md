@@ -559,8 +559,8 @@ checksums and copies between folders of that server run on the server.
 The drive list (Alt+F1) shows how each remote place is reached, for example
 `[agent over SSH]` or `[nmc serve, TLS]`.
 
-Copies between two `scs://` servers go directly from one to the other when
-they can reach each other (each authorised by a one-time token that expires
+Copies between two `scs://` servers (from the queue as well as `nmc cp`) go
+directly from one to the other when they can reach each other (each authorised by a one-time token that expires
 after five minutes), otherwise through your machine. `nmc cp` prints the
 route taken; `--route` chooses one.
 
@@ -595,7 +595,11 @@ Connections over SSH are probed every 15 seconds, so a dead link is noticed
 in about 45 seconds. When a step fails because the connection was lost, the
 job opens it again (a new agent or SFTP session) and retries after a pause,
 up to the number of retries in the settings; the part of the file already
-copied is kept. S3 requests are retried the same way.
+copied is kept. S3 requests are retried the same way, and a large S3 upload that was
+interrupted continues with the parts already stored when the same file is
+copied again in the same session. When a check "by size" is chosen and the
+destination is an agent or `nmc serve` server, the content is checked
+instead (hashed on the server, no extra traffic); a setting turns that off.
 
 ## Bookmarks, tabs and history
 

@@ -70,7 +70,8 @@ impl AppContext {
             max_concurrent_jobs: self.config.transfers.parallel_jobs,
             global_bandwidth_limit: self.config.transfers.bandwidth_limit_kib * 1024,
         };
-        let manager = TransferManager::new(self.registry.clone(), journal, options)?;
+        let manager = TransferManager::new(self.registry.clone(), journal, options)?
+            .with_server_copier(Arc::new(ServerCopies { tls_dir: self.paths.tls_dir() }));
         Ok(match resolver {
             Some(resolver) => manager.with_resolver(resolver),
             None => manager,
@@ -80,16 +81,85 @@ impl AppContext {
     /// Job options from the transfer settings. `conflict` overrides the
     /// configured conflict policy.
     pub fn job_options(&self, conflict: Option<ConflictPolicy>) -> JobOptions {
+        self.job_options_to(conflict, None)
+    }
+
+    /// Like [`job_options`](Self::job_options) for a job that copies to
+    /// `destination`, which decides the default check (see
+    /// [`effective_verify`]).
+    pub fn job_options_to(
+        &self,
+        conflict: Option<ConflictPolicy>,
+        destination: Option<&nmc_vfs::VfsPath>,
+    ) -> JobOptions {
         let settings = &self.config.transfers;
         JobOptions {
             conflict: conflict.unwrap_or(settings.conflict),
-            verify: settings.verify,
+            verify: match destination {
+                Some(destination) => effective_verify(settings, destination),
+                None => settings.verify,
+            },
             plan: PlanOptions { preserve_mtime: true, preserve_permissions: true },
             parallelism: settings.parallel_files.max(1),
             auto_parallelism: settings.auto_parallelism,
             retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
             bandwidth_limit: settings.bandwidth_limit_kib * 1024,
         }
+    }
+}
+
+/// Copies between two `nmc serve` servers directly (or in reverse), through
+/// `nmc_agent::route`; anything else is left to the normal copy.
+struct ServerCopies {
+    tls_dir: std::path::PathBuf,
+}
+
+#[async_trait::async_trait]
+impl nmc_transfer::ServerCopier for ServerCopies {
+    async fn copy(
+        &self,
+        sources: &[nmc_vfs::VfsPath],
+        destination: &nmc_vfs::VfsPath,
+        conflict: ConflictPolicy,
+        progress: &(dyn Fn(u64, u64) + Send + Sync),
+    ) -> Option<Result<nmc_transfer::ServerCopyReport, String>> {
+        use nmc_agent::route::{Outcome, Route, ServerCopy, copy_between_servers};
+        let copy = ServerCopy { sources, destination, conflict };
+        if !copy.is_between_servers() {
+            return None;
+        }
+        let identity = nmc_agent::ServeFactory::new(self.tls_dir.clone()).identity().ok()?;
+        let outcome =
+            copy_between_servers(&identity, &copy, &[Route::Direct, Route::Reverse], |m| {
+                progress(m.bytes_done, m.bytes_total)
+            })
+            .await;
+        match outcome {
+            Ok(Outcome::Copied(route, last)) => Some(Ok(nmc_transfer::ServerCopyReport {
+                route: route.to_string(),
+                bytes: last.bytes_done,
+                failures: last.failures,
+            })),
+            Ok(Outcome::UseController(_)) => None,
+            Err(e) => Some(Err(e)),
+        }
+    }
+}
+
+/// The check after copying to `destination`: the one in the settings, except
+/// that "same size" becomes a XXH3 content check on an agent or `nmc serve`
+/// server (which hashes on the server, so it costs no traffic) unless
+/// `verify_remote_fast` is off.
+pub fn effective_verify(
+    settings: &nmc_config::TransferSettings,
+    destination: &nmc_vfs::VfsPath,
+) -> nmc_ops::VerifyMode {
+    use nmc_ops::VerifyMode;
+    let on_server = matches!(destination.scheme(), "agent" | "scs");
+    if settings.verify == VerifyMode::Size && settings.verify_remote_fast && on_server {
+        VerifyMode::Fast
+    } else {
+        settings.verify
     }
 }
 
@@ -145,6 +215,21 @@ pub fn build_registry_for(paths: &AppPaths) -> ProviderRegistry {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn size_checks_become_content_checks_on_servers() {
+        use nmc_ops::VerifyMode;
+        let mut settings = nmc_config::TransferSettings::default();
+        let path = |u: &str| nmc_vfs::VfsPath::parse(u).unwrap();
+        assert_eq!(super::effective_verify(&settings, &path("agent://h/x")), VerifyMode::Fast);
+        assert_eq!(super::effective_verify(&settings, &path("scs://h/x")), VerifyMode::Fast);
+        assert_eq!(super::effective_verify(&settings, &path("sftp://h/x")), VerifyMode::Size);
+        settings.verify_remote_fast = false;
+        assert_eq!(super::effective_verify(&settings, &path("agent://h/x")), VerifyMode::Size);
+        settings.verify = VerifyMode::Full;
+        settings.verify_remote_fast = true;
+        assert_eq!(super::effective_verify(&settings, &path("agent://h/x")), VerifyMode::Full);
+    }
+
     use super::*;
 
     #[test]

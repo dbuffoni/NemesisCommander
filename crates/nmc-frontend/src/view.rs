@@ -560,7 +560,13 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .collect();
     let view = PanelView {
         title: display_location(panel.location()),
-        drive: crate::drives::drive_label(&app.context().config, panel.location()),
+        drive: {
+            let label = crate::drives::drive_label(&app.context().config, panel.location());
+            match crate::drives::connection_kind(&panel.location().to_string()) {
+                Some(kind) => format!("{label} · {kind}"),
+                None => label,
+            }
+        },
         branch: git.as_ref().map(|g| g.summary()).unwrap_or_default(),
         tabs,
         active,

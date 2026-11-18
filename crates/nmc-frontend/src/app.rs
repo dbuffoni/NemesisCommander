@@ -661,7 +661,14 @@ impl App {
                     self.refresh_git(&listed);
                     self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
-                        let error = error.to_owned();
+                        let mut error = error.to_owned();
+                        if nmc_ops::is_connection_error(&error) {
+                            // The next listing opens the connection again.
+                            self.context.registry.forget(self.workspace.active().location());
+                            error = format!(
+                                "Connection lost: {error} (it is opened again on the next try)"
+                            );
+                        }
                         self.set_error(error);
                     }
                     self.update_quick_view();
@@ -677,6 +684,9 @@ impl App {
                 self.set_status(format!("Retrying {title} ({attempt}/{attempts}): {message}…"));
             }
             AppEvent::Job(JobEvent::ParallelismChanged { .. }) => self.refresh_jobs(),
+            AppEvent::Job(JobEvent::Route { route, .. }) => {
+                self.set_status(format!("Copying {route} between the servers (not through here)"));
+            }
             AppEvent::Job(JobEvent::Progress { id, bytes }) => {
                 *self.live_bytes.entry(id).or_default() += bytes;
                 self.speed.record(std::time::Instant::now(), bytes);
@@ -1516,7 +1526,7 @@ impl App {
         sources: Vec<VfsPath>,
         destination: VfsPath,
     ) -> Option<JobId> {
-        let options = self.context.job_options(None);
+        let options = self.context.job_options_to(None, Some(&destination));
         let spec = JobSpec { kind, sources, destination: Some(destination), options, priority: 0 };
         let title = spec.title();
         let id = match self.manager.submit(spec) {
@@ -2242,7 +2252,7 @@ impl App {
         let destination = self.workspace.inactive().location().clone();
         let registry = self.context.registry.clone();
         let manager = self.manager.clone();
-        let options = self.context.job_options(None);
+        let options = self.context.job_options_to(None, Some(&destination));
         self.spawn_task(async move {
             let result = async {
                 let provider = registry.provider_for(&root).await?;

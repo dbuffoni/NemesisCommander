@@ -193,6 +193,13 @@ pub enum JobEvent {
         /// Why the step failed.
         message: String,
     },
+    /// A copy between two servers went directly between them.
+    Route {
+        /// Which job.
+        id: JobId,
+        /// `direct` or `reverse`.
+        route: String,
+    },
     /// The number of files a running job copies at once changed (by hand or
     /// by the automatic tuning).
     ParallelismChanged {
