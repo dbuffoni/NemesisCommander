@@ -562,8 +562,10 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         title: display_location(panel.location()),
         drive: {
             let label = crate::drives::drive_label(&app.context().config, panel.location());
+            let state =
+                crate::drives::connection_state(app.connection_lost[index], panel.is_loading());
             match crate::drives::connection_kind(&panel.location().to_string()) {
-                Some(kind) => format!("{label} · {kind}"),
+                Some(kind) => format!("{label} · {kind}{state}"),
                 None => label,
             }
         },

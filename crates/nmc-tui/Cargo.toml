@@ -26,6 +26,9 @@ tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 scripting = ["nmc-frontend/script-engine"]
 
 [dev-dependencies]
+async-trait.workspace = true
+nmc-agent.workspace = true
+nmc-proto.workspace = true
 serde_json.workspace = true
 nmc-ops.workspace = true
 image.workspace = true

@@ -13,6 +13,7 @@
 //! The listing of `smb://host/` (no share) shows the server's shares.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
@@ -34,6 +35,11 @@ const READ_CHUNK: u64 = 1024 * 1024;
 pub struct SmbProvider {
     /// The client is used by one request at a time.
     client: Mutex<SmbClient>,
+    /// How the connection was made, to make it again.
+    config: ClientConfig,
+    /// Set when a call reported a lost connection: the next call signs in
+    /// again (and drops the shares opened on the old connection).
+    lost: Arc<AtomicBool>,
     /// Connected shares by name (lowercase: share names ignore case).
     shares: Mutex<Vec<(String, Tree)>>,
 }
@@ -49,10 +55,15 @@ impl SmbProvider {
             auto_reconnect: true,
             ..Default::default()
         };
-        let client = SmbClient::connect(config)
+        let client = SmbClient::connect(config.clone())
             .await
             .map_err(|e| VfsError::Other(format!("smb://{addr}: {e}")))?;
-        Ok(SmbProvider { client: Mutex::new(client), shares: Mutex::new(Vec::new()) })
+        Ok(SmbProvider {
+            client: Mutex::new(client),
+            config,
+            lost: Arc::new(AtomicBool::new(false)),
+            shares: Mutex::new(Vec::new()),
+        })
     }
 
     /// Connects for an `smb://` authority, with the login from netrc.
@@ -79,11 +90,24 @@ impl SmbProvider {
     async fn tree(&self, share: &str, path: &VfsPath) -> Result<Tree> {
         let key = share.to_lowercase();
         let mut shares = self.shares.lock().await;
+        if self.lost.swap(false, Ordering::SeqCst) {
+            // The library's own reconnect did not get through: start over.
+            let client = SmbClient::connect(self.config.clone())
+                .await
+                .map_err(|e| VfsError::Other(format!("{path}: smb connection lost: {e}")))?;
+            *self.client.lock().await = client;
+            shares.clear();
+        }
         if let Some((_, tree)) = shares.iter().find(|(name, _)| *name == key) {
             return Ok(tree.clone());
         }
-        let tree =
-            self.client.lock().await.connect_share(share).await.map_err(|e| error(e, path))?;
+        let tree = self
+            .client
+            .lock()
+            .await
+            .connect_share(share)
+            .await
+            .map_err(|e| error(&self.lost, e, path))?;
         shares.push((key, tree.clone()));
         Ok(tree)
     }
@@ -120,7 +144,7 @@ impl SmbProvider {
 }
 
 /// Maps an SMB error for `path`.
-fn error(error: smb2::Error, path: &VfsPath) -> VfsError {
+fn error(lost: &AtomicBool, error: smb2::Error, path: &VfsPath) -> VfsError {
     match error.kind() {
         ErrorKind::NotFound => VfsError::NotFound(path.clone()),
         ErrorKind::AlreadyExists => VfsError::AlreadyExists(path.clone()),
@@ -133,6 +157,7 @@ fn error(error: smb2::Error, path: &VfsPath) -> VfsError {
         // Worded so that the transfer engine opens the connection again
         // (and the shares with it) before retrying.
         ErrorKind::ConnectionLost | ErrorKind::TimedOut | ErrorKind::SessionExpired => {
+            lost.store(true, Ordering::SeqCst);
             VfsError::Other(format!("{path}: smb connection lost: {error}"))
         }
         _ if error.to_string().contains("DIRECTORY_NOT_EMPTY") => {
@@ -179,8 +204,13 @@ impl Provider for SmbProvider {
         if inner.is_empty() {
             return Ok(Entry::new(share, EntryKind::Directory));
         }
-        let info =
-            self.client.lock().await.stat(&mut tree, inner).await.map_err(|e| error(e, path))?;
+        let info = self
+            .client
+            .lock()
+            .await
+            .stat(&mut tree, inner)
+            .await
+            .map_err(|e| error(&self.lost, e, path))?;
         let kind = if info.is_directory { EntryKind::Directory } else { EntryKind::File };
         let mut entry = Entry::new(name_of(inner), kind).with_size(info.size);
         entry.modified = time(info.modified);
@@ -190,8 +220,13 @@ impl Provider for SmbProvider {
     async fn list(&self, path: &VfsPath) -> Result<ListStream> {
         let Some((share, inner)) = Self::split(path) else {
             // The server's shares; administrative ones (C$, IPC$) are hidden.
-            let shares =
-                self.client.lock().await.list_shares().await.map_err(|e| error(e, path))?;
+            let shares = self
+                .client
+                .lock()
+                .await
+                .list_shares()
+                .await
+                .map_err(|e| error(&self.lost, e, path))?;
             let entries: Vec<Entry> = shares
                 .into_iter()
                 .filter(|s| !s.name.ends_with('$'))
@@ -202,7 +237,7 @@ impl Provider for SmbProvider {
         let mut tree = self.tree(share, path).await?;
         let listing = self.client.lock().await.list_directory(&mut tree, inner).await;
         let entries: Vec<Entry> = listing
-            .map_err(|e| error(e, path))?
+            .map_err(|e| error(&self.lost, e, path))?
             .into_iter()
             .filter(|e| e.name != "." && e.name != "..")
             .map(|e| {
@@ -223,7 +258,7 @@ impl Provider for SmbProvider {
             .await
             .open_file_reader(&tree, inner)
             .await
-            .map_err(|e| error(e, path))?;
+            .map_err(|e| error(&self.lost, e, path))?;
         let size = reader.size();
         let reader = Arc::new(reader);
         let chunks = stream::unfold(offset, move |position| {
@@ -258,34 +293,35 @@ impl Provider for SmbProvider {
                 }
             }
         }
-        .map_err(|e| error(e, path))?;
+        .map_err(|e| error(&self.lost, e, path))?;
         let path = path.clone();
+        let lost = self.lost.clone();
         Ok(upload_sink(move |mut body| async move {
             let mut writer = writer;
             while let Some(chunk) = body.next().await {
                 let chunk = chunk.map_err(|e| VfsError::from_io(&path, e))?;
-                writer.write_chunk(&chunk).await.map_err(|e| error(e, &path))?;
+                writer.write_chunk(&chunk).await.map_err(|e| error(&lost, e, &path))?;
             }
-            writer.finish().await.map_err(|e| error(e, &path)).map(drop)
+            writer.finish().await.map_err(|e| error(&lost, e, &path)).map(drop)
         }))
     }
 
     async fn create_dir(&self, path: &VfsPath) -> Result<()> {
         let (tree, inner) = self.locate_entry(path).await?;
         let result = self.client.lock().await.create_directory(&tree, inner).await;
-        result.map_err(|e| error(e, path))
+        result.map_err(|e| error(&self.lost, e, path))
     }
 
     async fn remove_file(&self, path: &VfsPath) -> Result<()> {
         let (tree, inner) = self.locate_entry(path).await?;
         let result = self.client.lock().await.delete_file(&tree, inner).await;
-        result.map_err(|e| error(e, path))
+        result.map_err(|e| error(&self.lost, e, path))
     }
 
     async fn remove_dir(&self, path: &VfsPath) -> Result<()> {
         let (tree, inner) = self.locate_entry(path).await?;
         let result = self.client.lock().await.delete_directory(&tree, inner).await;
-        match result.map_err(|e| error(e, path)) {
+        match result.map_err(|e| error(&self.lost, e, path)) {
             // Some servers report a non-empty folder only as a generic
             // failure: check what is there.
             Err(VfsError::Other(message)) => {
@@ -309,7 +345,7 @@ impl Provider for SmbProvider {
         }
         let options = RenameOptions::new().replace_if_exists(true);
         let result = self.client.lock().await.rename_with(&tree, source, target, options).await;
-        result.map_err(|e| error(e, from))
+        result.map_err(|e| error(&self.lost, e, from))
     }
 
     async fn set_attributes(&self, path: &VfsPath, attributes: &SetAttributes) -> Result<()> {
@@ -317,7 +353,7 @@ impl Provider for SmbProvider {
         let (tree, inner) = self.locate_entry(path).await?;
         let times = FileTimes::new().set_modified(modified);
         let result = self.client.lock().await.set_times(&tree, inner, times).await;
-        result.map_err(|e| error(e, path))
+        result.map_err(|e| error(&self.lost, e, path))
     }
 
     async fn copy_within(&self, from: &VfsPath, to: &VfsPath) -> Result<()> {
@@ -327,7 +363,7 @@ impl Provider for SmbProvider {
             return Err(VfsError::unsupported("server-side copy between shares", "smb"));
         }
         let result = self.client.lock().await.server_side_copy_file(&tree, source, target).await;
-        result.map_err(|e| error(e, from)).map(drop)
+        result.map_err(|e| error(&self.lost, e, from)).map(drop)
     }
 }
 

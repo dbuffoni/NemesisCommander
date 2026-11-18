@@ -601,6 +601,12 @@ copied again in the same session. When a check "by size" is chosen and the
 destination is an agent or `nmc serve` server, the content is checked
 instead (hashed on the server, no extra traffic); a setting turns that off.
 
+A panel on a remote place shows how it is reached above the list. When a
+listing fails because the connection was lost it adds "connection lost", and
+"reconnecting…" while the next listing (any key that reloads the folder, such
+as Ctrl+R) opens the connection again; both disappear when a listing works.
+An SMB connection that the server dropped is signed in again on the next call.
+
 ## Bookmarks, tabs and history
 
 - **Ctrl+Shift+D** bookmarks the current folder, **Ctrl+D** lists the

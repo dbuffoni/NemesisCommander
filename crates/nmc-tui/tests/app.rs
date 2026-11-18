@@ -12,6 +12,8 @@ use nmc_ops::ConflictPolicy;
 use nmc_panel::SideId;
 use nmc_tui::{App, AppEvent, KeyPress, Overlay, draw};
 use nmc_vfs::VfsPath;
+#[cfg(unix)]
+use nmc_vfs::{Provider, ProviderFactory, ProviderRegistry};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use tempfile::TempDir;
@@ -2114,4 +2116,83 @@ async fn files_get_the_icon_of_their_kind_unless_icons_are_off() {
     let mut h = Harness::with_settings(|c| c.panels.icons = false).await;
     let screen = h.screen();
     assert!(!screen.contains("▸ docs/") && !screen.contains("≡ a.txt"), "{screen}");
+}
+
+/// Opens `agent://` places on an agent running in this process (agents run on
+/// Unix servers, and their paths are Unix paths), and counts
+/// the connections it makes.
+#[cfg(unix)]
+struct InProcessAgents(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+#[cfg(unix)]
+#[async_trait::async_trait]
+impl ProviderFactory for InProcessAgents {
+    fn scheme(&self) -> &str {
+        "agent"
+    }
+
+    async fn create(
+        &self,
+        _path: &VfsPath,
+        _registry: &ProviderRegistry,
+    ) -> nmc_vfs::Result<std::sync::Arc<dyn Provider>> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let (controller, agent) = tokio::io::duplex(1024 * 1024);
+        let service = nmc_agent::AgentService::new(nmc_agent::Limits::default())
+            .map_err(|e| nmc_vfs::VfsError::Other(e.to_string()))?;
+        tokio::spawn(nmc_proto::transport::serve(service, agent));
+        let client = nmc_proto::transport::connect(controller)
+            .await
+            .map_err(|e| nmc_vfs::VfsError::Other(e.to_string()))?;
+        let provider = nmc_agent::AgentProvider::handshake(client, None)
+            .await
+            .map_err(|e| nmc_vfs::VfsError::Other(e.to_string()))?;
+        Ok(std::sync::Arc::new(provider))
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ctrl_right_opens_a_remote_subfolder_in_the_other_panel() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("srv/docs")).unwrap();
+    fs::write(root.join("srv/a.txt"), "alpha\n").unwrap();
+    fs::write(root.join("srv/docs/readme.md"), "# readme\n").unwrap();
+    fs::create_dir_all(root.join("right")).unwrap();
+
+    let connections = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut registry = nmc_providers::default_registry();
+    registry.register(InProcessAgents(connections.clone()));
+    let mut context = AppContext::load_from(AppPaths::in_dir(root.join("settings"))).unwrap();
+    context.registry = std::sync::Arc::new(registry);
+    // The right panel starts on this machine; the left one on the server.
+    let left = VfsPath::parse(&format!("agent://nas{}", root.join("srv").display())).unwrap();
+    let right = VfsPath::from_local(root.join("right")).unwrap();
+    let (app, events) = App::new(context, left, right).unwrap();
+    let mut h = Harness { app, events, dir };
+    h.settle().await;
+    assert_eq!(h.names(SideId::Left), ["..", "docs", "a.txt"]);
+    assert_eq!(connections.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // The right panel reaches the same server and shows the subfolder.
+    h.focus("docs");
+    h.key("Ctrl+Right");
+    h.settle().await;
+    assert_eq!(h.names(SideId::Right), ["..", "readme.md"]);
+    assert!(
+        h.app
+            .workspace()
+            .side(SideId::Right)
+            .panel()
+            .location()
+            .to_string()
+            .starts_with("agent://nas/")
+    );
+    assert_eq!(
+        connections.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "one connection is shared"
+    );
+    assert_eq!(h.app.workspace().active_side(), SideId::Left, "the focus stays");
 }

@@ -257,6 +257,9 @@ pub struct App {
     target_override: Option<Vec<VfsPath>>,
     /// Git status of what each side shows, with the folder it is for.
     pub git: [Option<(VfsPath, Arc<crate::git::GitStatus>)>; 2],
+    /// Per panel: its last listing failed with a lost connection, and no
+    /// listing has worked since (the next one opens the connection again).
+    pub connection_lost: [bool; 2],
     undo: Vec<UndoStep>,
     undo_jobs: HashSet<JobId>,
     tasks: usize,
@@ -474,6 +477,7 @@ impl App {
             live_bytes: HashMap::new(),
             speed: crate::speed::SpeedMeter::default(),
             git: [None, None],
+            connection_lost: [false, false],
             undo: Vec::new(),
             undo_jobs: HashSet::new(),
             quick_view: None,
@@ -657,6 +661,13 @@ impl App {
                 let listed = listing.path.clone();
                 self.folder_sizes.retain(|path, _| path.parent().as_ref() != Some(&listed));
                 if self.workspace.apply(listing) {
+                    for side in [SideId::Left, SideId::Right] {
+                        let panel = self.workspace.side(side).panel();
+                        if panel.location() == &listed {
+                            self.connection_lost[side_index(side)] =
+                                panel.error().is_some_and(nmc_ops::is_connection_error);
+                        }
+                    }
                     self.record_visits(&listed);
                     self.refresh_git(&listed);
                     self.release_archives();

@@ -4059,15 +4059,18 @@ dependencies = [
 name = "nmc-tui"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "crossterm",
  "futures",
  "image",
+ "nmc-agent",
  "nmc-app",
  "nmc-config",
  "nmc-frontend",
  "nmc-ops",
  "nmc-panel",
  "nmc-preview",
+ "nmc-proto",
  "nmc-providers",
  "nmc-transfer",
  "nmc-vfs",
