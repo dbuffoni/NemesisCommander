@@ -255,6 +255,12 @@ pub struct App {
     /// Items for the commands to act on instead of the panel's selection
     /// (the basket's).
     target_override: Option<Vec<VfsPath>>,
+    /// The selection in the panels comes from comparing folders: Esc
+    /// clears it in both.
+    compare_marks: bool,
+    /// Ctrl, Alt and Shift as held right now (the function key bar shows
+    /// what those keys do).
+    held: (bool, bool, bool),
     /// Git status of what each side shows, with the folder it is for.
     pub git: [Option<(VfsPath, Arc<crate::git::GitStatus>)>; 2],
     /// Per panel: its last listing failed with a lost connection, and no
@@ -467,6 +473,8 @@ impl App {
             visited: [None, None],
             last_search: None,
             target_override: None,
+            compare_marks: false,
+            held: (false, false, false),
             context,
             workspace,
             manager,
@@ -780,7 +788,8 @@ impl App {
                         panel.set_selected(name, true);
                     }
                 }
-                self.set_status(format!("{message} (differences are selected)"));
+                self.compare_marks = true;
+                self.set_status(format!("{message} (differences are selected, Esc clears)"));
             }
             AppEvent::SearchHit(hit) => {
                 let hint = self.basket_hint();
@@ -883,7 +892,22 @@ impl App {
         self.update_quick_view();
     }
 
+    /// Which of Ctrl, Alt and Shift are held. Front ends call it when one is
+    /// pressed or released; the function key bar then shows the commands of
+    /// those combinations (`Alt+F5` shows what it does where `F5` copies).
+    pub fn set_modifiers(&mut self, ctrl: bool, alt: bool, shift: bool) {
+        self.held = (ctrl, alt, shift);
+    }
+
+    /// The modifiers held, as set by [`set_modifiers`](Self::set_modifiers).
+    pub fn modifiers(&self) -> (bool, bool, bool) {
+        self.held
+    }
+
     fn normal_key(&mut self, press: KeyPress) {
+        if self.quick_view_key(&press) {
+            return;
+        }
         let page = self.page.max(1) as isize;
         let panel = self.workspace.active_mut();
         match press.plain() {
@@ -894,6 +918,19 @@ impl App {
             Some(Key::Home) => return panel.set_cursor(0),
             Some(Key::End) => return panel.set_cursor(usize::MAX),
             Some(Key::Esc) if !panel.filter().is_empty() => return panel.set_filter(""),
+            // The differences marked by Compare go away with Esc, in both
+            // panels; any other selection only in the active one.
+            Some(Key::Esc) if self.compare_marks => {
+                self.compare_marks = false;
+                self.workspace.active_mut().clear_selection();
+                self.workspace.inactive_mut().clear_selection();
+                return self.set_status("Comparison cleared");
+            }
+            Some(Key::Esc)
+                if panel.selection_summary().files + panel.selection_summary().dirs > 0 =>
+            {
+                return panel.clear_selection();
+            }
             Some(Key::Left) if self.context.config.panels.arrow_navigation => {
                 let request = panel.parent();
                 return self.load_opt(request);
@@ -1007,29 +1044,6 @@ impl App {
                         if let ChoosePurpose::Font { screen, .. } = dialog.purpose {
                             return Some(Overlay::Settings(*screen));
                         }
-                        return None;
-                    }
-                    Some(Key::F(4)) => {
-                        let ChoosePurpose::Drives(drives) = &dialog.purpose else {
-                            return Some(Overlay::Choose(dialog));
-                        };
-                        let Some(drive) = drives.get(dialog.cursor).filter(|d| d.saved) else {
-                            return Some(Overlay::Choose(dialog));
-                        };
-                        if !nmc_app::uses_ssh(&drive.location) {
-                            self.set_error("Only SFTP and agent connections use a private key");
-                            return None;
-                        }
-                        let current = self
-                            .context
-                            .config
-                            .connections
-                            .iter()
-                            .find(|c| c.name == drive.name && c.uri == drive.location)
-                            .and_then(|c| c.identity_file.clone())
-                            .unwrap_or_default();
-                        let (name, uri) = (drive.name.clone(), drive.location.clone());
-                        self.ask_connection_key(name, uri, false, &current);
                         return None;
                     }
                     Some(Key::Delete)
@@ -1297,6 +1311,8 @@ impl App {
             Action::Pack => {
                 let name = match targets.as_slice() {
                     [one] => one.file_name().unwrap_or("archive").to_owned(),
+                    // Items of many folders: no folder gives the name.
+                    _ if self.target_override.is_some() => "basket".to_owned(),
                     _ => self.workspace.active().location().file_name().unwrap_or("archive").into(),
                 };
                 let output =
@@ -1413,7 +1429,14 @@ impl App {
                 let request = self.workspace.open_cursor_in(side);
                 self.load(request);
             }
-            Action::SwapPanels => self.workspace.swap_sides(),
+            Action::SwapPanels => {
+                self.workspace.swap_sides();
+                // The quick view stays beside the panel it shows: the focus
+                // moves with that panel, so the two trade places.
+                if self.quick_view.is_some() {
+                    self.workspace.switch_side();
+                }
+            }
             Action::Refresh => self.reload_panels(None),
             Action::ToggleHidden => {
                 let show = !self.workspace.active().show_hidden();
@@ -1432,7 +1455,6 @@ impl App {
             }
             Action::SortName => self.workspace.active_mut().set_sort(SortKey::Name),
             Action::SortExtension => self.workspace.active_mut().set_sort(SortKey::Extension),
-            Action::SortSize => self.workspace.active_mut().set_sort(SortKey::Size),
             Action::SortModified => self.workspace.active_mut().set_sort(SortKey::Modified),
             Action::QuickView => {
                 self.quick_view = match self.quick_view {
@@ -1457,7 +1479,7 @@ impl App {
                 items.push("New connection…".into());
                 let mut dialog = ChooseDialog::new("Drives", items, ChoosePurpose::Drives(drives));
                 dialog.footer =
-                    "Enter: open in this panel   F4: private key   Delete: remove a connection"
+                    "Enter: open in this panel   F2: rename   Delete: remove a connection"
                         .into();
                 self.overlay = Some(Overlay::Choose(dialog));
             }
@@ -1626,10 +1648,7 @@ impl App {
                 if name.is_empty() {
                     return self.set_error("no name given".to_owned());
                 }
-                if nmc_app::uses_ssh(&uri) {
-                    return self.ask_connection_key(name, uri, true, "");
-                }
-                self.save_connection(name, uri, None, true);
+                self.save_connection(name, uri);
             }
             InputPurpose::RenameConnection { name, uri } => {
                 if text.is_empty() {
@@ -1651,10 +1670,6 @@ impl App {
                         self.set_status(format!("Renamed to {text}"));
                     }
                 }
-            }
-            InputPurpose::ConnectionKey { name, uri, new } => {
-                let key = (!text.is_empty()).then_some(text);
-                self.save_connection(name, uri, key, new);
             }
             InputPurpose::GoTo => match resolve_location(&text, &here) {
                 Ok(path) => {
@@ -2182,65 +2197,24 @@ impl App {
         }
     }
 
-    /// Asks for the private key file of an SFTP or agent connection.
-    fn ask_connection_key(&mut self, name: String, uri: String, new: bool, current: &str) {
-        let mut dialog = InputDialog::new(
-            "Private key",
-            &format!(
-                "Private key file for {name} (.pem or OpenSSH key; empty: SSH agent and ~/.ssh/config):"
-            ),
-            current,
-            InputPurpose::ConnectionKey { name, uri, new },
-        );
-        dialog.browse = true;
-        self.overlay = Some(Overlay::Input(dialog));
-    }
-
-    /// Saves a connection (a new one, or the key of a saved one); a new one
-    /// opens in the active panel.
-    fn save_connection(&mut self, name: String, uri: String, key: Option<String>, new: bool) {
-        let connections = &mut self.context.config.connections;
-        if new {
-            connections.push(Connection {
-                name: name.clone(),
-                uri: uri.clone(),
-                identity_file: key.clone(),
-                options: Default::default(),
-            });
-        } else if let Some(saved) = connections.iter_mut().find(|c| c.name == name && c.uri == uri)
-        {
-            saved.identity_file = key.clone();
-        }
+    /// Saves a new connection and opens it in the active panel.
+    fn save_connection(&mut self, name: String, uri: String) {
+        self.context.config.connections.push(Connection {
+            name: name.clone(),
+            uri: uri.clone(),
+            identity_file: None,
+            options: Default::default(),
+        });
         if !self.save_settings() {
             return;
         }
-        let problem = key
-            .as_deref()
-            .and_then(|k| nmc_ssh::check_identity_file(&nmc_ssh::expand_home(k)).err());
-        match (problem, new) {
-            (Some(problem), _) => self.set_error(format!("Saved {name}, but: {problem}")),
-            (None, true) => self.set_status(format!("Saved {name} in the drive list")),
-            (None, false) => self.set_status(match &key {
-                Some(key) => format!("{name} now logs in with {key}"),
-                None => format!("{name} now logs in with the SSH agent and ~/.ssh/config"),
-            }),
-        }
-        if new {
-            match VfsPath::parse(&uri) {
-                Ok(path) => {
-                    let request = self.workspace.active_mut().navigate(path);
-                    self.load(request);
-                }
-                Err(e) => self.set_error(e.to_string()),
+        self.set_status(format!("Saved {name} in the drive list"));
+        match VfsPath::parse(&uri) {
+            Ok(path) => {
+                let request = self.workspace.active_mut().navigate(path);
+                self.load(request);
             }
-        }
-    }
-
-    /// Replaces the text of the open one-line question (the GUI's file
-    /// picker fills it this way).
-    pub fn fill_input(&mut self, text: &str) {
-        if let Some(Overlay::Input(dialog)) = &mut self.overlay {
-            dialog.field = crate::input::TextField::new(text);
+            Err(e) => self.set_error(e.to_string()),
         }
     }
 
@@ -2414,7 +2388,40 @@ impl App {
                 panel.set_selected(name, true);
             }
         }
-        self.set_status(format!("Compared folders: {summary} (selected)"));
+        self.compare_marks = true;
+        self.set_status(format!("Compared folders: {summary} (selected, Esc clears)"));
+    }
+
+    /// Shift+arrows, Shift+PgUp/PgDn and Shift+Home/End scroll the quick
+    /// view (or turn the pages of a PDF in it); the plain keys keep moving
+    /// the cursor of the panel. Returns whether the key was used.
+    fn quick_view_key(&mut self, press: &KeyPress) -> bool {
+        let chord = press.chord;
+        if !chord.shift || chord.ctrl || chord.alt {
+            return false;
+        }
+        let key = chord.key;
+        if !matches!(key, Key::Up | Key::Down | Key::PageUp | Key::PageDown | Key::Home | Key::End)
+        {
+            return false;
+        }
+        let page = self.page.max(1);
+        let Some(Some(viewer)) = &mut self.quick_view else { return false };
+        if let Some(source) = viewer_picture_key(viewer, Some(key), None) {
+            let path = viewer.path.clone();
+            self.render_picture(path, true, source);
+            return true;
+        }
+        let ipage = page as isize;
+        match key {
+            Key::Up => viewer.scroll_by(-1, page),
+            Key::Down => viewer.scroll_by(1, page),
+            Key::PageUp => viewer.scroll_by(-ipage, page),
+            Key::PageDown => viewer.scroll_by(ipage, page),
+            Key::Home => viewer.scroll = 0,
+            _ => viewer.scroll_by(isize::MAX, page),
+        }
+        true
     }
 
     /// Keeps the quick view in sync with the cursor.

@@ -363,10 +363,13 @@ pub enum Row {
 /// The state of the settings screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SettingsScreen {
-    /// Every row, headers included.
+    /// The rows shown, headers included: all of them, or those that match
+    /// the filter.
     pub rows: Vec<Row>,
-    /// The highlighted row (never a header).
+    /// The highlighted row (never a header, unless nothing matches).
     pub cursor: usize,
+    /// What was typed to find a setting.
+    pub filter: String,
 }
 
 impl Default for SettingsScreen {
@@ -375,26 +378,62 @@ impl Default for SettingsScreen {
     }
 }
 
+/// Every row of the screen, in order, headers included.
+fn all_rows() -> Vec<Row> {
+    let mut rows = Vec::new();
+    let mut section = "";
+    for field in Field::ALL {
+        if field.section() != section {
+            section = field.section();
+            rows.push(Row::Header(section));
+        }
+        rows.push(Row::Option(field));
+    }
+    rows.push(Row::Header("Share settings"));
+    rows.extend(Command::ALL.map(Row::Command));
+    rows
+}
+
 impl SettingsScreen {
     /// The screen with the cursor on the first option.
     pub fn new() -> Self {
-        let mut rows = Vec::new();
-        let mut section = "";
-        for field in Field::ALL {
-            if field.section() != section {
-                section = field.section();
-                rows.push(Row::Header(section));
-            }
-            rows.push(Row::Option(field));
-        }
-        rows.push(Row::Header("Share settings"));
-        rows.extend(Command::ALL.map(Row::Command));
-        SettingsScreen { rows, cursor: 1 }
+        SettingsScreen { rows: all_rows(), cursor: 1, filter: String::new() }
     }
 
     /// The highlighted row.
     pub fn current(&self) -> Row {
         self.rows[self.cursor]
+    }
+
+    /// Shows only the rows whose section or label holds every word of
+    /// `filter` (ignoring case), each under its header; the cursor goes to
+    /// the first one. An empty filter shows everything.
+    pub fn set_filter(&mut self, filter: &str) {
+        self.filter = filter.to_owned();
+        let words: Vec<String> =
+            filter.to_lowercase().split_whitespace().map(str::to_owned).collect();
+        let mut rows: Vec<Row> = Vec::new();
+        let mut header: Option<Row> = None;
+        for row in all_rows() {
+            let text = match row {
+                Row::Header(_) => {
+                    header = Some(row);
+                    continue;
+                }
+                Row::Option(field) => format!("{} {}", field.section(), field.label()),
+                Row::Command(command) => format!("share settings {}", command.label()),
+            }
+            .to_lowercase();
+            if words.iter().all(|w| text.contains(w)) {
+                rows.extend(header.take());
+                rows.push(row);
+            }
+        }
+        if rows.is_empty() {
+            rows.push(Row::Header("No setting matches"));
+        }
+        self.cursor = rows.iter().position(|r| !matches!(r, Row::Header(_))).unwrap_or(0);
+        self.rows = rows;
     }
 
     /// Moves the cursor by `delta` rows, skipping headers.
@@ -574,5 +613,31 @@ mod tests {
         assert_eq!(screen.current(), Row::Option(Field::ShowHidden), "over the Panels title");
         screen.move_cursor(1000);
         assert_eq!(screen.current(), Row::Command(Command::EditFile));
+    }
+
+    #[test]
+    fn typing_finds_settings_under_their_headers() {
+        let mut screen = SettingsScreen::new();
+        screen.set_filter("font");
+        let options: Vec<Row> =
+            screen.rows.iter().copied().filter(|r| matches!(r, Row::Option(_))).collect();
+        assert_eq!(
+            options,
+            [
+                Row::Option(Field::FontFamily),
+                Row::Option(Field::FontSize),
+                Row::Option(Field::FixedFontFamily)
+            ]
+        );
+        assert!(matches!(screen.rows[0], Row::Header(_)), "under its header");
+        assert_eq!(screen.current(), Row::Option(Field::FontFamily));
+        screen.set_filter("FIXED  font");
+        assert_eq!(screen.current(), Row::Option(Field::FixedFontFamily));
+        screen.set_filter("zzzz");
+        assert_eq!(screen.rows, [Row::Header("No setting matches")]);
+        assert!(matches!(screen.current(), Row::Header(_)));
+        screen.move_cursor(5);
+        screen.set_filter("");
+        assert_eq!(screen.rows, SettingsScreen::new().rows);
     }
 }

@@ -170,6 +170,18 @@ impl qobject::Commander {
         }
     }
 
+    pub(crate) fn modifiers(mut self: Pin<&mut Self>, modifiers: i32) {
+        use crate::keys::{ALT, CONTROL, SHIFT};
+        self.as_mut().rust_mut().with_app(|app| {
+            app.set_modifiers(
+                modifiers & CONTROL != 0,
+                modifiers & ALT != 0,
+                modifiers & SHIFT != 0,
+            )
+        });
+        self.refresh();
+    }
+
     pub(crate) fn perform(mut self: Pin<&mut Self>, id: &QString) {
         let id = id.to_string();
         self.as_mut().rust_mut().with_app(|app| {
@@ -209,12 +221,6 @@ impl qobject::Commander {
             .map(|url| std::path::PathBuf::from(local_path_of(url)))
             .collect();
         self.as_mut().rust_mut().with_app(|app| app.drop_files(side_of(side), &files));
-        self.refresh();
-    }
-
-    pub(crate) fn fill(mut self: Pin<&mut Self>, url: &QString) {
-        let path = local_path_of(&url.to_string());
-        self.as_mut().rust_mut().with_app(|app| app.fill_input(&path));
         self.refresh();
     }
 

@@ -1,7 +1,7 @@
 //! Drawing the [`App`] with ratatui. Nothing here changes application
 //! state except the scroll offsets and page size the renderer measures.
 
-use nmc_config::{Category, Key, KeyChord};
+use nmc_config::Category;
 use nmc_panel::format::local_time;
 use nmc_panel::{PARENT, SideId};
 use nmc_transfer::JobState;
@@ -16,9 +16,9 @@ use nmc_frontend::drives::drive_label;
 use nmc_frontend::icons::icon_for;
 use nmc_frontend::preview::Zoom;
 use nmc_frontend::view::{
-    column_headers, commands_view, counted_size, describe, entry_details, git_mark, git_of,
-    job_line, jobs_progress, jobs_summary, panel_footer, scroll_offset, short_label,
-    size_text_counted, tab_title,
+    bar_color, bar_glyph, biggest_size, column_headers, commands_view, counted_size, describe,
+    entry_details, git_mark, git_of, job_line, jobs_progress, jobs_summary, key_bar_label,
+    panel_footer, scroll_offset, size_ratio, size_text_counted, tab_title,
 };
 use nmc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -170,14 +170,18 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let mark_width = if git.is_some() { 2 } else { 0 };
     // Two more for the icon of the kind of file.
     let icon_width = if app.context().config.panels.icons { 2 } else { 0 };
+    // One more for the size bar, once folder sizes were counted here.
+    let biggest = biggest_size(app.folder_sizes(), panel);
+    let bar_width = if biggest.is_some() { 2 } else { 0 };
     let name_width = width
-        .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width)
+        .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width + bar_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{}{} {:>SIZE_WIDTH$}{}",
+        "{}{} {}{:>SIZE_WIDTH$}{}",
         " ".repeat(mark_width),
         fit(&name_title, name_width),
+        " ".repeat(bar_width),
         size_title,
         if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
     );
@@ -206,12 +210,19 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         } else {
             String::new()
         };
+        let ratio = biggest.and_then(|biggest| size_ratio(entry, counted, biggest));
+        let bar = match (bar_width, ratio) {
+            (0, _) => None,
+            (_, Some(ratio)) => Some((format!(" {}", bar_glyph(ratio)), Some(ratio))),
+            (_, None) => Some(("  ".to_owned(), None)),
+        };
         let mark = if mark_width > 0 {
             format!("{:<1} ", git_mark(git.as_deref(), &entry.name))
         } else {
             String::new()
         };
-        let text = format!("{mark}{} {:>SIZE_WIDTH$}{date}", fit(&name, name_width), size);
+        let name_text = format!("{} ", fit(&name, name_width));
+        let rest = format!("{:>SIZE_WIDTH$}{date}", size);
 
         let mut style = Style::new();
         if entry.is_dir() {
@@ -230,27 +241,30 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
                 style.add_modifier(Modifier::UNDERLINED)
             };
         }
-        let line = if icon_width > 0 && entry.name != PARENT {
+        let mut spans = vec![Span::styled(mark, style)];
+        if icon_width > 0 && entry.name != PARENT {
             let icon = icon_for(entry);
             let mut colour = style;
             if i != cursor && !panel.is_selected(&entry.name) {
                 colour = colour.fg(hex_colour(icon.color));
             }
             // The icon sits after the git mark, before the name.
-            let (mark_text, rest) =
-                text.split_at(text.char_indices().nth(mark_width).map_or(text.len(), |(b, _)| b));
-            Line::from(vec![
-                Span::styled(mark_text.to_owned(), style),
-                Span::styled(format!("{} ", icon.shape.glyph()), colour),
-                Span::styled(rest.to_owned(), style),
-            ])
+            spans.push(Span::styled(format!("{} ", icon.shape.glyph()), colour));
         } else if icon_width > 0 {
-            let (mark_text, rest) =
-                text.split_at(text.char_indices().nth(mark_width).map_or(text.len(), |(b, _)| b));
-            Line::styled(format!("{mark_text}  {rest}"), style)
-        } else {
-            Line::styled(text, style)
-        };
+            spans.push(Span::styled("  ", style));
+        }
+        spans.push(Span::styled(name_text, style));
+        if let Some((glyph, ratio)) = bar {
+            let mut colour = style;
+            if let Some(ratio) = ratio
+                && i != cursor
+            {
+                colour = colour.fg(hex_colour(&bar_color(ratio)));
+            }
+            spans.push(Span::styled(glyph, colour));
+        }
+        spans.push(Span::styled(rest, style));
+        let line = Line::from(spans);
         lines.push(line);
     }
     if panel.is_loading() && panel.entries().is_empty() {
@@ -331,12 +345,7 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
 fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans = Vec::new();
     for n in 1..=10u8 {
-        let label = app
-            .context()
-            .keymap
-            .action_for(&KeyChord::plain(Key::F(n)))
-            .map(short_label)
-            .unwrap_or("");
+        let label = key_bar_label(app, n);
         // With the "F" in front, ten labels fit 80 columns at five letters.
         let width = if area.width < 90 { 5 } else { 6 };
         let label = match label {
@@ -455,8 +464,11 @@ fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
     };
     let width = inner.width as usize;
     let visible = inner.height.saturating_sub(3) as usize;
-    let skip = (view.item + 1).saturating_sub(visible);
     let mut lines = vec![Line::from(buttons), typed, Line::raw("")];
+    // F1: what the highlighted command does, in up to three lines.
+    let help = wrap_text(&view.help, width.saturating_sub(2), 3);
+    let visible = visible.saturating_sub(if help.is_empty() { 0 } else { help.len() + 1 });
+    let skip = (view.item + 1).saturating_sub(visible);
     if view.rows.is_empty() {
         lines.push(Line::styled(" Nothing matches", dim()));
     }
@@ -472,7 +484,36 @@ fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
             Span::styled(format!("{} ", row.keys), keys_style),
         ]));
     }
+    if !help.is_empty() {
+        lines.push(Line::raw(""));
+        lines.extend(
+            help.into_iter().map(|l| Line::styled(format!(" {l}"), Style::new().fg(Color::Yellow))),
+        );
+    }
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// `text` broken into lines of at most `width` characters at spaces, at
+/// most `rows` of them (the last one ends in `…` when the text goes on).
+fn wrap_text(text: &str, width: usize, rows: usize) -> Vec<String> {
+    let width = width.max(8);
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        match lines.last_mut() {
+            Some(line) if line.chars().count() + 1 + word.chars().count() <= width => {
+                line.push(' ');
+                line.push_str(word);
+            }
+            _ => lines.push(word.to_owned()),
+        }
+    }
+    if lines.len() > rows {
+        lines.truncate(rows);
+        if let Some(last) = lines.last_mut() {
+            *last = fit(&format!("{last} …"), width);
+        }
+    }
+    lines
 }
 
 /// The visible part of a text field and the cursor column within it.

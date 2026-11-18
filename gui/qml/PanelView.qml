@@ -123,6 +123,10 @@ Rectangle {
                 color: panel.theme.dim
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
+            Item {
+                visible: panel.view !== null && panel.view.bars
+                Layout.preferredWidth: 40
+            }
             Label {
                 Layout.preferredWidth: sizeWidth.width
                 horizontalAlignment: Text.AlignRight
@@ -151,6 +155,9 @@ Rectangle {
             Layout.fillHeight: true
             clip: true
             visible: panel.view !== null && !panel.view.quick_view
+            readonly property var blank: ({ cursor: false, selected: false, hidden: false,
+                dir: false, name: "", size: "", date: "", git: "", icon: "", icon_color: "",
+                url: "", bar: -1, bar_color: "" })
 
             WheelHandler {
                 onWheel: (event) => panel.theme.app.scroll_rows(panel.side,
@@ -160,23 +167,29 @@ Rectangle {
             Column {
                 width: parent.width
                 Repeater {
-                    model: panel.view ? panel.view.rows : []
+                    // A count, not the rows: the delegates stay where they are
+                    // and only their contents change, so moving the cursor does
+                    // not rebuild (and flash) every row.
+                    model: panel.view ? panel.view.rows.length : 0
                     delegate: Rectangle {
                         id: row
+                        readonly property var entry:
+                            panel.view && index < panel.view.rows.length ? panel.view.rows[index]
+                                                                         : list.blank
                         width: list.width
                         height: panel.theme.rowHeight
                         // The cursor is a bar (strong in the active panel, faint in
                         // the other); selected entries are tinted and bold.
-                        readonly property bool strong: modelData.cursor && panel.view.active
+                        readonly property bool strong: entry.cursor && panel.view.active
                         // Drag a row to the other panel, or out to another
                         // program (local files only), and click or double
                         // click it.
                         Drag.active: rowDrag.active
                         Drag.dragType: Drag.Automatic
                         Drag.supportedActions: Qt.CopyAction
-                        Drag.mimeData: modelData.url !== ""
+                        Drag.mimeData: entry.url !== ""
                             ? { "application/x-nemesiscommander": panel.side + ":" + index,
-                                "text/uri-list": modelData.url }
+                                "text/uri-list": entry.url }
                             : { "application/x-nemesiscommander": panel.side + ":" + index }
                         DragHandler {
                             id: rowDrag
@@ -195,17 +208,17 @@ Rectangle {
                             }
                         }
                         color: strong ? palette.highlight
-                             : modelData.cursor ? panel.theme.lineColor
-                             : modelData.selected ? panel.theme.selectionTint
+                             : entry.cursor ? panel.theme.lineColor
+                             : entry.selected ? panel.theme.selectionTint
                              : "transparent"
                         readonly property color textColor:
                             strong ? palette.highlightedText
-                            : modelData.selected ? panel.theme.selectedText
-                            : modelData.hidden ? panel.theme.dim
+                            : entry.selected ? panel.theme.selectedText
+                            : entry.hidden ? panel.theme.dim
                             : palette.text
                         // A mark at the left edge keeps selection visible under the cursor.
                         Rectangle {
-                            visible: modelData.selected
+                            visible: entry.selected
                             width: 3
                             height: parent.height
                             color: panel.theme.accent
@@ -220,22 +233,22 @@ Rectangle {
                                 visible: panel.view.branch !== ""
                                 Layout.preferredWidth: panel.theme.rowHeight * 0.6
                                 horizontalAlignment: Text.AlignHCenter
-                                text: modelData.git
+                                text: entry.git
                                 font: panel.theme.fixedFont
-                                color: modelData.git === "M" ? panel.theme.accent
-                                     : modelData.git === "?" ? panel.theme.codeColor
+                                color: entry.git === "M" ? panel.theme.accent
+                                     : entry.git === "?" ? panel.theme.codeColor
                                      : panel.theme.dim
                             }
                             // The kind of file, as a bold single-colour outline.
                             Canvas {
                                 id: glyph
-                                visible: modelData.icon !== ""
+                                visible: entry.icon !== ""
                                 Layout.preferredWidth: visible ? 16 : 0
                                 Layout.preferredHeight: 16
                                 Layout.rightMargin: -6
                                 Layout.alignment: Qt.AlignVCenter
-                                property string shape: modelData.icon
-                                property string tint: modelData.icon_color
+                                property string shape: entry.icon
+                                property string tint: entry.icon_color
                                 onShapeChanged: requestPaint()
                                 onTintChanged: requestPaint()
                                 onPaint: {
@@ -260,20 +273,37 @@ Rectangle {
                             }
                             Label {
                                 Layout.fillWidth: true
-                                text: modelData.name
+                                text: entry.name
                                 elide: Text.ElideRight
                                 color: row.textColor
-                                font.bold: modelData.dir || modelData.selected
+                                font.bold: entry.dir || entry.selected
+                            }
+                            // Once folder sizes are counted: how big it is against
+                            // the biggest here, from green to red.
+                            Rectangle {
+                                visible: panel.view.bars
+                                opacity: entry.bar >= 0 ? 1 : 0
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                color: panel.theme.lineColor
+                                radius: 2
+                                Rectangle {
+                                    width: Math.max(2, parent.width * Math.max(0, entry.bar) / 100)
+                                    height: parent.height
+                                    radius: 2
+                                    color: entry.bar_color
+                                }
                             }
                             Label {
-                                text: modelData.size
+                                text: entry.size
                                 horizontalAlignment: Text.AlignRight
                                 Layout.preferredWidth: sizeWidth.width
                                 color: row.textColor
                                 font: panel.theme.fixedFont
                             }
                             Label {
-                                text: modelData.date
+                                text: entry.date
                                 Layout.preferredWidth: dateWidth.width
                                 color: row.textColor
                                 font: panel.theme.fixedFont

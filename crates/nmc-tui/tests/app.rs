@@ -1116,11 +1116,138 @@ async fn the_settings_screen_changes_options_and_saves_them() {
     let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
     assert!(saved.contains("parallel_jobs = 1") && saved.contains("show_hidden = true"), "{saved}");
 
-    // r puts the default back.
-    h.press(KeyPress::char('r'));
+    // Delete puts the default back; typing finds settings instead.
+    h.key("Delete");
     assert_eq!(h.app.context().config.transfers.parallel_jobs, 2);
+    h.press(KeyPress::char('r'));
+    assert_eq!(h.app.context().config.transfers.parallel_jobs, 2, "r only types now");
+    h.key("Esc");
     h.key("Esc");
     assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn typing_in_the_settings_screen_finds_a_setting() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+,");
+    h.type_text("");
+    for c in "fixed".chars() {
+        h.press(KeyPress::char(c));
+    }
+    let screen = h.screen();
+    assert!(screen.contains("Find: fixed_"), "{screen}");
+    assert!(screen.contains("Fixed-width") && !screen.contains("Ask before deleting"), "{screen}");
+    // Esc clears the filter first, and closes only the second time.
+    h.key("Esc");
+    let screen = h.screen();
+    assert!(screen.contains("Ask before deleting"), "{screen}");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn the_command_list_explains_the_highlighted_command() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    for c in "swap".chars() {
+        h.press(KeyPress::char(c));
+    }
+    h.key("F1");
+    let screen = h.screen();
+    assert!(screen.contains("Swaps the two panels"), "{screen}");
+    h.key("Esc");
+    assert!(!h.screen().contains("Swaps the two panels"));
+    assert!(matches!(h.app.overlay(), Some(Overlay::Commands(_))), "still the list");
+}
+
+#[tokio::test]
+async fn esc_clears_what_compare_selected() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("right/only-there.txt"), "x").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.key("Alt+C");
+    assert!(h.status().contains("Esc clears"), "{}", h.status());
+    let marked = |h: &Harness| h.app.workspace.active().selection_summary().files;
+    assert!(marked(&h) > 0);
+    h.key("Tab");
+    assert!(marked(&h) > 0);
+    h.key("Esc");
+    assert_eq!(marked(&h), 0);
+    h.key("Tab");
+    assert_eq!(marked(&h), 0, "both panels are cleared");
+}
+
+#[tokio::test]
+async fn the_filter_says_how_to_remove_it() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+S");
+    h.type_text("not");
+    h.key("Enter");
+    assert!(h.screen().contains("(Esc clears)"), "{}", h.screen());
+    h.key("Esc");
+    assert!(!h.screen().contains("filter:"));
+}
+
+#[tokio::test]
+async fn the_key_bar_follows_the_modifiers() {
+    let mut h = Harness::new().await;
+    assert!(h.screen().contains("F5Copy"));
+    h.app.set_modifiers(false, true, false);
+    let screen = h.screen();
+    assert!(screen.contains("F5Pack") && screen.contains("F9Unpac"), "{screen}");
+    assert!(!screen.contains("F5Copy"), "{screen}");
+    h.app.set_modifiers(false, false, false);
+    assert!(h.screen().contains("F5Copy"));
+}
+
+#[tokio::test]
+async fn swapping_with_the_quick_view_keeps_the_file_panel_with_its_focus() {
+    let mut h = Harness::new().await;
+    h.focus("notes.txt");
+    h.key("Ctrl+Q");
+    let before = h.app.workspace.active_side();
+    h.key("Ctrl+U");
+    assert_eq!(h.app.workspace.active_side(), before.other(), "the file panel moved with the swap");
+    assert_eq!(h.current(), "notes.txt");
+    assert!(h.app.quick_view.is_some());
+}
+
+#[tokio::test]
+async fn shift_keys_scroll_the_quick_view() {
+    let mut h = Harness::new().await;
+    let lines: String = (1..=200).map(|n| format!("line {n}\n")).collect();
+    fs::write(h.path("left/long.txt"), lines).unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("long.txt");
+    h.key("Ctrl+Q");
+    h.settle().await;
+    let scroll = |h: &Harness| match &h.app.quick_view {
+        Some(Some(viewer)) => viewer.scroll,
+        _ => panic!("no quick view"),
+    };
+    assert_eq!(scroll(&h), 0);
+    h.key("Shift+PageDown");
+    let page = scroll(&h);
+    assert!(page > 0);
+    h.key("Shift+Down");
+    assert_eq!(scroll(&h), page + 1);
+    h.key("Shift+End");
+    assert!(scroll(&h) > page);
+    h.key("Shift+Home");
+    assert_eq!(scroll(&h), 0);
+    assert_eq!(h.current(), "long.txt", "the cursor of the panel stayed");
+}
+
+#[tokio::test]
+async fn counted_folder_sizes_get_bars() {
+    let mut h = Harness::new().await;
+    assert!(h.app.folder_sizes().is_empty());
+    h.key("Alt+S");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains('█') || screen.contains('▁'), "{screen}");
 }
 
 #[tokio::test]
@@ -1269,65 +1396,29 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
 }
 
 #[tokio::test]
-async fn sftp_connections_take_a_private_key() {
+async fn connections_have_no_key_setting_ssh_finds_its_keys() {
+    // Settings written when a key file could be set still load.
     let mut h = Harness::with_settings(|config| {
         config.connections.push(nmc_config::Connection {
             name: "nas".into(),
             uri: "sftp://me@nas.invalid/srv".into(),
-            identity_file: None,
+            identity_file: Some("~/.ssh/old.pem".into()),
             options: Default::default(),
         });
     })
     .await;
-    let key = h.path("nas.pem");
-    fs::write(&key, "key").unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
+    h.key("Alt+F1");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+    assert!(!dialog.footer.contains("key"), "{}", dialog.footer);
+    let row = dialog.items.iter().position(|r| r.contains(" nas ")).unwrap();
+    for _ in 0..row {
+        h.key("Down");
     }
-    let key = key.display().to_string();
-    let open_nas = |h: &mut Harness| {
-        h.key("Alt+F1");
-        let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
-        assert!(dialog.footer.contains("F4: private key"), "{}", dialog.footer);
-        let row = dialog.items.iter().position(|r| r.contains(" nas ")).unwrap();
-        for _ in 0..row {
-            h.key("Down");
-        }
-    };
-
-    // F4 on a saved SFTP connection asks for its key file, with a picker.
-    open_nas(&mut h);
     h.key("F4");
-    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no key asked") };
-    assert_eq!(dialog.title, "Private key");
-    assert!(dialog.browse && dialog.field.text().is_empty());
-    h.app.fill_input(&key);
-    h.key("Enter");
-    assert!(h.status().contains("nas now logs in with"), "{}", h.status());
-    assert_eq!(h.app.context().config.connections[0].identity_file.as_deref(), Some(key.as_str()));
-    let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
-    assert!(saved.contains("identity_file"), "{saved}");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "F4 asks nothing any more");
+    h.key("Esc");
 
-    // The key is shown again; a missing file is saved but reported.
-    open_nas(&mut h);
-    h.key("F4");
-    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no key asked") };
-    assert_eq!(dialog.field.text(), key);
-    h.type_text("~/no-such-key.pem");
-    h.key("Enter");
-    assert!(h.status().contains("Saved nas, but: private key"), "{}", h.status());
-    assert!(h.status().contains("not found"), "{}", h.status());
-
-    // Empty: back to the SSH agent.
-    open_nas(&mut h);
-    h.key("F4");
-    h.type_text("");
-    h.key("Enter");
-    assert_eq!(h.app.context().config.connections[0].identity_file, None);
-
-    // A new SFTP connection asks for the key after its name.
+    // A new SFTP connection is saved after its name, without a key question.
     h.key("Ctrl+N");
     for _ in 0..40 {
         h.key("Down");
@@ -1337,11 +1428,10 @@ async fn sftp_connections_take_a_private_key() {
     h.key("Enter");
     h.type_text("other");
     h.key("Enter");
-    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no key asked") };
-    assert_eq!(dialog.title, "Private key");
-    assert!(dialog.prompt.contains("other"), "{}", dialog.prompt);
-    h.key("Esc");
-    assert_eq!(h.app.context().config.connections.len(), 1, "cancelled: not saved");
+    assert!(h.status().contains("Saved other"), "{}", h.status());
+    assert_eq!(h.app.context().config.connections.len(), 2);
+    let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
+    assert!(!saved.contains("identity_file"), "{saved}");
 }
 
 #[tokio::test]
@@ -2195,4 +2285,24 @@ async fn ctrl_right_opens_a_remote_subfolder_in_the_other_panel() {
         "one connection is shared"
     );
     assert_eq!(h.app.workspace().active_side(), SideId::Left, "the focus stays");
+}
+
+#[tokio::test]
+async fn the_basket_packs_what_it_holds() {
+    let mut h = Harness::with_settings(|_| {}).await;
+    h.focus("notes.txt");
+    h.key("Alt+B");
+    h.focus("docs");
+    h.key("Enter");
+    h.settle().await;
+    h.focus("readme.md");
+    h.key("Alt+B");
+    h.key("Ctrl+B");
+    h.key("Alt+F5");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no pack dialog") };
+    assert!(dialog.field.text().ends_with("basket.zip"), "{}", dialog.field.text());
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(h.status(), "Packed 2 entries into basket.zip");
+    assert!(h.path("right/basket.zip").exists());
 }

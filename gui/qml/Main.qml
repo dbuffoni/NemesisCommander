@@ -10,6 +10,8 @@ import QtQuick.Layouts
 import NemesisCommander
 
 ApplicationWindow {
+    // Losing the focus loses the releases: forget the held modifiers.
+    onActiveChanged: if (!active) keys.hold(0)
     id: window
     width: commander.window_width
     height: commander.window_height
@@ -112,8 +114,38 @@ ApplicationWindow {
             id: keys
             anchors.fill: parent
             focus: true
+            // Ctrl, Alt and Shift held right now (the function key bar shows
+            // what they do with F1-F10). A modifier's own press and release
+            // carry it in `modifiers` only on some platforms, so add or drop
+            // it by its key.
+            property int held: 0
+            function bit(key) {
+                return key === Qt.Key_Shift ? Qt.ShiftModifier
+                     : key === Qt.Key_Control ? Qt.ControlModifier
+                     : key === Qt.Key_Alt ? Qt.AltModifier : 0
+            }
+            function hold(mask) {
+                if (mask !== held) {
+                    held = mask
+                    commander.modifiers(mask)
+                }
+            }
             Keys.onPressed: (event) => {
-                commander.key(event.key, event.text, event.modifiers)
+                var own = bit(event.key)
+                if (own !== 0) {
+                    hold(event.modifiers | own)
+                } else {
+                    hold(event.modifiers)
+                    commander.key(event.key, event.text, event.modifiers)
+                }
+                event.accepted = true
+            }
+            Keys.onReleased: (event) => {
+                var own = bit(event.key)
+                if (own !== 0)
+                    hold(event.modifiers & ~own)
+                else
+                    hold(event.modifiers)
                 event.accepted = true
             }
         }
@@ -201,7 +233,7 @@ ApplicationWindow {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                commander.key(Qt.Key_F1 + modelData.number - 1, "", Qt.NoModifier)
+                                commander.key(Qt.Key_F1 + modelData.number - 1, "", keys.held)
                                 keys.forceActiveFocus()
                             }
                         }

@@ -92,6 +92,9 @@ pub struct PanelView {
     pub quick_view: Option<ViewerView>,
     /// Column titles (name, size, date), the sorted one with an arrow.
     pub headers: [String; 3],
+    /// Rows carry size bars (folder sizes were counted): the front end
+    /// leaves room for them.
+    pub bars: bool,
 }
 
 /// A tab of a panel.
@@ -130,6 +133,11 @@ pub struct RowView {
     /// The file as a `file://` URL, for dragging it to other programs;
     /// empty for anything that is not on this disk.
     pub url: String,
+    /// Its size against the biggest in the folder, in percent, once the
+    /// folder sizes were counted (see [`size_ratio`]); -1 for no bar.
+    pub bar: i32,
+    /// The colour of the bar (`#rrggbb`), green for small to red for big.
+    pub bar_color: String,
 }
 
 /// The status line.
@@ -175,8 +183,6 @@ pub enum OverlayView {
         cursor: usize,
         /// Lines below the field (multi-rename: the new names).
         preview: Vec<String>,
-        /// The answer is a local file: the GUI shows a file picker.
-        browse: bool,
     },
     /// A yes/no question.
     Confirm {
@@ -274,6 +280,8 @@ pub struct CommandsView {
     pub recording: Option<String>,
     /// The keys of the moment.
     pub hint: String,
+    /// What the highlighted command does, while F1 shows it; else empty.
+    pub help: String,
 }
 
 /// A row of the command list.
@@ -439,16 +447,7 @@ impl Screen {
             },
         };
         let keys = (1..=10u8)
-            .map(|number| KeyLabel {
-                number,
-                label: app
-                    .context()
-                    .keymap
-                    .action_for(&KeyChord::plain(Key::F(number)))
-                    .map(short_label)
-                    .unwrap_or("")
-                    .to_owned(),
-            })
+            .map(|number| KeyLabel { number, label: key_bar_label(app, number).to_owned() })
             .collect();
         let overlay = overlay_view(app, viewer_rows);
         let conflict = app.pending_conflict().map(|c| ConflictView {
@@ -488,8 +487,8 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     let hint = if let Some(name) = &recording {
         format!("Press the new shortcut for {name}    Esc: cancel")
     } else {
-        "Type to find    Left Right: category    Enter: run    Ctrl+K: set shortcut    \
-         Del: remove shortcut    Esc: close"
+        "Type to find    Left Right: category    Enter: run    F1: help    \
+         Ctrl+K: set shortcut    Del: remove shortcut    Esc: close"
             .to_owned()
     };
     CommandsView {
@@ -504,6 +503,14 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
         item: palette.item,
         recording,
         hint,
+        help: if palette.help {
+            palette
+                .selected()
+                .map(|e| format!("{}: {}", e.name(), e.help()))
+                .unwrap_or_else(|| "No command to explain.".to_owned())
+        } else {
+            String::new()
+        },
     }
 }
 
@@ -547,6 +554,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
     let git = git_of(app, side);
     let sizes = app.folder_sizes();
     let panel = app.workspace.side(side).panel();
+    let biggest = biggest_size(sizes, panel);
     let row_views = panel
         .entries()
         .iter()
@@ -555,7 +563,8 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .take(rows)
         .map(|(i, entry)| {
             let counted = counted_size(sizes, panel.location(), entry);
-            row_view(panel, entry, i == cursor, human, git.as_deref(), counted, icons)
+            let bar = biggest.and_then(|biggest| size_ratio(entry, counted, biggest));
+            row_view(panel, entry, i == cursor, human, git.as_deref(), counted, bar, icons)
         })
         .collect();
     let view = PanelView {
@@ -580,6 +589,7 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         loading: panel.is_loading(),
         quick_view: None,
         headers: column_headers(panel.sort()),
+        bars: biggest.is_some(),
     };
     app.scroll[index] = offset;
     view
@@ -613,6 +623,62 @@ pub fn counted_size(
     sizes.get(&folder.join(&entry.name)).map(|(bytes, _)| *bytes)
 }
 
+/// The biggest size in `panel`, when the size of at least one of its
+/// folders was counted: files and counted folders are drawn against it as
+/// small bars. `None` when nothing was counted here (no bars).
+pub fn biggest_size(
+    sizes: &std::collections::HashMap<nmc_vfs::VfsPath, (u64, u64)>,
+    panel: &Panel,
+) -> Option<u64> {
+    let mut any = false;
+    let mut biggest = 0;
+    for entry in panel.entries() {
+        match counted_size(sizes, panel.location(), entry) {
+            Some(bytes) => {
+                any = true;
+                biggest = biggest.max(bytes);
+            }
+            None if !entry.is_dir() => biggest = biggest.max(entry.size),
+            None => {}
+        }
+    }
+    (any && biggest > 0).then_some(biggest)
+}
+
+/// How big an entry is against `biggest`, 0 to 1 (folders whose size was
+/// not counted have none).
+pub fn size_ratio(entry: &Entry, counted: Option<u64>, biggest: u64) -> Option<f32> {
+    if entry.name == PARENT {
+        return None;
+    }
+    let bytes = match (entry.is_dir(), counted) {
+        (true, None) => return None,
+        (true, Some(bytes)) => bytes,
+        (false, _) => entry.size,
+    };
+    Some((bytes as f64 / biggest.max(1) as f64).clamp(0.0, 1.0) as f32)
+}
+
+/// The colour of a bar of `ratio`: green when small, through yellow, to red
+/// for the biggest.
+pub fn bar_color(ratio: f32) -> String {
+    let hue = 120.0 * (1.0 - ratio.clamp(0.0, 1.0));
+    let (s, l) = (0.75_f32, 0.5_f32);
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
+    let (r, g, b) = if hue < 60.0 { (c, x, 0.0) } else { (x, c, 0.0) };
+    let byte = |v: f32| ((v + m) * 255.0).round() as u8;
+    format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
+}
+
+/// A block character as high as `ratio` (eight levels), for terminals.
+pub fn bar_glyph(ratio: f32) -> char {
+    const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    BLOCKS[((ratio.clamp(0.0, 1.0) * 7.0).round() as usize).min(7)]
+}
+
+#[allow(clippy::too_many_arguments)]
 fn row_view(
     panel: &Panel,
     entry: &Entry,
@@ -620,6 +686,7 @@ fn row_view(
     human: bool,
     git: Option<&crate::git::GitStatus>,
     counted: Option<u64>,
+    bar: Option<f32>,
     icons: bool,
 ) -> RowView {
     let icon = (icons && entry.name != PARENT).then(|| crate::icons::icon_for(entry));
@@ -638,6 +705,8 @@ fn row_view(
         git: git_mark(git, &entry.name),
         icon: icon.map(|i| i.shape.id().to_owned()).unwrap_or_default(),
         icon_color: icon.map(|i| i.color.to_owned()).unwrap_or_default(),
+        bar: bar.map(|r| (r * 100.0).round() as i32).unwrap_or(-1),
+        bar_color: bar.map(bar_color).unwrap_or_default(),
         url: if entry.name == PARENT {
             String::new()
         } else {
@@ -698,11 +767,15 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         rows: Vec::new(),
         offset: 0,
         total: 0,
-        footer: String::new(),
+        footer: format!(
+            "Shift+Up/Down/PgUp/PgDn scroll, {} closes",
+            app.context().keymap.shortcut_text(Action::QuickView)
+        ),
         error: None,
         loading: false,
         quick_view: Some(quick_view),
         headers: Default::default(),
+        bars: false,
     }
 }
 
@@ -727,7 +800,6 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             text: dialog.field.text().to_owned(),
             cursor: dialog.field.cursor(),
             preview: dialog.preview.clone(),
-            browse: dialog.browse,
         },
         Overlay::Confirm(dialog) => {
             OverlayView::Confirm { title: dialog.title.clone(), lines: dialog.lines.clone() }
@@ -789,19 +861,26 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             changed: false,
         },
     };
+    let find = if screen.filter.is_empty() {
+        "Type to find   ".to_owned()
+    } else {
+        format!("Find: {}_   ", screen.filter)
+    };
+    let esc = if screen.filter.is_empty() { "Esc: close" } else { "Esc: clear" };
     let hint = match screen.current() {
         Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
-                "Enter / ← →: change   r: default   Esc: close"
+                format!("{find}Enter / ← →: change   Del: default   {esc}")
             }
             FieldKind::Number(..) => {
-                "Enter: type a value   ← →: one less / more   r: default   Esc: close"
+                format!("{find}Enter: type a value   ← →: one less / more   Del: default   {esc}")
             }
-            FieldKind::Text => "Enter: type a value   r: default   Esc: close",
-            FieldKind::Font => "Enter: choose an installed font   r: default   Esc: close",
-        }
-        .to_owned(),
-        _ => "Enter: run   Esc: close".to_owned(),
+            FieldKind::Text => format!("{find}Enter: type a value   Del: default   {esc}"),
+            FieldKind::Font => {
+                format!("{find}Enter: choose an installed font   Del: default   {esc}")
+            }
+        },
+        _ => format!("{find}Enter: run   {esc}"),
     };
     SettingsView {
         rows: screen.rows.iter().skip(offset).take(rows).map(row_view).collect(),
@@ -937,7 +1016,7 @@ pub fn panel_footer(panel: &Panel) -> String {
         format!("{count} items")
     };
     if !panel.filter().is_empty() {
-        text.push_str(&format!("  filter: {}", panel.filter()));
+        text.push_str(&format!("  filter: {} (Esc clears)", panel.filter()));
     }
     if panel.is_loading() {
         text.push_str("  loading…");
@@ -965,6 +1044,17 @@ pub fn entry_details(panel: &Panel) -> String {
         parts.push(format!("→ {target}"));
     }
     parts.join("  ")
+}
+
+/// What F`number` does with the modifiers held now, for the function key
+/// bar: empty when nothing is bound to that combination.
+pub fn key_bar_label(app: &App, number: u8) -> &'static str {
+    let (ctrl, alt, shift) = app.modifiers();
+    app.context()
+        .keymap
+        .action_for(&KeyChord::normalized(Key::F(number), ctrl, alt, shift))
+        .map(short_label)
+        .unwrap_or("")
 }
 
 /// A short label for the function key bar.
