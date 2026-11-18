@@ -1,4 +1,4 @@
-// SuperCommander's window. It only draws: the state lives in the Rust
+// NemesisCommander's window. It only draws: the state lives in the Rust
 // `Commander` object, which publishes the whole screen as JSON (`screen`)
 // and receives every key press. There are no toolbars or icons; commands
 // are in the Commands list (F9) and on the keyboard (F1 lists the main
@@ -7,16 +7,16 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import SuperCommander
+import NemesisCommander
 
 ApplicationWindow {
     id: window
     width: commander.window_width
     height: commander.window_height
     visible: true
-    title: screen ? "SuperCommander — " + screen.panels[activeSide].title : "SuperCommander"
+    title: screen ? "NemesisCommander — " + screen.panels[activeSide].title : "NemesisCommander"
 
-    // The screen description (see sc_frontend::view::Screen).
+    // The screen description (see nmc_frontend::view::Screen).
     readonly property var screen: commander.screen ? JSON.parse(commander.screen) : null
     // The application, for windows drawn in other files (clicks).
     readonly property var app: commander

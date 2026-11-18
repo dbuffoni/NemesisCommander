@@ -1,9 +1,12 @@
 # Architecture Decision Records
 
+Note: the product was called SuperCommander and its program `sc` until
+ADR 0029; records 0001 to 0028 keep the old names.
+
 Each file records one decision: the context, what was decided, and its
 consequences. Records are immutable once accepted; a later record can
 supersede an earlier one. The reference design is the document
-"SuperCommander — Architettura v0.1"; these records cover the decisions
+"NemesisCommander — Architettura v0.1"; these records cover the decisions
 taken while implementing it.
 
 | #    | Title                                                        | Status   |
@@ -33,6 +36,7 @@ taken while implementing it.
 | 0023 | [Bookmarks with target folders for the other panel](0023-bookmark-targets.md) | Accepted |
 | 0024 | [Multi-rename always previews, and refuses names that exist](0024-multi-rename-preview.md) | Accepted |
 | 0025 | [Saved connections can log in with their own private key file](0025-connection-private-key.md) | Accepted |
+| 0029 | [The product is renamed NemesisCommander, the program `nmc`](0029-rename-to-nemesiscommander.md) | Accepted |
 
 Template:
 

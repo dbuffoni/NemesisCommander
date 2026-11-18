@@ -1,7 +1,7 @@
 //! The `Commander` QML object: the shared [`App`] behind the window.
 //!
 //! QML forwards every key press and command choice here; after each change the
-//! object publishes the whole screen as JSON (see [`sc_frontend::view`]) in
+//! object publishes the whole screen as JSON (see [`nmc_frontend::view`]) in
 //! its `screen` property, which the QML files only draw. Background results
 //! (listings, transfer progress) arrive on a tokio runtime and are moved to
 //! the Qt thread in small batches.
@@ -14,10 +14,10 @@ use std::time::Duration;
 
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
-use sc_app::AppContext;
-use sc_frontend::view::Screen;
-use sc_frontend::{App, AppEvent, External, KeyPress, SideId, resolve_location};
-use sc_vfs::VfsPath;
+use nmc_app::AppContext;
+use nmc_frontend::view::Screen;
+use nmc_frontend::{App, AppEvent, External, KeyPress, SideId, resolve_location};
+use nmc_vfs::VfsPath;
 use tokio::runtime::Runtime;
 
 use crate::ffi::qobject;
@@ -288,12 +288,12 @@ impl qobject::Commander {
         }
         let Some(test) = rust.test.as_mut() else { return };
         if let Some(chord) = test.keys.pop_front() {
-            match chord.parse::<sc_config::KeyChord>() {
+            match chord.parse::<nmc_config::KeyChord>() {
                 Ok(_) => {
                     let press = KeyPress::chord(&chord);
                     rust.with_app(|app| app.handle_key(press));
                 }
-                Err(e) => eprintln!("sc-gui: self test: {e}"),
+                Err(e) => eprintln!("nmc-gui: self test: {e}"),
             }
             return self.refresh();
         }
@@ -307,7 +307,7 @@ impl qobject::Commander {
     }
 
     fn fail(mut self: Pin<&mut Self>, message: &str) {
-        eprintln!("sc-gui: {message}");
+        eprintln!("nmc-gui: {message}");
         ENDED_EARLY.store(true, Ordering::SeqCst);
         self.as_mut().set_running(false);
     }

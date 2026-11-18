@@ -1,0 +1,21 @@
+[package]
+name = "nmc-panel"
+description = "UI-independent model of NemesisCommander's dual-pane workspace: panels, tabs, selection, history."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-index.workspace = true
+nmc-archive.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+nmc-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

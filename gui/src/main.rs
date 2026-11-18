@@ -1,15 +1,15 @@
-//! The `sc-gui` program: reads the command line and opens the window (see
+//! The `nmc-gui` program: reads the command line and opens the window (see
 //! the library for how the window works).
 
-const USAGE: &str = "usage: sc-gui [LEFT] [RIGHT]\n\n\
-    Opens SuperCommander's window with the two locations (folders or URLs\n\
+const USAGE: &str = "usage: nmc-gui [LEFT] [RIGHT]\n\n\
+    Opens NemesisCommander's window with the two locations (folders or URLs\n\
     such as sftp://host/path); the current folder when left out.\n\n\
     For tests: --self-test [--keys=\"F1 Esc\"] [--screenshot=FILE.png] presses\n\
     the keys once the listings are loaded, prints the screen as JSON, saves\n\
     a picture of the window and quits.";
 
 fn main() {
-    let mut startup = sc_gui::Startup::default();
+    let mut startup = nmc_gui::Startup::default();
     let mut places = Vec::new();
     let (mut test, mut keys, mut shot) = (None, String::new(), None);
     for argument in std::env::args().skip(1) {
@@ -19,16 +19,16 @@ fn main() {
                 return;
             }
             "-V" | "--version" => {
-                println!("sc-gui {}", env!("CARGO_PKG_VERSION"));
+                println!("nmc-gui {}", env!("CARGO_PKG_VERSION"));
                 return;
             }
-            "--self-test" => test = Some(sc_gui::SelfTest::default()),
+            "--self-test" => test = Some(nmc_gui::SelfTest::default()),
             _ if argument.starts_with("--keys=") => keys = argument[7..].to_owned(),
             _ if argument.starts_with("--screenshot=") => shot = Some(argument[13..].to_owned()),
             _ if argument.starts_with("--size=") => match parse_size(&argument[7..]) {
                 Some(size) => startup.size = Some(size),
                 None => {
-                    eprintln!("sc-gui: --size takes WIDTHxHEIGHT, such as 1280x800");
+                    eprintln!("nmc-gui: --size takes WIDTHxHEIGHT, such as 1280x800");
                     std::process::exit(2);
                 }
             },
@@ -47,7 +47,7 @@ fn main() {
     let mut places = places.into_iter();
     startup.left = places.next();
     startup.right = places.next();
-    if !sc_gui::run(startup) {
+    if !nmc_gui::run(startup) {
         std::process::exit(1);
     }
 }

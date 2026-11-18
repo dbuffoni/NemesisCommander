@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Packages SuperCommander as an AppImage.
+# Packages NemesisCommander as an AppImage.
 #
-#   packaging/linux/build-appimage.sh <directory with sc and sc-gui> <version>
+#   packaging/linux/build-appimage.sh <directory with nmc and nmc-gui> <version>
 #
-# Produces SuperCommander-<version>-<arch>.AppImage in the current directory.
-# The AppImage opens the window; `SuperCommander.AppImage sc ...` runs the
-# `sc` program (terminal interface and commands), see `supercommander`.
+# Produces NemesisCommander-<version>-<arch>.AppImage in the current directory.
+# The AppImage opens the window; `NemesisCommander.AppImage nmc ...` runs the
+# `nmc` program (terminal interface and commands), see `nemesiscommander`.
 #
 # Qt is bundled by linuxdeploy's Qt plugin, which uses the qmake given in
-# $QMAKE (the Qt sc-gui was built with). linuxdeploy and the plugin are
+# $QMAKE (the Qt nmc-gui was built with). linuxdeploy and the plugin are
 # downloaded on first use, or taken from $LINUXDEPLOY and $LINUXDEPLOY_QT.
 set -euo pipefail
 
@@ -20,11 +20,11 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 appdir="$work/AppDir"
-install -Dm755 "$bin_dir/sc" "$appdir/usr/bin/sc"
-install -Dm755 "$bin_dir/sc-gui" "$appdir/usr/bin/sc-gui"
-install -Dm755 "$here/supercommander" "$appdir/usr/bin/supercommander"
-install -Dm644 "$here/supercommander.desktop" "$appdir/usr/share/applications/supercommander.desktop"
-install -Dm644 "$here/supercommander.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/supercommander.svg"
+install -Dm755 "$bin_dir/nmc" "$appdir/usr/bin/nmc"
+install -Dm755 "$bin_dir/nmc-gui" "$appdir/usr/bin/nmc-gui"
+install -Dm755 "$here/nemesiscommander" "$appdir/usr/bin/nemesiscommander"
+install -Dm644 "$here/nemesiscommander.desktop" "$appdir/usr/share/applications/nemesiscommander.desktop"
+install -Dm644 "$here/nemesiscommander.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/nemesiscommander.svg"
 
 # Downloads a linuxdeploy tool unless its variable names one already.
 fetch() {
@@ -46,11 +46,11 @@ export QML_SOURCES_PATHS="$here/../../gui/qml"
 export APPIMAGE_EXTRACT_AND_RUN=1
 export LINUXDEPLOY_OUTPUT_VERSION="$version"
 "$linuxdeploy" --appdir "$appdir" \
-    --executable "$appdir/usr/bin/sc" \
-    --executable "$appdir/usr/bin/sc-gui" \
+    --executable "$appdir/usr/bin/nmc" \
+    --executable "$appdir/usr/bin/nmc-gui" \
     --plugin qt \
-    --desktop-file "$appdir/usr/share/applications/supercommander.desktop" \
-    --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/supercommander.svg" \
+    --desktop-file "$appdir/usr/share/applications/nemesiscommander.desktop" \
+    --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/nemesiscommander.svg" \
     --output appimage
 
-echo "built SuperCommander-$version-$arch.AppImage"
+echo "built NemesisCommander-$version-$arch.AppImage"

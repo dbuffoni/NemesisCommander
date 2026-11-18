@@ -5298,20 +5298,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-agent"
+name = "nmc-agent"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "blake3",
  "bytes",
  "futures",
- "sc-hash",
- "sc-ops",
- "sc-proto",
- "sc-providers",
- "sc-ssh",
- "sc-tls",
- "sc-vfs",
+ "nmc-hash",
+ "nmc-ops",
+ "nmc-proto",
+ "nmc-providers",
+ "nmc-ssh",
+ "nmc-tls",
+ "nmc-vfs",
  "serde_json",
  "tempfile",
  "tokio",
@@ -5321,27 +5321,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-app"
+name = "nmc-app"
 version = "0.1.0"
 dependencies = [
- "sc-agent",
- "sc-archive",
- "sc-config",
- "sc-ops",
- "sc-providers",
- "sc-s3",
- "sc-sftp",
- "sc-smb",
- "sc-ssh",
- "sc-transfer",
- "sc-vfs",
- "sc-webdav",
+ "nmc-agent",
+ "nmc-archive",
+ "nmc-config",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-s3",
+ "nmc-sftp",
+ "nmc-smb",
+ "nmc-ssh",
+ "nmc-transfer",
+ "nmc-vfs",
+ "nmc-webdav",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
-name = "sc-archive"
+name = "nmc-archive"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5351,9 +5351,9 @@ dependencies = [
  "futures",
  "liblzma",
  "proptest",
- "sc-ops",
- "sc-providers",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
  "serde",
  "sevenz-rust2",
  "tar",
@@ -5367,7 +5367,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-cli"
+name = "nmc-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
@@ -5376,19 +5376,19 @@ dependencies = [
  "predicates",
  "reqwest",
  "rustls",
- "sc-agent",
- "sc-app",
- "sc-archive",
- "sc-config",
- "sc-hash",
- "sc-index",
- "sc-ops",
- "sc-panel",
- "sc-script",
- "sc-tls",
- "sc-transfer",
- "sc-tui",
- "sc-vfs",
+ "nmc-agent",
+ "nmc-app",
+ "nmc-archive",
+ "nmc-config",
+ "nmc-hash",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-panel",
+ "nmc-script",
+ "nmc-tls",
+ "nmc-transfer",
+ "nmc-tui",
+ "nmc-vfs",
  "serde",
  "serde_json",
  "tempfile",
@@ -5397,13 +5397,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-config"
+name = "nmc-config"
 version = "0.1.0"
 dependencies = [
  "directories",
- "sc-index",
- "sc-ops",
- "sc-vfs",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-vfs",
  "serde",
  "tempfile",
  "thiserror 2.0.21",
@@ -5411,7 +5411,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-frontend"
+name = "nmc-frontend"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5419,19 +5419,19 @@ dependencies = [
  "directories",
  "futures",
  "image",
- "sc-app",
- "sc-archive",
- "sc-config",
- "sc-hash",
- "sc-index",
- "sc-ops",
- "sc-panel",
- "sc-preview",
- "sc-providers",
- "sc-script",
- "sc-ssh",
- "sc-transfer",
- "sc-vfs",
+ "nmc-app",
+ "nmc-archive",
+ "nmc-config",
+ "nmc-hash",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-panel",
+ "nmc-preview",
+ "nmc-providers",
+ "nmc-script",
+ "nmc-ssh",
+ "nmc-transfer",
+ "nmc-vfs",
  "serde",
  "serde_json",
  "similar",
@@ -5441,30 +5441,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-gui"
+name = "nmc-gui"
 version = "0.1.0"
 dependencies = [
  "cxx",
  "cxx-qt",
  "cxx-qt-build",
  "cxx-qt-lib",
- "sc-app",
- "sc-config",
- "sc-frontend",
- "sc-preview",
- "sc-vfs",
+ "nmc-app",
+ "nmc-config",
+ "nmc-frontend",
+ "nmc-preview",
+ "nmc-vfs",
  "serde_json",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
-name = "sc-hash"
+name = "nmc-hash"
 version = "0.1.0"
 dependencies = [
  "blake3",
  "hex",
- "sc-vfs",
+ "nmc-vfs",
  "sha2 0.11.1",
  "tempfile",
  "tokio",
@@ -5472,7 +5472,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-index"
+name = "nmc-index"
 version = "0.1.0"
 dependencies = [
  "futures",
@@ -5480,8 +5480,8 @@ dependencies = [
  "memchr",
  "proptest",
  "regex",
- "sc-providers",
- "sc-vfs",
+ "nmc-providers",
+ "nmc-vfs",
  "serde",
  "thiserror 2.0.21",
  "tokio",
@@ -5489,7 +5489,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-ops"
+name = "nmc-ops"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5498,9 +5498,9 @@ dependencies = [
  "jiff",
  "proptest",
  "regex",
- "sc-hash",
- "sc-providers",
- "sc-vfs",
+ "nmc-hash",
+ "nmc-providers",
+ "nmc-vfs",
  "serde",
  "tempfile",
  "thiserror 2.0.21",
@@ -5509,19 +5509,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-panel"
+name = "nmc-panel"
 version = "0.1.0"
 dependencies = [
  "jiff",
- "sc-archive",
- "sc-index",
- "sc-providers",
- "sc-vfs",
+ "nmc-archive",
+ "nmc-index",
+ "nmc-providers",
+ "nmc-vfs",
  "tokio",
 ]
 
 [[package]]
-name = "sc-preview"
+name = "nmc-preview"
 version = "0.1.0"
 dependencies = [
  "calamine",
@@ -5536,14 +5536,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-proto"
+name = "nmc-proto"
 version = "0.1.0"
 dependencies = [
  "bytes",
  "hyper-util",
  "prost",
  "protox",
- "sc-vfs",
+ "nmc-vfs",
  "tokio",
  "tonic",
  "tonic-prost",
@@ -5552,7 +5552,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-providers"
+name = "nmc-providers"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5560,15 +5560,15 @@ dependencies = [
  "filetime",
  "futures",
  "reflink-copy",
- "sc-hash",
- "sc-vfs",
+ "nmc-hash",
+ "nmc-vfs",
  "tempfile",
  "tokio",
  "trash",
 ]
 
 [[package]]
-name = "sc-s3"
+name = "nmc-s3"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5586,9 +5586,9 @@ dependencies = [
  "rustls",
  "s3s",
  "s3s-fs",
- "sc-ops",
- "sc-providers",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
  "sha2 0.11.1",
  "tempfile",
  "tokio",
@@ -5596,15 +5596,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-script"
+name = "nmc-script"
 version = "0.1.0"
 dependencies = [
  "deno_ast",
  "deno_core",
  "deno_error",
- "sc-ops",
- "sc-providers",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
  "serde",
  "serde_json",
  "tempfile",
@@ -5613,30 +5613,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-sftp"
+name = "nmc-sftp"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "futures",
  "russh-sftp",
- "sc-ops",
- "sc-providers",
- "sc-ssh",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-ssh",
+ "nmc-vfs",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
-name = "sc-smb"
+name = "nmc-smb"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
  "futures",
- "sc-ops",
- "sc-providers",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
  "smb2",
  "tempfile",
  "tokio",
@@ -5644,14 +5644,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-ssh"
+name = "nmc-ssh"
 version = "0.1.0"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
-name = "sc-tls"
+name = "nmc-tls"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
@@ -5667,14 +5667,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-transfer"
+name = "nmc-transfer"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "rusqlite",
- "sc-ops",
- "sc-providers",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
  "serde",
  "serde_json",
  "tempfile",
@@ -5684,29 +5684,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-tui"
+name = "nmc-tui"
 version = "0.1.0"
 dependencies = [
  "crossterm",
  "futures",
  "image",
  "ratatui",
- "sc-app",
- "sc-config",
- "sc-frontend",
- "sc-ops",
- "sc-panel",
- "sc-preview",
- "sc-providers",
- "sc-transfer",
- "sc-vfs",
+ "nmc-app",
+ "nmc-config",
+ "nmc-frontend",
+ "nmc-ops",
+ "nmc-panel",
+ "nmc-preview",
+ "nmc-providers",
+ "nmc-transfer",
+ "nmc-vfs",
  "serde_json",
  "tempfile",
  "tokio",
 ]
 
 [[package]]
-name = "sc-vfs"
+name = "nmc-vfs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5722,7 +5722,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sc-webdav"
+name = "nmc-webdav"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -5736,9 +5736,9 @@ dependencies = [
  "quick-xml",
  "reqwest",
  "rustls",
- "sc-ops",
- "sc-providers",
- "sc-vfs",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-vfs",
  "tempfile",
  "tokio",
  "tokio-util",

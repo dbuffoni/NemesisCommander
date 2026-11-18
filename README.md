@@ -1,4 +1,4 @@
-# SuperCommander
+# NemesisCommander
 
 A fast dual-pane file manager for local and remote files, written in Rust.
 
@@ -10,14 +10,14 @@ A fast dual-pane file manager for local and remote files, written in Rust.
   3D models and pictures, also as a quick view beside the files.
 - Background transfers with a queue, verification and resume after crashes.
 - Multi-rename with templates and a preview of the new names, or with
-  rules written by Claude (`sc ai rename`).
-- A small static agent for Linux servers (`sc agent` over SSH, `sc serve`
+  rules written by Claude (`nmc ai rename`).
+- A small static agent for Linux servers (`nmc agent` over SSH, `nmc serve`
   over mutual TLS) for fast remote work and server-to-server copies.
-- Plugins and scripts in TypeScript, in a sandbox, tested with `sc test`
-  and, with your Anthropic API key, written by Claude (`sc ai new`).
-- `sc`, a command line for all of it.
+- Plugins and scripts in TypeScript, in a sandbox, tested with `nmc test`
+  and, with your Anthropic API key, written by Claude (`nmc ai new`).
+- `nmc`, a command line for all of it.
 
-![SuperCommander](docs/manual/images/panels-1280x800.png)
+![NemesisCommander](docs/manual/images/panels-1280x800.png)
 
 Read the **[manual](docs/manual/README.md)** for everything it does. Design
 decisions are in [docs/adr](docs/adr), scripting in
@@ -26,12 +26,12 @@ decisions are in [docs/adr](docs/adr), scripting in
 ## Building
 
 ```sh
-cargo build --release              # sc: terminal interface, CLI, agent
-cargo build --release -p sc-gui    # the window (needs Qt 6.8 or later)
+cargo build --release              # nmc: terminal interface, CLI, agent
+cargo build --release -p nmc-gui    # the window (needs Qt 6.8 or later)
 cargo test --workspace
 ```
 
-Build the window with its own cargo command: built together with `sc`, it
+Build the window with its own cargo command: built together with `nmc`, it
 would link the script engine it does not need (ADR 0020).
 
 Linux releases are an AppImage of the window plus static agents for x86_64

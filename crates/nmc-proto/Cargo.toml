@@ -1,0 +1,28 @@
+[package]
+name = "nmc-proto"
+description = "The NemesisCommander agent protocol: gRPC messages, error mapping and transports (SSH stdio, in-memory)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+bytes.workspace = true
+prost = "0.14.6"
+tonic = "0.14.9"
+tonic-prost = "0.14.9"
+hyper-util = { version = "0.1", features = ["tokio"] }
+tower = { version = "0.5", features = ["util"] }
+tokio = { workspace = true, features = ["io-std", "sync"] }
+
+[build-dependencies]
+tonic-prost-build = "0.14.9"
+protox = "0.10.0"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

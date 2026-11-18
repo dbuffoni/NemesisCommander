@@ -1,0 +1,64 @@
+[package]
+name = "nmc-cli"
+description = "The `nmc` binary: NemesisCommander's command line, terminal UI and remote agent."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+default-run = "nmc"
+
+[[bin]]
+name = "nmc"
+path = "src/main.rs"
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-hash.workspace = true
+nmc-ops.workspace = true
+nmc-transfer.workspace = true
+nmc-index.workspace = true
+nmc-archive.workspace = true
+nmc-config.workspace = true
+nmc-panel.workspace = true
+nmc-app = { workspace = true, default-features = false }
+nmc-tui = { workspace = true, optional = true }
+nmc-agent.workspace = true
+nmc-tls.workspace = true
+nmc-script = { workspace = true, optional = true, features = ["engine"] }
+async-trait.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-util.workspace = true
+tempfile = { workspace = true, optional = true }
+# `nmc ai`: the same HTTP client and TLS as WebDAV and S3 (already in `nmc`).
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2"], optional = true }
+rustls = { version = "0.23.4", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
+
+[features]
+default = ["desktop", "remote", "tui", "scripting", "ai"]
+# Desktop build: recycle bin support.
+desktop = ["nmc-app/desktop"]
+# SFTP, WebDAV, S3 and SMB locations. Agent-only server builds leave
+# them out (agent:// and scs:// stay).
+remote = ["nmc-app/remote"]
+# The terminal UI started by `nmc` without a command. Agent-only server
+# builds leave it out.
+tui = ["dep:nmc-tui"]
+# `nmc run`: TypeScript scripts on V8 (adds 30-40 MB). Agent-only server
+# builds leave it out.
+scripting = ["dep:nmc-script", "dep:tempfile", "nmc-tui?/scripting"]
+# `nmc ai`: scripts written by Claude with the user's API key, tested with
+# `nmc test`. Agent-only server builds leave it out.
+ai = ["scripting", "dep:reqwest", "dep:rustls"]
+rar = ["nmc-app/rar"]
+
+[dev-dependencies]
+tempfile.workspace = true
+assert_cmd = "2"
+predicates = "3"
+
+[lints]
+workspace = true
