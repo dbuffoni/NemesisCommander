@@ -2116,10 +2116,13 @@ async fn files_get_the_icon_of_their_kind_unless_icons_are_off() {
     assert!(!screen.contains("▸ docs/") && !screen.contains("≡ a.txt"), "{screen}");
 }
 
-/// Opens `agent://` places on an agent running in this process, and counts
+/// Opens `agent://` places on an agent running in this process (agents run on
+/// Unix servers, and their paths are Unix paths), and counts
 /// the connections it makes.
+#[cfg(unix)]
 struct InProcessAgents(std::sync::Arc<std::sync::atomic::AtomicUsize>);
 
+#[cfg(unix)]
 #[async_trait::async_trait]
 impl ProviderFactory for InProcessAgents {
     fn scheme(&self) -> &str {
@@ -2146,6 +2149,7 @@ impl ProviderFactory for InProcessAgents {
     }
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn ctrl_right_opens_a_remote_subfolder_in_the_other_panel() {
     let dir = TempDir::new().unwrap();
