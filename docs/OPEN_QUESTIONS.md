@@ -25,4 +25,4 @@ Decisions that should not be taken without the owner.
 
 3. **Plugin trust.** A grant belongs to a plugin's name and request
    (ADR 0016). If plugins are shared publicly, should they be signed, and
-   should SuperCommander keep a list of known publishers?
+   should NemesisCommander keep a list of known publishers?

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keeps an eye on SuperCommander's footprint (Linux).
+"""Keeps an eye on NemesisCommander's footprint (Linux).
 
   scripts/footprint.py size FILE MAX_MB
       Fails when FILE is larger than MAX_MB.
@@ -9,7 +9,7 @@
       fails when it uses more than MAX_MB of memory (resident set).
 
   scripts/footprint.py bench SC
-      Times a few everyday jobs of the `sc` program SC on generated files
+      Times a few everyday jobs of the `nmc` program SC on generated files
       and prints a Markdown table with their time and peak memory (which
       includes about 10 MB of this script's own). Only informative: it
       never fails on numbers.
@@ -82,8 +82,8 @@ def measure(command):
     return seconds, usage.ru_maxrss / 1024
 
 
-def bench(sc):
-    work = tempfile.mkdtemp(prefix="sc-bench-")
+def bench(nmc):
+    work = tempfile.mkdtemp(prefix="nmc-bench-")
     try:
         # Made by another process, which keeps this one small: a program
         # started from here starts with this process's peak memory.
@@ -95,11 +95,11 @@ def bench(sc):
         packed = os.path.join(work, "many.zip")
 
         jobs = [
-            ("list 20,000 files", [sc, "ls", "-l", many]),
-            ("hash 256 MB (blake3, memory-mapped)", [sc, "hash", big]),
-            ("copy 256 MB", [sc, "cp", big, copy]),
-            ("open a zip of 100,000 entries", [sc, "ls", f"zip://{archive}!/d1"]),
-            ("pack 20,000 files (zip)", [sc, "pack", many, "-o", packed]),
+            ("list 20,000 files", [nmc, "ls", "-l", many]),
+            ("hash 256 MB (blake3, memory-mapped)", [nmc, "hash", big]),
+            ("copy 256 MB", [nmc, "cp", big, copy]),
+            ("open a zip of 100,000 entries", [nmc, "ls", f"zip://{archive}!/d1"]),
+            ("pack 20,000 files (zip)", [nmc, "pack", many, "-o", packed]),
         ]
         say("| job | time | peak memory |")
         say("|---|---|---|")

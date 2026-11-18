@@ -29,7 +29,7 @@ jobs:
         run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
       - run: cargo fmt --all --check
       # The desktop interface needs Qt: it is checked in the `gui` job.
-      - run: cargo clippy --workspace --exclude sc-gui --all-targets
+      - run: cargo clippy --workspace --exclude nmc-gui --all-targets
 
   test:
     name: Test (${{ matrix.os }})
@@ -52,8 +52,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openssh-sftp-server samba
-          sudo scripts/smb-test-server.sh /var/tmp/sc-smb >> "$GITHUB_ENV"
-      - run: cargo test --workspace --exclude sc-gui
+          sudo scripts/smb-test-server.sh /var/tmp/nmc-smb >> "$GITHUB_ENV"
+      - run: cargo test --workspace --exclude nmc-gui
 
   gui:
     name: Desktop interface (Qt 6)
@@ -80,9 +80,9 @@ jobs:
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             qml6-module-qtqml-workerscript qml6-module-qtqml-models \
             qml6-module-qtquick-dialogs
-      - run: cargo clippy -p sc-gui --all-targets
+      - run: cargo clippy -p nmc-gui --all-targets
       # The window tests use Qt's offscreen platform: no display needed.
-      - run: cargo test -p sc-gui
+      - run: cargo test -p nmc-gui
 
   gui-other:
     name: Desktop interface (${{ matrix.os }})
@@ -112,6 +112,6 @@ jobs:
       # its header, which the current Xcode's clang rejects.
       - if: runner.os == 'macOS'
         run: echo "CXXFLAGS=-include arm_acle.h" >> "$GITHUB_ENV"
-      - run: cargo test -p sc-gui
+      - run: cargo test -p nmc-gui
         env:
           QT_QPA_PLATFORM: offscreen

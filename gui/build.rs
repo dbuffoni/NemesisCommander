@@ -3,7 +3,7 @@
 use cxx_qt_build::{CxxQtBuilder, QmlModule};
 
 fn main() {
-    let module = QmlModule::new("SuperCommander").qml_files([
+    let module = QmlModule::new("NemesisCommander").qml_files([
         "qml/Main.qml",
         "qml/PanelView.qml",
         "qml/ViewerView.qml",

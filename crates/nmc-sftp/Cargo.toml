@@ -1,0 +1,25 @@
+[package]
+name = "nmc-sftp"
+description = "SFTP provider for NemesisCommander, carried by the system's OpenSSH client."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-ssh.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+russh-sftp = "3.0.1"
+tokio = { workspace = true, features = ["io-util", "process", "sync", "time"] }
+
+[dev-dependencies]
+nmc-providers.workspace = true
+nmc-ops.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

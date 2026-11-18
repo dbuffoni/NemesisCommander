@@ -1,0 +1,23 @@
+[package]
+name = "nmc-config"
+description = "NemesisCommander settings, key bindings, bookmarks, connections and export/import to a file."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-ops.workspace = true
+nmc-index.workspace = true
+directories.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

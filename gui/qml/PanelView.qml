@@ -36,8 +36,8 @@ Rectangle {
     DropArea {
         anchors.fill: parent
         onDropped: (drop) => {
-            if (drop.formats.indexOf("application/x-supercommander") >= 0) {
-                const part = drop.getDataAsString("application/x-supercommander").split(":")
+            if (drop.formats.indexOf("application/x-nemesiscommander") >= 0) {
+                const part = drop.getDataAsString("application/x-nemesiscommander").split(":")
                 panel.theme.app.drag_rows(parseInt(part[0]), parseInt(part[1]), panel.side)
             } else if (drop.hasUrls) {
                 panel.theme.app.drop_files(panel.side, drop.urls.join("\n"))
@@ -175,9 +175,9 @@ Rectangle {
                         Drag.dragType: Drag.Automatic
                         Drag.supportedActions: Qt.CopyAction
                         Drag.mimeData: modelData.url !== ""
-                            ? { "application/x-supercommander": panel.side + ":" + index,
+                            ? { "application/x-nemesiscommander": panel.side + ":" + index,
                                 "text/uri-list": modelData.url }
-                            : { "application/x-supercommander": panel.side + ":" + index }
+                            : { "application/x-nemesiscommander": panel.side + ":" + index }
                         DragHandler {
                             id: rowDrag
                             target: null

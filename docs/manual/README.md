@@ -1,10 +1,10 @@
-# SuperCommander manual
+# NemesisCommander manual
 
-SuperCommander is a dual-pane file manager for local and remote files. It
+NemesisCommander is a dual-pane file manager for local and remote files. It
 comes as:
 
-- **`sc-gui`**, a desktop window (Qt 6), shipped as an AppImage on Linux;
-- **`sc`**, one program that is the terminal interface, a command line for
+- **`nmc-gui`**, a desktop window (Qt 6), shipped as an AppImage on Linux;
+- **`nmc`**, one program that is the terminal interface, a command line for
   scripts, and the agent that runs on servers.
 
 Both interfaces work the same way and share every shortcut, so what you learn
@@ -28,7 +28,7 @@ the real window on a demo folder.
 9. [Synchronizing folders](#synchronizing-folders)
 10. [Archives](#archives)
 11. [Remote locations](#remote-locations)
-12. [Servers: the agent and `sc serve`](#servers-the-agent-and-sc-serve)
+12. [Servers: the agent and `nmc serve`](#servers-the-agent-and-nmc-serve)
 13. [The transfer queue](#the-transfer-queue)
 14. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
 15. [Plugins and scripts](#plugins-and-scripts)
@@ -38,12 +38,12 @@ the real window on a demo folder.
 
 ## Getting started
 
-Start the window with `sc-gui` (or the AppImage), or the terminal interface
-with `sc`. Both take up to two locations, one for each panel:
+Start the window with `nmc-gui` (or the AppImage), or the terminal interface
+with `nmc`. Both take up to two locations, one for each panel:
 
 ```sh
-sc-gui ~/Projects sftp://nas/backup
-sc ~/Downloads s3://photos/2026
+nmc-gui ~/Projects sftp://nas/backup
+nmc ~/Downloads s3://photos/2026
 ```
 
 Without locations both panels open the current folder. The window also
@@ -59,7 +59,7 @@ The window adapts to its size; here it is at 800 × 500 and at 1920 × 1080:
 
 ## Commands (F9)
 
-**F9** opens the command list: every command of SuperCommander, of your
+**F9** opens the command list: every command of NemesisCommander, of your
 plugins and of your scripts, one per row as `Category/Command`, with its
 shortcuts on the right.
 
@@ -70,7 +70,7 @@ shortcuts on the right.
   Files/Checksum), the names starting with what you typed first.
   Backspace erases a letter, Ctrl+U or Esc empties the filter.
 - **Categories**: the buttons on top (All, Files, Select, Navigate, View,
-  Tools, SuperCommander, and Plugins and Scripts when you have some) show
+  Tools, NemesisCommander, and Plugins and Scripts when you have some) show
   one category only. Left and Right (or Tab) move between them; in the
   window you can also click them.
 - **Up/Down**, Page Up/Down, Home/End move; **Enter** (or a click in the
@@ -201,7 +201,7 @@ default; the destination can be edited before you confirm.
 |---|---|---|
 | ![Copy](images/copy.png) | ![New folder](images/mkdir.png) | ![Delete](images/delete.png) |
 
-When a file already exists at the destination, SuperCommander asks whether
+When a file already exists at the destination, NemesisCommander asks whether
 to overwrite, skip, keep both (renaming the new one) or overwrite only if
 newer, for this file or for all of them. Every copy and move becomes a job
 in the [transfer queue](#the-transfer-queue), so you can keep working while
@@ -244,10 +244,10 @@ find and replace or regular expression, letter case, counter) from the file
 names only, using your Anthropic API key; the same preview then shows the
 rule and the new names before anything is renamed.
 
-On the command line, `sc rename` has every option of the rule (`--find`,
+On the command line, `nmc rename` has every option of the rule (`--find`,
 `--replace`, `--regex`, `--case`, `--start`, `--step`, `--digits`);
-`--preview` (or `-n`) prints the new names without renaming. `sc ai rename
-"description" FILES...` prints the rule Claude wrote as an `sc rename`
+`--preview` (or `-n`) prints the new names without renaming. `nmc ai rename
+"description" FILES...` prints the rule Claude wrote as an `nmc rename`
 command, with the new names.
 
 ### Renaming in your editor
@@ -372,7 +372,7 @@ viewer shows; Ctrl+Q again closes it.
 **Alt+F7** searches below the current folder by name mask (`*.rs;*.toml`,
 with `!` to exclude) and, optionally, by text the files contain. Results
 appear in a list as they are found; Enter jumps to the chosen file in the
-panel. On the command line, `sc find` also searches by regular expression,
+panel. On the command line, `nmc find` also searches by regular expression,
 size and age.
 
 ![Search](images/search.png)
@@ -466,8 +466,8 @@ Every command works the same on remote locations, written as URIs:
 | SMB / Windows shares | `smb://host/share/dir` |
 | WebDAV (`dav` or `davs` for HTTPS) | `davs://cloud.example.org/remote.php/dav/files/me` |
 | Amazon S3 and compatible services | `s3://bucket/dir` |
-| A server running the SuperCommander agent over SSH | `agent://host/dir` |
-| A server running `sc serve` | `scs://host:7443/dir` |
+| A server running the NemesisCommander agent over SSH | `agent://host/dir` |
+| A server running `nmc serve` | `scs://host:7443/dir` |
 | Inside an archive | `zip:///home/me/site.zip!/css` |
 
 ### One list for drives and connections
@@ -479,7 +479,7 @@ and your saved connections together, grouped by a category column:
 
 - **Local**: your home folder, the root and the disks and network shares
   mounted on this computer (drive letters on Windows, `/Volumes` on macOS).
-- **Remote**: saved SFTP, SMB, WebDAV, S3, agent and `sc serve` connections.
+- **Remote**: saved SFTP, SMB, WebDAV, S3, agent and `nmc serve` connections.
 - **Archive**: a saved location inside an archive file.
 
 Enter opens the highlighted row in the active panel, the same way for every
@@ -498,7 +498,7 @@ shared settings.
 
 ![A new connection](images/drives-new.png)
 
-Passwords are never stored in SuperCommander's settings: SFTP and the agent
+Passwords are never stored in NemesisCommander's settings: SFTP and the agent
 use SSH (keys, agent, `~/.ssh/config`), WebDAV and SMB read `~/.netrc`, S3
 reads the usual `~/.aws` files and environment variables.
 
@@ -524,7 +524,7 @@ connection to that login (same user, host and port), so the agent's other
 keys are not tried first. The file must exist and, on Linux and macOS, be
 readable by you only: if not, connecting stops with a message that says
 so (fix it with `chmod 600 FILE`). Keys with a passphrase need the SSH
-agent (`ssh-add FILE`), since SuperCommander never asks for passwords. In
+agent (`ssh-add FILE`), since NemesisCommander never asks for passwords. In
 the settings file the key is the `identity_file` of the connection:
 
 ```toml
@@ -534,23 +534,23 @@ uri = "sftp://ubuntu@203.0.113.10/var/www"
 identity_file = "~/.ssh/aws-web.pem"
 ```
 
-## Servers: the agent and `sc serve`
+## Servers: the agent and `nmc serve`
 
-On a Linux server, the `sc` agent (a single static program, no
+On a Linux server, the `nmc` agent (a single static program, no
 dependencies) makes remote work much faster than SFTP: listings, searches,
 checksums and copies between folders of that server run on the server.
 
-- **Over SSH**, with nothing to set up: copy `sc` to the server and use
-  `agent://host/path`. SuperCommander starts `sc agent --stdio` through SSH.
-- **Permanently**, with `sc serve`, for long jobs and for copies directly
-  between two servers. On your machine, `sc tls init` creates a private
-  certificate authority once; `sc tls server NAME --out DIR` issues a bundle
-  for each server, which runs `sc serve --tls DIR`. Connections use mutual
+- **Over SSH**, with nothing to set up: copy `nmc` to the server and use
+  `agent://host/path`. NemesisCommander starts `nmc agent --stdio` through SSH.
+- **Permanently**, with `nmc serve`, for long jobs and for copies directly
+  between two servers. On your machine, `nmc tls init` creates a private
+  certificate authority once; `nmc tls server NAME --out DIR` issues a bundle
+  for each server, which runs `nmc serve --tls DIR`. Connections use mutual
   TLS; `--root` limits what is served and `--read-only` refuses changes.
 
 Copies between two `scs://` servers go directly from one to the other when
 they can reach each other (each authorised by a one-time token that expires
-after five minutes), otherwise through your machine. `sc cp` prints the
+after five minutes), otherwise through your machine. `nmc cp` prints the
 route taken; `--route` chooses one.
 
 ## The transfer queue
@@ -612,39 +612,39 @@ opens the bookmarks list.
 
 ## Plugins and scripts
 
-SuperCommander runs extensions written in TypeScript (or JavaScript) with a
-small `sc` API to list, read, write, copy and search files on any location.
+NemesisCommander runs extensions written in TypeScript (or JavaScript) with a
+small `nmc` API to list, read, write, copy and search files on any location.
 Scripts run in a sandbox: they can only touch the paths they were allowed.
 
-- `sc run script.ts` runs a script from the command line, with
+- `nmc run script.ts` runs a script from the command line, with
   `--allow-read` and `--allow-write` for the paths it may use.
 - Plugins are folders with a `plugin.json` that names their commands and the
   permissions they need (for example `$SELECTION` or `$OTHER`). Install one
-  with `sc plugin install DIR`; the first run asks you to allow its
+  with `nmc plugin install DIR`; the first run asks you to allow its
   permissions.
 - Plugin commands are in the command list (F9) as `Category/Command`: in
   the category their manifest names (`"category": "Files"`), or in
   **Plugins**. Each can have a shortcut (Ctrl+K in the list).
 - Your own scripts go in the `scripts` folder of the data folder
-  (`~/.local/share/supercommander/scripts` on Linux). Each `.ts` or `.js`
+  (`~/.local/share/nemesiscommander/scripts` on Linux). Each `.ts` or `.js`
   file there is a command in the **Scripts** category, which can have a
   shortcut too. It runs on the active panel like a script from a panel, with
   no question, since you put it there.
 - **Alt+X** in either interface lists the plugin commands, and offers to run
   the script under the cursor, after a confirmation.
 - The window has no script engine of its own: it runs scripts and plugins
-  with the `sc` program installed next to it (the AppImage has both), so
+  with the `nmc` program installed next to it (the AppImage has both), so
   they behave exactly as from the command line.
 
-- `sc test SCRIPT_OR_PLUGIN` tries it on sample files in a throwaway
+- `nmc test SCRIPT_OR_PLUGIN` tries it on sample files in a throwaway
   folder and lists what it printed and which files it created, removed and
   changed, so you (or an AI assistant writing it for you) can check it
-  before running it on real files. `sc run --guide` prints a guide for
+  before running it on real files. `nmc run --guide` prints a guide for
   AI assistants.
 - **Tools/Write a script with AI…** (F9) asks what the script should do;
-  Claude writes it with your Anthropic API key, `sc test` checks it, and
+  Claude writes it with your Anthropic API key, `nmc test` checks it, and
   Claude fixes it until it passes. It then appears under **Scripts**. From
-  the command line: `sc ai new "description"` (key: `sc ai key` or
+  the command line: `nmc ai new "description"` (key: `nmc ai key` or
   `ANTHROPIC_API_KEY`).
 
 See [docs/scripting.md](../scripting.md) for the API and the examples in
@@ -652,36 +652,36 @@ See [docs/scripting.md](../scripting.md) for the API and the examples in
 
 ## The command line
 
-`sc` with a command works without the interface, for scripts and quick
+`nmc` with a command works without the interface, for scripts and quick
 jobs. Every command accepts the same locations as the panels.
 
 | Command | What it does |
 |---|---|
-| `sc ls LOCATION` | List a folder (`--json` for scripts) |
-| `sc cp SRC... DEST` | Copy, with `--conflict`, `--verify`, `--parallel`, `--limit`, `--queue`, `--route` |
-| `sc mv SRC... DEST` | Move or rename |
-| `sc rm PATH...` | Delete |
-| `sc mkdir PATH...` | Create folders |
-| `sc cat FILE` | Print a file |
-| `sc hash FILE...` | Checksums (`--algorithm blake3`, `xxh3` or `sha256`) |
-| `sc find DIR` | Search by `--name`, `--content` (`--regex`), size and age |
-| `sc pack` / `sc unpack` | Create and extract archives |
-| `sc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace); `--preview` shows the new names only |
-| `sc jobs` | Show and control the transfer queue |
-| `sc config path / show / export / import` | Locate, print, back up and restore the settings |
-| `sc config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
-| `sc keys` | Print the main shortcuts |
-| `sc run` / `sc plugin` | Scripts and plugins (`sc run --guide`: the guide for AI assistants) |
-| `sc test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
-| `sc ai new` / `sc ai rename` / `sc ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
-| `sc agent --stdio`, `sc serve`, `sc tls` | The server side (Linux) |
+| `nmc ls LOCATION` | List a folder (`--json` for scripts) |
+| `nmc cp SRC... DEST` | Copy, with `--conflict`, `--verify`, `--parallel`, `--limit`, `--queue`, `--route` |
+| `nmc mv SRC... DEST` | Move or rename |
+| `nmc rm PATH...` | Delete |
+| `nmc mkdir PATH...` | Create folders |
+| `nmc cat FILE` | Print a file |
+| `nmc hash FILE...` | Checksums (`--algorithm blake3`, `xxh3` or `sha256`) |
+| `nmc find DIR` | Search by `--name`, `--content` (`--regex`), size and age |
+| `nmc pack` / `nmc unpack` | Create and extract archives |
+| `nmc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace); `--preview` shows the new names only |
+| `nmc jobs` | Show and control the transfer queue |
+| `nmc config path / show / export / import` | Locate, print, back up and restore the settings |
+| `nmc config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
+| `nmc keys` | Print the main shortcuts |
+| `nmc run` / `nmc plugin` | Scripts and plugins (`nmc run --guide`: the guide for AI assistants) |
+| `nmc test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
+| `nmc ai new` / `nmc ai rename` / `nmc ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
+| `nmc agent --stdio`, `nmc serve`, `nmc tls` | The server side (Linux) |
 
 For example:
 
 ```sh
-sc cp --verify full ~/Pictures/2026 sftp://nas/backup/pictures/
-sc find ~/Projects --name "*.rs" --content "TODO" --json
-sc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
+nmc cp --verify full ~/Pictures/2026 sftp://nas/backup/pictures/
+nmc find ~/Projects --name "*.rs" --content "TODO" --json
+nmc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
 ```
 
 ## Settings
@@ -715,24 +715,24 @@ changed in one works in the other.
 
 ### Sharing settings with other machines
 
-The last rows of the screen, and `sc config`, move settings between
+The last rows of the screen, and `nmc config`, move settings between
 machines. Nothing is synchronized in the background: settings move only
 when you send or fetch them.
 
-- **Send these settings to another machine…** (`sc config push LOCATION`)
+- **Send these settings to another machine…** (`nmc config push LOCATION`)
   writes your settings there. For a server running the agent, the machine
   is enough (`agent://host`, `scs://host:7443`): the agent says where its
   settings live. Anywhere else, give the settings file or its folder, for
-  example `sftp://host/home/me/.config/supercommander`. The previous file
+  example `sftp://host/home/me/.config/nemesiscommander`. The previous file
   is kept as `config.toml.bak`; `--merge` keeps the other machine's
   bookmarks, connections and shortcuts.
-- **Get the settings of another machine…** (`sc config pull LOCATION`)
+- **Get the settings of another machine…** (`nmc config pull LOCATION`)
   reads them, then asks whether to replace yours or merge them.
 - **Export / Import** write and read a settings file anywhere, and **Edit
   the settings file** opens the TOML file in your editor; it is read again
   when you close the editor.
 
-`sc config path` shows where the settings file is.
+`nmc config path` shows where the settings file is.
 
 ## All shortcuts
 
@@ -809,7 +809,7 @@ on the settings screen (Ctrl+,).
 | Alt+X | Plugins and scripts |
 | (F9 only) | Write a script with AI |
 
-| SuperCommander | |
+| NemesisCommander | |
 |---|---|
 | F1 | Show main shortcuts |
 | F9 | Commands: find and run any command, give it a shortcut |

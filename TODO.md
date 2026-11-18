@@ -9,7 +9,7 @@ release.
   enable the `rar` feature, which links RARLAB's unRAR source through the
   `unrar` crate. Its license allows free use and redistribution but forbids
   using the code to recreate the RAR compression algorithm, and it is not
-  OSI-approved. SuperCommander itself is MIT; the AppImage must ship
+  OSI-approved. NemesisCommander itself is MIT; the AppImage must ship
   unRAR's license text in its third-party notices, and distributions that
   only accept free software should build without `--features rar`
   (archives then open everything except RAR).

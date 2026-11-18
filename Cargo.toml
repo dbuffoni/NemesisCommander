@@ -2,14 +2,14 @@
 resolver = "3"
 members = ["crates/*", "gui"]
 # The desktop interface needs Qt, so plain `cargo build` and `cargo test`
-# leave it out; build it with `-p sc-gui`.
+# leave it out; build it with `-p nmc-gui`.
 default-members = ["crates/*"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.92"
-repository = "https://github.com/dbuffoni/SuperCommander"
+repository = "https://github.com/dbuffoni/NemesisCommander"
 license = "MIT"
 
 [workspace.lints.rust]
@@ -34,28 +34,28 @@ debug = false
 # so that the whole workspace always agrees on a single version.
 [workspace.dependencies]
 # internal crates
-sc-vfs = { path = "crates/sc-vfs" }
-sc-hash = { path = "crates/sc-hash" }
-sc-providers = { path = "crates/sc-providers", default-features = false }
-sc-ops = { path = "crates/sc-ops" }
-sc-transfer = { path = "crates/sc-transfer" }
-sc-index = { path = "crates/sc-index" }
-sc-archive = { path = "crates/sc-archive" }
-sc-config = { path = "crates/sc-config" }
-sc-panel = { path = "crates/sc-panel" }
-sc-app = { path = "crates/sc-app", default-features = false }
-sc-frontend = { path = "crates/sc-frontend" }
-sc-tui = { path = "crates/sc-tui" }
-sc-proto = { path = "crates/sc-proto" }
-sc-agent = { path = "crates/sc-agent" }
-sc-ssh = { path = "crates/sc-ssh" }
-sc-sftp = { path = "crates/sc-sftp" }
-sc-webdav = { path = "crates/sc-webdav" }
-sc-s3 = { path = "crates/sc-s3" }
-sc-smb = { path = "crates/sc-smb" }
-sc-tls = { path = "crates/sc-tls" }
-sc-script = { path = "crates/sc-script", default-features = false }
-sc-preview = { path = "crates/sc-preview" }
+nmc-vfs = { path = "crates/nmc-vfs" }
+nmc-hash = { path = "crates/nmc-hash" }
+nmc-providers = { path = "crates/nmc-providers", default-features = false }
+nmc-ops = { path = "crates/nmc-ops" }
+nmc-transfer = { path = "crates/nmc-transfer" }
+nmc-index = { path = "crates/nmc-index" }
+nmc-archive = { path = "crates/nmc-archive" }
+nmc-config = { path = "crates/nmc-config" }
+nmc-panel = { path = "crates/nmc-panel" }
+nmc-app = { path = "crates/nmc-app", default-features = false }
+nmc-frontend = { path = "crates/nmc-frontend" }
+nmc-tui = { path = "crates/nmc-tui" }
+nmc-proto = { path = "crates/nmc-proto" }
+nmc-agent = { path = "crates/nmc-agent" }
+nmc-ssh = { path = "crates/nmc-ssh" }
+nmc-sftp = { path = "crates/nmc-sftp" }
+nmc-webdav = { path = "crates/nmc-webdav" }
+nmc-s3 = { path = "crates/nmc-s3" }
+nmc-smb = { path = "crates/nmc-smb" }
+nmc-tls = { path = "crates/nmc-tls" }
+nmc-script = { path = "crates/nmc-script", default-features = false }
+nmc-preview = { path = "crates/nmc-preview" }
 
 # async & utilities
 async-trait = "0.1.92"

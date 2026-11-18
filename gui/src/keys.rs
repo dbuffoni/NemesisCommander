@@ -3,8 +3,8 @@
 //! QML hands over `event.key`, `event.text` and `event.modifiers` unchanged;
 //! the numbers are the ones of `Qt::Key` and `Qt::KeyboardModifier`.
 
-use sc_config::{Key, KeyChord};
-use sc_frontend::KeyPress;
+use nmc_config::{Key, KeyChord};
+use nmc_frontend::KeyPress;
 
 /// `Qt::ShiftModifier`.
 pub const SHIFT: i32 = 0x0200_0000;
