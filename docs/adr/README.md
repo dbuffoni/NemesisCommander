@@ -39,6 +39,7 @@ taken while implementing it.
 | 0029 | [The product is renamed NemesisCommander, the program `nmc`](0029-rename-to-nemesiscommander.md) | Accepted |
 | 0030 | [Remote connections are probed and reopened; jobs tune their parallelism; `nmc serve install`](0030-remote-resilience-and-parallelism.md) | Accepted |
 | 0031 | [Server-to-server copies in the queue, S3 upload resume, content checks on servers](0031-remote-followups.md) | Accepted |
+| 0032 | [Remote features tested against real servers, panel connection state](0032-tested-against-real-servers.md) | Accepted |
 
 Template:
 

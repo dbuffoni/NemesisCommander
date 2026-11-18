@@ -83,6 +83,17 @@ pub fn connection_kind(location: &str) -> Option<&'static str> {
     })
 }
 
+/// What to add to the drive text of a remote panel whose last listing
+/// failed with a lost connection (`lost`): the next listing, already
+/// running (`loading`), opens the connection again.
+pub fn connection_state(lost: bool, loading: bool) -> &'static str {
+    match (lost, loading) {
+        (true, true) => " · reconnecting…",
+        (true, false) => " · connection lost",
+        (false, _) => "",
+    }
+}
+
 /// The short name shown above a panel for `location`: the saved connection
 /// it is inside, else the kind of place (`Local`, `C:`, `sftp`, `Archive`).
 pub fn drive_label(config: &Config, location: &nmc_vfs::VfsPath) -> String {
@@ -226,6 +237,13 @@ mod tests {
         let name = |uri: &str| suggested_name(&nmc_vfs::VfsPath::parse(uri).unwrap());
         assert_eq!(name("sftp://me@nas.lan:2222/srv"), "nas.lan");
         assert_eq!(name("s3://photos/2026"), "photos");
+    }
+
+    #[test]
+    fn a_lost_connection_shows_until_a_listing_works() {
+        assert_eq!(connection_state(false, true), "");
+        assert_eq!(connection_state(true, false), " · connection lost");
+        assert_eq!(connection_state(true, true), " · reconnecting…");
     }
 
     #[test]

@@ -193,3 +193,98 @@ async fn copies_between_local_and_smb_with_the_normal_engine() {
     let two = fs::read(work.path().join("back/source/deep/er/two.bin")).unwrap();
     assert_eq!(two, vec![7u8; 700_000]);
 }
+
+/// A TCP relay in front of the test server whose connections can all be cut
+/// at once, like a server restart or a network drop.
+struct Relay {
+    addr: String,
+    cut: tokio::sync::watch::Sender<u64>,
+}
+
+impl Relay {
+    async fn start(target: &str) -> Relay {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let (cut, watch) = tokio::sync::watch::channel(0u64);
+        let target = target.to_owned();
+        tokio::spawn(async move {
+            while let Ok((mut client, _)) = listener.accept().await {
+                let target = target.clone();
+                let mut watch = watch.clone();
+                watch.mark_unchanged();
+                tokio::spawn(async move {
+                    let Ok(mut server) = tokio::net::TcpStream::connect(&target).await else {
+                        return;
+                    };
+                    tokio::select! {
+                        _ = tokio::io::copy_bidirectional(&mut client, &mut server) => {}
+                        _ = watch.changed() => {}
+                    }
+                });
+            }
+        });
+        Relay { addr, cut }
+    }
+
+    /// Drops every open connection; new ones are accepted again.
+    fn cut(&self) {
+        self.cut.send_modify(|n| *n += 1);
+    }
+}
+
+#[tokio::test]
+async fn the_share_works_again_after_the_connection_was_cut() {
+    let (Ok(url), Ok(dir)) = (std::env::var("NMC_TEST_SMB_URL"), std::env::var("NMC_TEST_SMB_DIR"))
+    else {
+        eprintln!("skipping: no SMB test server (see scripts/smb-test-server.sh)");
+        return;
+    };
+    let password = std::env::var("NMC_TEST_SMB_PASSWORD").unwrap_or_default();
+    let share = VfsPath::parse(&url).unwrap();
+    let (user, addr) = share.authority().rsplit_once('@').unwrap();
+    let relay = Relay::start(addr).await;
+    let provider = SmbProvider::connect(&relay.addr, user, &password).await.unwrap();
+    let folder = PathBuf::from(dir).join("reconnect");
+    let _ = fs::remove_dir_all(&folder);
+    let base = VfsPath::parse(&format!("smb://{user}@{}/share/reconnect", relay.addr)).unwrap();
+    provider.create_dir(&base).await.unwrap();
+    let file = base.join("a.txt");
+    write_all(&provider, &file, WriteMode::Truncate, b"before").await;
+    assert_eq!(read_all(&provider, &file, 0).await, b"before");
+
+    relay.cut();
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // A call right after the cut may report the lost connection (the
+    // transfer engine then retries on a new one); the share must work again
+    // after that without restarting anything.
+    let mut recovered = false;
+    for _ in 0..3 {
+        match provider.stat(&file).await {
+            Ok(_) => {
+                recovered = true;
+                break;
+            }
+            Err(e) => assert!(e.to_string().contains("connection lost"), "unexpected error: {e}"),
+        }
+    }
+    assert!(recovered, "the share never recovered");
+    let mut sink = None;
+    for _ in 0..3 {
+        match provider
+            .write(&file, WriteOptions { mode: WriteMode::Truncate, size_hint: None })
+            .await
+        {
+            Ok(opened) => {
+                sink = Some(opened);
+                break;
+            }
+            Err(e) => assert!(e.to_string().contains("connection lost"), "unexpected error: {e}"),
+        }
+    }
+    let mut sink = sink.expect("could not open the file again");
+    sink.write_all(b"after").await.unwrap();
+    sink.shutdown().await.unwrap();
+    assert_eq!(read_all(&provider, &file, 0).await, b"after");
+    assert_eq!(fs::read(folder.join("a.txt")).unwrap(), b"after");
+}

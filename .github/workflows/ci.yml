@@ -47,12 +47,15 @@ jobs:
       - name: Let v8 fetch its library
         shell: bash
         run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
-      # OpenSSH's sftp-server and Samba, for the SFTP and SMB provider tests.
+      # OpenSSH's sftp-server and Samba, for the SFTP and SMB provider tests,
+      # and a private sshd for the `nmc serve install` test.
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends openssh-sftp-server samba
+          sudo apt-get install -y --no-install-recommends openssh-sftp-server openssh-server samba
           sudo scripts/smb-test-server.sh /var/tmp/nmc-smb >> "$GITHUB_ENV"
+          sudo mkdir -p /run/sshd
+          scripts/ssh-test-server.sh /var/tmp/nmc-ssh >> "$GITHUB_ENV"
       - run: cargo test --workspace --exclude nmc-gui
 
   gui:
