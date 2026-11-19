@@ -2473,13 +2473,13 @@ async fn the_flat_view_lists_files_below_with_their_folder() {
     h.key("Backspace");
     h.settle().await;
     let screen = h.screen();
-    assert!(!screen.contains("(flat)"), "Backspace leaves the flat view: {screen}");
+    assert!(!screen.contains("Folder "), "Backspace leaves the flat view: {screen}");
     assert!(h.app.is_running());
     h.key("Alt+V");
     h.settle().await;
-    assert!(h.screen().contains("(flat)"), "Alt+V enters it again");
+    assert!(h.screen().contains("Folder "), "Alt+V enters it again");
     h.key("Alt+V");
     h.settle().await;
-    assert!(!h.screen().contains("(flat)"), "and leaves it");
+    assert!(!h.screen().contains("Folder "), "and leaves it");
     assert!(screen.contains("docs"), "{screen}");
 }
