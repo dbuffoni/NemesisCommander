@@ -108,6 +108,8 @@ fn every_dialog_draws_cleanly() {
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
         ("Ctrl+,", "settings"),
+        // About: the logo above the text.
+        ("F9 a b o u t Enter", "message"),
         // F1 explains the highlighted command; typing finds a setting.
         ("F9 s w a p F1", "commands"),
         ("Ctrl+, f o n t", "settings"),
@@ -116,6 +118,18 @@ fn every_dialog_draws_cleanly() {
         assert_no_qml_warnings(&run);
         assert_eq!(run.screen["overlay"]["kind"], kind, "{keys}: {}", run.screen["overlay"]);
     }
+}
+
+#[test]
+fn about_shows_the_logo_from_a_file() {
+    let home = home();
+    let run = run(home.path(), "F9 a b o u t Enter", None);
+    assert_no_qml_warnings(&run);
+    let about = &run.screen["overlay"];
+    let url = about["logo_url"].as_str().unwrap_or_default();
+    assert!(url.starts_with("file://") && url.ends_with("logo.png"), "{about}");
+    assert!(std::path::Path::new(url.trim_start_matches("file://")).exists());
+    assert!(about["lines"][0].as_str().unwrap().starts_with("NemesisCommander 0."), "{about}");
 }
 
 #[test]
