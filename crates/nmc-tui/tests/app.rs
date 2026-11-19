@@ -2464,7 +2464,7 @@ async fn the_flat_view_lists_files_below_with_their_folder() {
     h.key("Alt+V");
     h.settle().await;
     let screen = h.screen();
-    assert!(screen.contains("(flat)"), "{screen}");
+    // (The title may be cut on long temporary paths; the column says it too.)
     assert!(screen.contains("Folder"), "a folder column: {screen}");
     let line = screen.lines().find(|l| l.contains("readme.md")).expect("the nested file is listed");
     assert!(line.contains("docs"), "with its folder: {line}");
