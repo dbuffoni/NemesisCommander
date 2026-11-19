@@ -675,7 +675,12 @@ fn draw_content(frame: &mut Frame, viewer: &Viewer, area: Rect) {
         frame.render_widget(Paragraph::new(lines), area);
         return;
     }
-    let lines: Vec<Line> = viewer.visible_rows(page).into_iter().map(Line::raw).collect();
+    let tinted = viewer.visible_tinted(page);
+    let lines: Vec<Line> = if tinted.is_empty() {
+        viewer.visible_rows(page).into_iter().map(Line::raw).collect()
+    } else {
+        tinted.iter().map(rich_line).collect()
+    };
     let mut paragraph = Paragraph::new(lines);
     if viewer.wrap && !viewer.hex {
         paragraph = paragraph.wrap(Wrap { trim: false });
@@ -694,6 +699,7 @@ fn rich_line(line: &nmc_preview::rich::Line) -> Line<'static> {
 
 /// How a document style looks in a terminal.
 fn rich_style(style: &nmc_preview::rich::Style) -> Style {
+    use nmc_preview::rich::Tone;
     let mut out = Style::new();
     match style.heading {
         0 => {}
@@ -718,6 +724,14 @@ fn rich_style(style: &nmc_preview::rich::Style) -> Style {
     }
     if style.removed {
         out = out.fg(Color::Red);
+    }
+    match style.tone {
+        Tone::Plain => {}
+        Tone::Keyword => out = out.fg(Color::Magenta),
+        Tone::Str => out = out.fg(Color::Green),
+        Tone::Number => out = out.fg(Color::Yellow),
+        Tone::Comment => out = out.fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+        Tone::Name => out = out.fg(Color::Cyan),
     }
     out
 }

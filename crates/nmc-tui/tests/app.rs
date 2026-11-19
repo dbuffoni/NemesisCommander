@@ -503,6 +503,43 @@ async fn viewer_shows_text_and_hex() {
 }
 
 #[tokio::test]
+async fn viewer_colours_source_files_by_language() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/main.rs"), "fn main() {\n    let n = 42; // answer\n}\n").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("main.rs");
+    h.key("F3");
+    h.settle().await;
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let colour_of = |word: &str| -> Option<ratatui::style::Color> {
+        let area = buffer.area;
+        (0..area.height).find_map(|y| {
+            let row: String = (0..area.width).map(|x| buffer[(x, y)].symbol()).collect();
+            let at = row.find(word)?;
+            let x = row[..at].chars().count() as u16;
+            Some(buffer[(x, y)].fg)
+        })
+    };
+    use ratatui::style::Color;
+    assert_eq!(colour_of("fn main"), Some(Color::Magenta), "keyword");
+    assert_eq!(colour_of("42"), Some(Color::Yellow), "number");
+    assert_eq!(colour_of("// answer"), Some(Color::DarkGray), "comment");
+    assert!(h.screen().contains("Rust"), "the language is named");
+    // Plain text stays plain.
+    h.key("Esc");
+    h.focus("notes.txt");
+    h.key("F3");
+    h.settle().await;
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let plain = terminal.backend().buffer().content().iter().any(|c| c.fg == Color::Magenta);
+    assert!(!plain);
+}
+
+#[tokio::test]
 async fn viewer_draws_images() {
     let mut h = Harness::new().await;
     // A small solid green PNG.

@@ -22,6 +22,40 @@ pub struct Style {
     pub mark: bool,
     /// Something taken away (red): removed lines, files to delete.
     pub removed: bool,
+    /// What a piece of source code is (see [`crate::syntax`]).
+    pub tone: Tone,
+}
+
+/// The colour class of a piece of source code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tone {
+    /// Not coloured.
+    #[default]
+    Plain,
+    /// A reserved word.
+    Keyword,
+    /// A string or character literal.
+    Str,
+    /// A number.
+    Number,
+    /// A comment.
+    Comment,
+    /// A name that matters: a type, a key, a tag, a variable.
+    Name,
+}
+
+impl Tone {
+    /// The word a window uses for this class (empty for plain text).
+    pub fn word(self) -> &'static str {
+        match self {
+            Tone::Plain => "",
+            Tone::Keyword => "keyword",
+            Tone::Str => "string",
+            Tone::Number => "number",
+            Tone::Comment => "comment",
+            Tone::Name => "name",
+        }
+    }
 }
 
 /// Text with one style.

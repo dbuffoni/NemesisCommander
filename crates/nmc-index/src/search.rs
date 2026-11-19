@@ -223,10 +223,12 @@ async fn search_tree(
                 let item = item?;
                 let first_match = match &run.criteria.content {
                     None => None,
-                    Some(query) => match find_content(provider.as_ref(), &item.path, query).await? {
-                        Some(found) => Some(found),
-                        None => return Ok(None),
-                    },
+                    Some(query) => {
+                        match find_content(provider.as_ref(), &item.path, query).await? {
+                            Some(found) => Some(found),
+                            None => return Ok(None),
+                        }
+                    }
                 };
                 Ok(Some(SearchHit { path: item.path, entry: item.entry, first_match }))
             }
@@ -501,8 +503,8 @@ mod tests {
     #[tokio::test]
     async fn archives_are_searched_only_when_asked() {
         let content = || Some(ContentQuery::text("needle", true));
-        let without = run_with_archives(SearchCriteria { content: content(), ..Default::default() })
-            .await;
+        let without =
+            run_with_archives(SearchCriteria { content: content(), ..Default::default() }).await;
         assert_eq!(paths(&without), ["/data/plain.txt"]);
 
         let with = run_with_archives(SearchCriteria {

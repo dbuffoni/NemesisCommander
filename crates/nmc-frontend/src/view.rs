@@ -323,6 +323,10 @@ pub struct ViewerView {
     pub image_url: Option<String>,
     /// Formatted lines (documents), from the scroll position.
     pub rich: Vec<RichLineView>,
+    /// The text `lines` with colours (source and data files): same rows,
+    /// pieces with a `keyword`, `string`, `number`, `comment` or `name`
+    /// word. Empty when the text has no colours.
+    pub tinted: Vec<RichLineView>,
     /// One line about what is shown (picture size, page, zoom).
     pub info: String,
     /// The keys of this mode, for the window's header.
@@ -341,7 +345,8 @@ pub struct SpanView {
     /// The text.
     pub text: String,
     /// How it looks, as space-separated words: `h1`-`h6`, `bold`,
-    /// `italic`, `code`, `link`, `mark` (decorations); empty for plain.
+    /// `italic`, `code`, `link`, `mark` (decorations), `keyword`, `string`,
+    /// `number`, `comment`, `name` (source code); empty for plain.
     pub style: String,
 }
 
@@ -381,6 +386,9 @@ impl SpanView {
         let mut words: Vec<String> = Vec::new();
         if s.heading > 0 {
             words.push(format!("h{}", s.heading));
+        }
+        if s.tone != nmc_preview::rich::Tone::Plain {
+            words.push(s.tone.word().to_owned());
         }
         for (on, word) in [
             (s.bold, "bold"),
@@ -765,6 +773,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
                 loading: false,
                 image_url: None,
                 rich: Vec::new(),
+                tinted: Vec::new(),
                 info: String::new(),
                 keys: String::new(),
                 zoom: 1.0,
@@ -930,6 +939,8 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
     } else {
         viewer.visible_rows(rows)
     };
+    let tinted: Vec<RichLineView> =
+        viewer.visible_tinted(rows).iter().map(RichLineView::of).collect();
     ViewerView {
         title: viewer.title.clone().unwrap_or_else(|| display_location(&viewer.path)),
         mode: viewer.mode().into(),
@@ -940,6 +951,7 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
         loading: viewer.data.is_none() && viewer.error.is_none(),
         image_url,
         rich,
+        tinted,
         info: viewer.info(),
         keys: viewer_keys(viewer).into(),
         zoom: f64::from(viewer.zoom.factor),
