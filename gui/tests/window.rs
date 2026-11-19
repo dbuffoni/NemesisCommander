@@ -128,7 +128,10 @@ fn about_shows_the_logo_from_a_file() {
     let about = &run.screen["overlay"];
     let url = about["logo_url"].as_str().unwrap_or_default();
     assert!(url.starts_with("file://") && url.ends_with("logo.png"), "{about}");
-    assert!(std::path::Path::new(url.trim_start_matches("file://")).exists());
+    // `file:///C:/x` on Windows, `file:///tmp/x` elsewhere.
+    let path = url.trim_start_matches("file://");
+    let path = if cfg!(windows) { path.trim_start_matches('/') } else { path };
+    assert!(std::path::Path::new(path).exists(), "{url}");
     assert!(about["lines"][0].as_str().unwrap().starts_with("NemesisCommander 0."), "{about}");
 }
 
