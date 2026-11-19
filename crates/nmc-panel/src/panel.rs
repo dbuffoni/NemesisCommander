@@ -654,7 +654,6 @@ mod tests {
         m.put_file("/t/sub/deep/inner.txt", "22");
         m.put_file("/t/sub/.secret/x", "3");
         m.put_file("/t/sub/side.md", "4");
-        let mut registry = registry;
         registry.insert(&p("/t"), Arc::new(m));
         let mut panel = Panel::new(p("/t"), SortSpec::default(), false);
         let request = panel.reload();
