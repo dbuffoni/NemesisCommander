@@ -68,6 +68,9 @@ pub enum Command {
     /// Have Claude write a script or a plugin (tested with `nmc test` until
     /// it passes), or a multi-rename rule.
     Ai(AiArgs),
+    /// Open the terminal UI as a chooser and print the chosen paths, one per
+    /// line (for editors, shell scripts and `$(nmc pick)`).
+    Pick(PickArgs),
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -671,4 +674,20 @@ pub enum PluginAction {
         #[arg(long, value_name = "LOCATION")]
         other: Option<String>,
     },
+}
+
+/// Options of `nmc pick`.
+#[derive(Debug, Args)]
+pub struct PickArgs {
+    /// Folder or URI to start in (the current folder when omitted).
+    pub location: Option<String>,
+    /// Choose a folder (the one shown, with Alt+Y) instead of files.
+    #[arg(short, long)]
+    pub dir: bool,
+    /// Allow several files: mark them with Space, then press Enter.
+    #[arg(short, long)]
+    pub multiple: bool,
+    /// End each path with a NUL character instead of a new line.
+    #[arg(short = '0', long)]
+    pub null: bool,
 }

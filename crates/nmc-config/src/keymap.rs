@@ -169,6 +169,7 @@ actions! {
     Settings      = "app.settings",         App, true,  "Settings…",                  ["Ctrl+,"];
     ExportConfig  = "app.export-config",    App, false, "Export settings to file…",   [];
     ImportConfig  = "app.import-config",    App, false, "Import settings from file…", [];
+    Choose        = "app.choose",           App, false, "Choose and exit (nmc pick)", ["Alt+Y"];
     Quit          = "app.quit",             App, true,  "Quit",                       ["F10"];
 }
 
@@ -338,6 +339,9 @@ impl Action {
             }
             Action::ImportConfig => {
                 "Reads settings, bookmarks and connections from a file written by Export, replacing or merging."
+            }
+            Action::Choose => {
+                "Only in nmc pick: gives the marked items, the item under the cursor or, when asked for a folder, the current folder to the program that started nmc pick."
             }
             Action::Quit => "Closes the application.",
         }

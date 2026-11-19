@@ -2331,3 +2331,69 @@ async fn the_basket_packs_what_it_holds() {
     assert_eq!(h.status(), "Packed 2 entries into basket.zip");
     assert!(h.path("right/basket.zip").exists());
 }
+
+// ------------------------------------------------------------- pick mode
+
+fn paths(h: &Harness) -> Vec<PathBuf> {
+    h.app.picked().expect("something was chosen").iter().filter_map(|p| p.to_local_path()).collect()
+}
+
+#[tokio::test]
+async fn pick_mode_chooses_the_file_under_the_cursor() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode::default());
+    // The cursor starts on `..`; folders are entered, files are chosen.
+    h.key("Down");
+    h.key("Down"); // docs/ is first, then a.txt
+    h.key("Enter");
+    h.settle().await;
+    assert!(!h.app.is_running());
+    assert_eq!(paths(&h), vec![h.path("left/a.txt")]);
+}
+
+#[tokio::test]
+async fn pick_mode_enters_folders_and_esc_cancels() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode::default());
+    h.key("Down"); // docs/
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.is_running(), "a folder is entered, not chosen");
+    assert!(h.screen().contains("readme.md"));
+    h.key("Esc");
+    assert!(!h.app.is_running());
+    assert!(h.app.picked().is_none(), "cancelled: nothing chosen");
+}
+
+#[tokio::test]
+async fn pick_mode_with_several_files_gives_the_marked_ones() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode { folder: false, multiple: true });
+    h.key("Down");
+    h.key("Down"); // a.txt
+    h.key("Space"); // marks a.txt and moves to notes.txt
+    h.key("Space");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(paths(&h), vec![h.path("left/a.txt"), h.path("left/notes.txt")]);
+}
+
+#[tokio::test]
+async fn pick_mode_for_a_folder_gives_the_one_shown() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode { folder: true, multiple: false });
+    h.key("Down"); // docs/
+    h.key("Enter");
+    h.settle().await;
+    h.key("Alt+Y");
+    assert!(!h.app.is_running());
+    assert_eq!(paths(&h), vec![h.path("left/docs")]);
+}
+
+#[tokio::test]
+async fn choosing_does_nothing_outside_pick_mode() {
+    let mut h = Harness::new().await;
+    h.key("Alt+Y");
+    assert!(h.app.is_running());
+    assert!(h.app.picked().is_none());
+}

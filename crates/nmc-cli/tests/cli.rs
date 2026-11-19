@@ -325,3 +325,15 @@ fn config_push_and_pull_through_any_location() {
     sandbox.nmc().args(["config", "pull", &folder]).assert().success();
     sandbox.nmc().args(["config", "push", &sandbox.arg("missing")]).assert().failure();
 }
+
+#[test]
+fn pick_needs_a_terminal() {
+    // Standard input is not a terminal here, so the chooser cannot start.
+    let sandbox = Sandbox::new();
+    sandbox
+        .nmc()
+        .args(["pick", "src"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs a terminal"));
+}
