@@ -370,8 +370,7 @@ async fn the_command_list_runs_commands() {
 fn command_list_height(screen: &str) -> usize {
     let lines: Vec<&str> = screen.lines().collect();
     let top = lines.iter().position(|l| l.contains(" Commands ")).expect("title border");
-    let bottom = lines[top..].iter().position(|l| l.contains('└')).expect("bottom border");
-    bottom
+    lines[top..].iter().position(|l| l.contains('└')).expect("bottom border")
 }
 
 #[tokio::test]

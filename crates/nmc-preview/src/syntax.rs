@@ -443,14 +443,7 @@ impl Out {
 }
 
 fn starts_with(chars: &[char], at: usize, pattern: &str) -> bool {
-    let mut index = at;
-    for c in pattern.chars() {
-        if chars.get(index) != Some(&c) {
-            return false;
-        }
-        index += 1;
-    }
-    true
+    pattern.chars().zip(at..).all(|(c, index)| chars.get(index) == Some(&c))
 }
 
 /// The index just after `close` searching from `from`, if it is there.
@@ -532,18 +525,16 @@ fn lex_code(config: &Config, chars: &[char], mut state: State, out: &mut Out) ->
             i = end;
             continue;
         }
-        if let Some((open, close)) = config.block {
-            if starts_with(chars, i, open) {
-                match find_after(chars, i + open.chars().count(), close) {
-                    Some(end) => {
-                        out.push(&chars[i..end], Tone::Comment);
-                        i = end;
-                        continue;
-                    }
-                    None => {
-                        out.push(&chars[i..], Tone::Comment);
-                        return State::Block;
-                    }
+        if let Some((open, close)) = config.block.filter(|(open, _)| starts_with(chars, i, open)) {
+            match find_after(chars, i + open.chars().count(), close) {
+                Some(end) => {
+                    out.push(&chars[i..end], Tone::Comment);
+                    i = end;
+                    continue;
+                }
+                None => {
+                    out.push(&chars[i..], Tone::Comment);
+                    return State::Block;
                 }
             }
         }
