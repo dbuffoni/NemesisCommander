@@ -325,3 +325,45 @@ fn config_push_and_pull_through_any_location() {
     sandbox.nmc().args(["config", "pull", &folder]).assert().success();
     sandbox.nmc().args(["config", "push", &sandbox.arg("missing")]).assert().failure();
 }
+
+#[test]
+fn pick_needs_a_terminal() {
+    // Standard input is not a terminal here, so the chooser cannot start.
+    let sandbox = Sandbox::new();
+    sandbox
+        .nmc()
+        .args(["pick", "src"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("needs a terminal"));
+}
+
+#[test]
+fn find_looks_inside_archives_when_asked() {
+    let sandbox = Sandbox::new();
+    sandbox.nmc().args(["pack", "src", "-o", "bundle.zip"]).assert().success();
+    fs::remove_dir_all(sandbox.path("src")).unwrap();
+    fs::create_dir_all(sandbox.path("work")).unwrap();
+    fs::rename(sandbox.path("bundle.zip"), sandbox.path("work/bundle.zip")).unwrap();
+
+    // Without the option the archive is just a file.
+    sandbox
+        .nmc()
+        .args(["find", "work", "--content", "hello world"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::is_empty());
+
+    sandbox
+        .nmc()
+        .args(["find", "work", "--content", "hello world", "--archives"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello.txt:1: hello world"));
+    sandbox
+        .nmc()
+        .args(["find", "work", "--name", "code.rs", "--archives"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("code.rs"));
+}

@@ -1,0 +1,103 @@
+//! The About window: logo, version, licence and where to find the source.
+//!
+//! The logo is part of the program (`assets/branding`): a terminal draws
+//! it with half-block characters like any picture, a window shows the
+//! same PNG from a file in the temporary folder.
+
+use std::sync::OnceLock;
+
+use image::RgbaImage;
+
+use crate::dialogs::MessageDialog;
+
+/// The logo as a PNG, 256 × 256.
+pub const LOGO_PNG: &[u8] = include_bytes!("../../../assets/branding/nemesiscommander-256.png");
+
+/// The version of the program.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The git commit it was built from (with `-dirty` after local changes).
+pub const COMMIT: &str = env!("NMC_BUILD_COMMIT");
+
+/// Where the source is.
+pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+
+/// Rows of text the logo takes in a terminal.
+pub const LOGO_ROWS: u16 = 10;
+
+/// The decoded logo.
+pub fn logo() -> &'static RgbaImage {
+    static LOGO: OnceLock<RgbaImage> = OnceLock::new();
+    LOGO.get_or_init(|| {
+        image::load_from_memory(LOGO_PNG).map_or_else(|_| RgbaImage::new(1, 1), |i| i.to_rgba8())
+    })
+}
+
+/// A `file://` URL of the logo for a window, written once.
+pub fn logo_url() -> Option<String> {
+    static URL: OnceLock<Option<String>> = OnceLock::new();
+    URL.get_or_init(|| {
+        let folder = std::env::temp_dir().join(format!("nemesiscommander-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).ok()?;
+        let path = folder.join("logo.png");
+        std::fs::write(&path, LOGO_PNG).ok()?;
+        let text = path.display().to_string().replace('\\', "/");
+        Some(if text.starts_with('/') {
+            format!("file://{text}")
+        } else {
+            format!("file:///{text}")
+        })
+    })
+    .clone()
+}
+
+/// What the About window says.
+pub fn lines() -> Vec<String> {
+    vec![
+        format!("NemesisCommander {VERSION}  (commit {COMMIT})"),
+        "A fast dual-pane file manager for local and remote files.".into(),
+        String::new(),
+        "License: MIT, \u{a9} 2026 escursionista2k".into(),
+        format!("Source:  {REPOSITORY}"),
+        String::new(),
+        "Built with Rust and Qt 6 (LGPL v3, linked dynamically).".into(),
+        "Release builds read RAR archives with RARLAB's unRAR library, which".into(),
+        "has its own license. The third-party notices of a release list them all.".into(),
+    ]
+}
+
+/// The About dialog: its text starts below the logo in a terminal.
+pub fn dialog() -> MessageDialog {
+    MessageDialog { title: "About".into(), lines: lines(), then: None, logo: true }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_logo_is_a_square_picture() {
+        let logo = logo();
+        assert_eq!(logo.width(), logo.height());
+        assert!(logo.width() >= 128);
+    }
+
+    #[test]
+    fn the_text_names_version_licence_and_source() {
+        let text = lines().join("\n");
+        assert!(text.contains(VERSION));
+        assert!(text.contains("MIT"));
+        assert!(text.contains("github.com"));
+        assert!(!COMMIT.is_empty());
+    }
+
+    #[test]
+    fn the_icon_files_are_small() {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/branding");
+        let mut total = 0;
+        for entry in std::fs::read_dir(folder).unwrap() {
+            total += entry.unwrap().metadata().unwrap().len();
+        }
+        assert!(total < 300 * 1024, "branding assets take {total} bytes");
+    }
+}

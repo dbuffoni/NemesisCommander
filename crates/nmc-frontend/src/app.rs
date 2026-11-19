@@ -272,6 +272,20 @@ pub struct App {
     search_cancel: Option<CancellationToken>,
     external: Option<External>,
     running: bool,
+    /// `nmc pick`: the application is a chooser (see [`PickMode`]).
+    picker: Option<PickMode>,
+    /// What the user chose in pick mode (set together with `running = false`).
+    picked: Option<Vec<VfsPath>>,
+}
+
+/// How the application behaves when it is started as a chooser, to give
+/// paths to another program (`nmc pick`, SC-3).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PickMode {
+    /// Choose a folder (the one shown) instead of files.
+    pub folder: bool,
+    /// Several items may be chosen (the marked ones).
+    pub multiple: bool,
 }
 
 /// Something Ctrl+Z can take back: each item is `(path now, path before)`.
@@ -497,6 +511,8 @@ impl App {
             search_cancel: None,
             external: None,
             running: true,
+            picker: None,
+            picked: None,
             graphical: false,
         };
         for (_, request) in requests {
@@ -511,6 +527,48 @@ impl App {
     /// `false` once the user asked to quit.
     pub fn is_running(&self) -> bool {
         self.running
+    }
+
+    /// Turns the application into a chooser: Enter on a file (or Alt+Y)
+    /// ends it, and what was chosen is in [`picked`](Self::picked).
+    pub fn set_picker(&mut self, mode: PickMode) {
+        self.picker = Some(mode);
+        self.set_status(if mode.folder {
+            "Choose a folder: Alt+Y picks this one, Esc cancels"
+        } else {
+            "Choose a file: Enter picks it, Alt+Y picks a folder too, Esc cancels"
+        });
+    }
+
+    /// What the user chose in pick mode: `None` when nothing was chosen
+    /// (the user cancelled).
+    pub fn picked(&self) -> Option<&[VfsPath]> {
+        self.picked.as_deref()
+    }
+
+    /// Ends pick mode with `items`.
+    fn finish_pick(&mut self, items: Vec<VfsPath>) {
+        if !items.is_empty() {
+            self.picked = Some(items);
+            self.running = false;
+        }
+    }
+
+    /// The items Alt+Y chooses: the current folder in folder mode, else the
+    /// marked items (several allowed) or the one under the cursor.
+    fn choose_now(&mut self) {
+        let Some(mode) = self.picker else {
+            return self.set_status("Choosing works only in nmc pick");
+        };
+        let panel = self.workspace.active();
+        let items = if mode.folder {
+            vec![panel.location().clone()]
+        } else if mode.multiple {
+            panel.targets()
+        } else {
+            panel.current_path().into_iter().collect()
+        };
+        self.finish_pick(items);
     }
 
     /// The panels.
@@ -835,6 +893,7 @@ impl App {
                             title: title.clone(),
                             lines: text,
                             then: None,
+                            logo: false,
                         }));
                     }
                 }
@@ -930,6 +989,11 @@ impl App {
                 if panel.selection_summary().files + panel.selection_summary().dirs > 0 =>
             {
                 return panel.clear_selection();
+            }
+            // Pick mode: Esc, with nothing left to clear, cancels.
+            Some(Key::Esc) if self.picker.is_some() => {
+                self.running = false;
+                return;
             }
             Some(Key::Left) if self.context.config.panels.arrow_navigation => {
                 let request = panel.parent();
@@ -1378,6 +1442,7 @@ impl App {
                 let request = self.workspace.active_mut().enter();
                 match request {
                     Some(request) => self.load(request),
+                    None if self.picker.is_some() => self.choose_file(),
                     None if self.workspace.active().current_path().is_some() => self.view_current(),
                     None => {}
                 }
@@ -1512,8 +1577,29 @@ impl App {
                     InputPurpose::ImportSettings,
                 );
             }
+            Action::FlatView => {
+                let request = self.workspace.active_mut().toggle_branch();
+                self.load(request);
+            }
+            Action::Choose => self.choose_now(),
+            Action::About => self.overlay = Some(Overlay::Message(crate::about::dialog())),
             Action::Quit => self.running = false,
         }
+    }
+
+    /// Enter on a file in pick mode: the marked files, or this one.
+    fn choose_file(&mut self) {
+        let Some(mode) = self.picker else { return };
+        if mode.folder {
+            return self.set_status("Choose a folder: Alt+Y picks the one shown");
+        }
+        let panel = self.workspace.active();
+        let items = if mode.multiple {
+            panel.targets()
+        } else {
+            panel.current_path().into_iter().collect()
+        };
+        self.finish_pick(items);
     }
 
     fn cycle_tab(&mut self, delta: isize) {
@@ -1717,7 +1803,7 @@ impl App {
             }
             InputPurpose::SearchContent { mask } => self.ask(
                 "Search",
-                "Size and age (>10M <1G newer:7d older:2w; empty: any):",
+                "Size, age, archives (>10M <1G newer:7d older:2w archives; empty: any):",
                 "",
                 InputPurpose::SearchFilters { mask, content: text },
             ),
@@ -1822,6 +1908,7 @@ impl App {
                     title,
                     lines,
                     then: None,
+                    logo: false,
                 })));
             }
             lines.push(format!("Rename {changed} items?"));
@@ -1987,7 +2074,8 @@ impl App {
                 Ok(provider) => provider,
                 Err(e) => return AppEvent::SearchDone(Some(e.to_string())),
             };
-            let mut hits = nmc_index::search(provider, root, criteria, cancel);
+            let opener = Arc::new(nmc_app::RegistryArchives(registry.clone()));
+            let mut hits = nmc_index::search_in_archives(provider, root, criteria, cancel, opener);
             let mut error = None;
             while let Some(hit) = hits.recv().await {
                 match hit {
@@ -2310,8 +2398,12 @@ impl App {
             &suggestion,
             InputPurpose::Attributes(vec![path.clone()]),
         ));
-        self.overlay =
-            Some(Overlay::Message(MessageDialog { title: "Properties".into(), lines, then }));
+        self.overlay = Some(Overlay::Message(MessageDialog {
+            title: "Properties".into(),
+            lines,
+            then,
+            logo: false,
+        }));
     }
 
     fn checksum_current(&mut self) {
@@ -2340,6 +2432,7 @@ impl App {
                     title: "Checksums".into(),
                     lines,
                     then: None,
+                    logo: false,
                 }))),
                 Err(e) => done(Err(e), None),
             }

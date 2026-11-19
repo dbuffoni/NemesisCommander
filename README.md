@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/branding/nemesiscommander-logo.png" alt="NemesisCommander" width="360"></p>
+
 # NemesisCommander
 
 A fast dual-pane file manager for local and remote files, written in Rust.

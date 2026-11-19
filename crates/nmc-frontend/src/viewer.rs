@@ -11,9 +11,13 @@ use image::RgbaImage;
 use nmc_preview::Kind;
 use nmc_preview::model::Camera;
 use nmc_preview::rich::{Line, line_text};
+use nmc_preview::syntax::{self, Language};
 use nmc_vfs::{ProviderRegistry, VfsPath};
 
 use crate::preview::{Prepared, RichText, Source, Zoom};
+
+/// Text files with more lines than this get no colours.
+const TINT_LINES: usize = 50_000;
 use tokio::io::AsyncReadExt;
 
 /// At most this much of a file is loaded into the viewer.
@@ -204,6 +208,11 @@ pub struct Viewer {
     pub kind: Option<Kind>,
     /// A formatted document (Markdown, Office).
     pub rich: Option<RichText>,
+    /// The coloured `lines` of a source or data file, when it has a known
+    /// language and is not too big.
+    pub tinted: Vec<Line>,
+    /// The language `tinted` is coloured as.
+    pub language: Option<Language>,
     /// This viewer shows the comparison of two files (Alt+C).
     pub diff: Option<Box<crate::diff::Diff>>,
     /// A title to show instead of the path.
@@ -244,6 +253,8 @@ impl Viewer {
             image: None,
             kind,
             rich: None,
+            tinted: Vec::new(),
+            language: None,
             diff: None,
             title: None,
             report: None,
@@ -484,7 +495,10 @@ impl Viewer {
         }
         match &self.image {
             Some(picture) => format!("{} × {} pixels{zoom}", picture.width(), picture.height()),
-            None => String::new(),
+            None => match self.language.filter(|_| !self.tinted.is_empty()) {
+                Some(language) => language.label().to_owned(),
+                None => String::new(),
+            },
         }
     }
 
@@ -501,10 +515,36 @@ impl Viewer {
         self.hex = self.image.is_none() && !looks_like_text(&data);
         let plain_text = self.image.is_none() && !self.hex && self.kind.is_none();
         self.lines = if plain_text { text_lines(&data, tab_width) } else { Vec::new() };
+        self.tint();
         self.tab_width = tab_width;
         self.data = Some(data);
         self.truncated = truncated;
         self.scroll = 0;
+    }
+
+    /// Colours `lines` when the file's language is known (by its name, or a
+    /// `#!` line) and it is small enough for the colours not to matter
+    /// for memory.
+    fn tint(&mut self) {
+        self.tinted = Vec::new();
+        self.language = None;
+        if self.lines.is_empty() || self.lines.len() > TINT_LINES {
+            return;
+        }
+        let first = self.lines.first().map_or("", String::as_str);
+        if let Some(language) = Language::of(path_name(&self.path), first) {
+            self.tinted = syntax::highlight(language, &self.lines);
+            self.language = Some(language);
+        }
+    }
+
+    /// The coloured lines to draw, from the scroll position (empty when
+    /// the text has no colours or the viewer shows something else).
+    pub fn visible_tinted(&self, count: usize) -> Vec<Line> {
+        if self.hex || self.rich.is_some() || self.tinted.len() != self.lines.len() {
+            return Vec::new();
+        }
+        self.tinted.iter().skip(self.scroll).take(count).cloned().collect()
     }
 
     /// Number of rows in the current mode.
@@ -541,6 +581,7 @@ impl Viewer {
             if let Some(data) = &self.data {
                 self.lines = text_lines(data, self.tab_width);
             }
+            self.tint();
         }
         let offset = if self.hex {
             self.scroll * HEX_ROW

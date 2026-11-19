@@ -7,6 +7,10 @@
 
 pub mod sync;
 
+mod archive_search;
+
+pub use archive_search::RegistryArchives;
+
 use std::sync::Arc;
 
 use nmc_config::{AppPaths, Config, ConfigError, Keymap};

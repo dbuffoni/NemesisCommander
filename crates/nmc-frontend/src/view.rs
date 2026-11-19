@@ -95,6 +95,8 @@ pub struct PanelView {
     /// Rows carry size bars (folder sizes were counted): the front end
     /// leaves room for them.
     pub bars: bool,
+    /// The panel shows the flat (branch) view: rows carry a folder column.
+    pub flat: bool,
 }
 
 /// A tab of a panel.
@@ -109,8 +111,11 @@ pub struct TabView {
 /// One entry of a listing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RowView {
-    /// Name; folders end with `/`.
+    /// Name; folders end with `/`. In the flat view only the file name.
     pub name: String,
+    /// In the flat view, the folder of the file inside the panel's folder
+    /// (`sub/deeper`); empty elsewhere.
+    pub folder: String,
     /// Size, `<DIR>`, or `UP` for the parent entry.
     pub size: String,
     /// Modification time.
@@ -212,6 +217,9 @@ pub enum OverlayView {
         has_next: bool,
         /// The keys line below the text.
         hint: String,
+        /// The logo to show above the text (About): a `file://` URL of
+        /// a PNG for a window.
+        logo_url: Option<String>,
     },
     /// F3: the viewer.
     Viewer(ViewerView),
@@ -318,6 +326,10 @@ pub struct ViewerView {
     pub image_url: Option<String>,
     /// Formatted lines (documents), from the scroll position.
     pub rich: Vec<RichLineView>,
+    /// The text `lines` with colours (source and data files): same rows,
+    /// pieces with a `keyword`, `string`, `number`, `comment` or `name`
+    /// word. Empty when the text has no colours.
+    pub tinted: Vec<RichLineView>,
     /// One line about what is shown (picture size, page, zoom).
     pub info: String,
     /// The keys of this mode, for the window's header.
@@ -336,7 +348,8 @@ pub struct SpanView {
     /// The text.
     pub text: String,
     /// How it looks, as space-separated words: `h1`-`h6`, `bold`,
-    /// `italic`, `code`, `link`, `mark` (decorations); empty for plain.
+    /// `italic`, `code`, `link`, `mark` (decorations), `keyword`, `string`,
+    /// `number`, `comment`, `name` (source code); empty for plain.
     pub style: String,
 }
 
@@ -376,6 +389,9 @@ impl SpanView {
         let mut words: Vec<String> = Vec::new();
         if s.heading > 0 {
             words.push(format!("h{}", s.heading));
+        }
+        if s.tone != nmc_preview::rich::Tone::Plain {
+            words.push(s.tone.word().to_owned());
         }
         for (on, word) in [
             (s.bold, "bold"),
@@ -568,7 +584,12 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         })
         .collect();
     let view = PanelView {
-        title: display_location(panel.location()),
+        title: if panel.is_branch() {
+            format!("{}  (every file below)", display_location(panel.location()))
+        } else {
+            display_location(panel.location())
+        },
+        flat: panel.is_branch(),
         drive: {
             let label = crate::drives::drive_label(&app.context().config, panel.location());
             let state =
@@ -691,11 +712,20 @@ fn row_view(
 ) -> RowView {
     let icon = (icons && entry.name != PARENT).then(|| crate::icons::icon_for(entry));
     let mut name = entry.name.clone();
+    let mut folder = String::new();
+    if panel.is_branch()
+        && entry.name != PARENT
+        && let Some((parents, file)) = entry.name.rsplit_once('/')
+    {
+        folder = parents.to_owned();
+        name = file.to_owned();
+    }
     if entry.is_dir() && entry.name != PARENT {
         name.push('/');
     }
     RowView {
         name,
+        folder,
         size: size_text_counted(entry, human, counted),
         date: entry.modified.map(local_time).unwrap_or_default(),
         dir: entry.is_dir(),
@@ -746,6 +776,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
                 loading: false,
                 image_url: None,
                 rich: Vec::new(),
+                tinted: Vec::new(),
                 info: String::new(),
                 keys: String::new(),
                 zoom: 1.0,
@@ -776,6 +807,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         quick_view: Some(quick_view),
         headers: Default::default(),
         bars: false,
+        flat: false,
     }
 }
 
@@ -815,6 +847,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             lines: dialog.lines.clone(),
             has_next: dialog.then.is_some(),
             hint: dialog.hint(),
+            logo_url: dialog.logo.then(crate::about::logo_url).flatten(),
         },
         Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
         Overlay::Jobs(view) => OverlayView::Jobs {
@@ -910,6 +943,8 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
     } else {
         viewer.visible_rows(rows)
     };
+    let tinted: Vec<RichLineView> =
+        viewer.visible_tinted(rows).iter().map(RichLineView::of).collect();
     ViewerView {
         title: viewer.title.clone().unwrap_or_else(|| display_location(&viewer.path)),
         mode: viewer.mode().into(),
@@ -920,6 +955,7 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
         loading: viewer.data.is_none() && viewer.error.is_none(),
         image_url,
         rich,
+        tinted,
         info: viewer.info(),
         keys: viewer_keys(viewer).into(),
         zoom: f64::from(viewer.zoom.factor),
@@ -1017,6 +1053,9 @@ pub fn panel_footer(panel: &Panel) -> String {
     };
     if !panel.filter().is_empty() {
         text.push_str(&format!("  filter: {} (Esc clears)", panel.filter()));
+    }
+    if panel.branch_truncated() {
+        text.push_str(&format!("  (first {} files only)", nmc_panel::BRANCH_LIMIT));
     }
     if panel.is_loading() {
         text.push_str("  loading…");

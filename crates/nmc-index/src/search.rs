@@ -8,11 +8,12 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use futures::StreamExt;
+use futures::future::BoxFuture;
 use memchr::memmem;
 use nmc_vfs::{Entry, EntryKind, Provider, Result, VfsError, VfsPath, walk};
 use regex::bytes::{Regex, RegexBuilder};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use tokio::sync::mpsc;
+use tokio::sync::{Semaphore, mpsc};
 use tokio_util::sync::CancellationToken;
 
 use crate::mask::Mask;
@@ -80,6 +81,9 @@ pub struct SearchCriteria {
     pub include_directories: bool,
     /// Limit recursion depth (`None` = unlimited).
     pub max_depth: Option<usize>,
+    /// Also search inside the archives met on the way (needs an
+    /// [`ArchiveOpener`], see [`search_in_archives`]).
+    pub archives: bool,
 }
 
 impl SearchCriteria {
@@ -113,6 +117,22 @@ pub struct SearchHit {
     pub first_match: Option<(u64, String)>,
 }
 
+/// Archives inside archives are searched down to this level.
+const MAX_ARCHIVE_DEPTH: usize = 3;
+
+/// Archives opened and searched at the same time.
+const ARCHIVE_PARALLELISM: usize = 4;
+
+/// Tells a search how to look inside archive files, which this crate cannot
+/// do itself (SC-32).
+pub trait ArchiveOpener: Send + Sync {
+    /// The root inside `file` if its name says it is an archive.
+    fn root_of(&self, file: &VfsPath) -> Option<VfsPath>;
+
+    /// The provider that reads the archive whose root is `root`.
+    fn provider_for<'a>(&'a self, root: &'a VfsPath) -> BoxFuture<'a, Result<Arc<dyn Provider>>>;
+}
+
 /// Starts a search below `root` and returns a channel of results.
 ///
 /// The search runs on the tokio runtime until it finishes, `cancel` fires,
@@ -124,52 +144,129 @@ pub fn search(
     criteria: SearchCriteria,
     cancel: CancellationToken,
 ) -> mpsc::Receiver<Result<SearchHit>> {
+    start(provider, root, criteria, cancel, None)
+}
+
+/// Like [`search`], and when `criteria.archives` is set also looks inside
+/// every archive it meets (zip, tar, 7z, ...), where `opener` says how. Hits
+/// inside archives have paths such as `zip:///data/a.zip!/docs/readme.txt`.
+pub fn search_in_archives(
+    provider: Arc<dyn Provider>,
+    root: VfsPath,
+    criteria: SearchCriteria,
+    cancel: CancellationToken,
+    opener: Arc<dyn ArchiveOpener>,
+) -> mpsc::Receiver<Result<SearchHit>> {
+    start(provider, root, criteria, cancel, Some(opener))
+}
+
+/// What the searches of one run share.
+struct Run {
+    criteria: SearchCriteria,
+    cancel: CancellationToken,
+    tx: mpsc::Sender<Result<SearchHit>>,
+    opener: Option<Arc<dyn ArchiveOpener>>,
+    /// Limits how many archives are open at once.
+    archive_slots: Semaphore,
+}
+
+fn start(
+    provider: Arc<dyn Provider>,
+    root: VfsPath,
+    criteria: SearchCriteria,
+    cancel: CancellationToken,
+    opener: Option<Arc<dyn ArchiveOpener>>,
+) -> mpsc::Receiver<Result<SearchHit>> {
     let (tx, rx) = mpsc::channel(256);
-    tokio::spawn(async move {
-        let criteria = Arc::new(criteria);
-        let candidates = walk(provider.as_ref(), &root, criteria.max_depth)
-            .take_until(cancel.cancelled())
-            .filter_map(|item| {
-                let criteria = criteria.clone();
-                async move {
-                    match item {
-                        Ok(item) if criteria.matches_metadata(&item.entry) => Some(Ok(item)),
-                        Ok(_) => None,
-                        Err(e) => Some(Err(e)),
-                    }
-                }
-            });
-        let checked = candidates
-            .map(|item| {
-                let (provider, criteria) = (provider.clone(), criteria.clone());
-                async move {
-                    let item = item?;
-                    let first_match = match &criteria.content {
-                        None => None,
-                        Some(query) => {
-                            match find_content(provider.as_ref(), &item.path, query).await? {
-                                Some(found) => Some(found),
-                                None => return Ok(None),
-                            }
+    let opener = opener.filter(|_| criteria.archives);
+    let run = Arc::new(Run {
+        criteria,
+        cancel,
+        tx,
+        opener,
+        archive_slots: Semaphore::new(ARCHIVE_PARALLELISM),
+    });
+    tokio::spawn(search_tree(run, provider, root, 0));
+    rx
+}
+
+/// Searches the tree below `root`; archives met on the way are searched by
+/// tasks of their own (`archive_depth` counts how deep inside archives this
+/// tree is).
+async fn search_tree(
+    run: Arc<Run>,
+    provider: Arc<dyn Provider>,
+    root: VfsPath,
+    archive_depth: usize,
+) {
+    let criteria = &run.criteria;
+    let candidates = walk(provider.as_ref(), &root, criteria.max_depth)
+        .take_until(run.cancel.cancelled())
+        .filter_map(|item| {
+            let run = run.clone();
+            async move {
+                match item {
+                    Ok(item) => {
+                        if archive_depth < MAX_ARCHIVE_DEPTH && item.entry.kind == EntryKind::File {
+                            spawn_archive(&run, &item.path, archive_depth + 1);
                         }
-                    };
-                    Ok(Some(SearchHit { path: item.path, entry: item.entry, first_match }))
+                        run.criteria.matches_metadata(&item.entry).then_some(Ok(item))
+                    }
+                    Err(e) => Some(Err(e)),
                 }
-            })
-            .buffered(CONTENT_PARALLELISM);
-        futures::pin_mut!(checked);
-        while let Some(result) = checked.next().await {
-            let message = match result {
-                Ok(Some(hit)) => Ok(hit),
-                Ok(None) => continue,
-                Err(e) => Err(e),
-            };
-            if cancel.is_cancelled() || tx.send(message).await.is_err() {
-                break;
+            }
+        });
+    let checked = candidates
+        .map(|item| {
+            let (provider, run) = (provider.clone(), run.clone());
+            async move {
+                let item = item?;
+                let first_match = match &run.criteria.content {
+                    None => None,
+                    Some(query) => {
+                        match find_content(provider.as_ref(), &item.path, query).await? {
+                            Some(found) => Some(found),
+                            None => return Ok(None),
+                        }
+                    }
+                };
+                Ok(Some(SearchHit { path: item.path, entry: item.entry, first_match }))
+            }
+        })
+        .buffered(CONTENT_PARALLELISM);
+    futures::pin_mut!(checked);
+    while let Some(result) = checked.next().await {
+        let message = match result {
+            Ok(Some(hit)) => Ok(hit),
+            Ok(None) => continue,
+            Err(e) => Err(e),
+        };
+        if run.cancel.is_cancelled() || run.tx.send(message).await.is_err() {
+            break;
+        }
+    }
+}
+
+/// Starts searching inside `file` if it is an archive and archives are asked
+/// for.
+fn spawn_archive(run: &Arc<Run>, file: &VfsPath, depth: usize) {
+    let Some(opener) = &run.opener else { return };
+    let Some(root) = opener.root_of(file) else { return };
+    let run = run.clone();
+    let opener = opener.clone();
+    tokio::spawn(async move {
+        let Ok(_slot) = run.archive_slots.acquire().await else { return };
+        if run.cancel.is_cancelled() {
+            return;
+        }
+        match opener.provider_for(&root).await {
+            Ok(provider) => search_tree(run.clone(), provider, root, depth).await,
+            // An archive that cannot be opened does not stop the search.
+            Err(e) => {
+                let _ = run.tx.send(Err(e)).await;
             }
         }
     });
-    rx
 }
 
 /// Returns the first matching line of `path`, if any.
@@ -364,5 +461,73 @@ mod tests {
         let mut rx =
             search(tree(), VfsPath::parse("mem://t/").unwrap(), SearchCriteria::default(), cancel);
         assert!(rx.recv().await.is_none());
+    }
+
+    /// Treats every `*.pack` file as an archive whose content is `inner`.
+    struct FakeArchives {
+        inner: Arc<MemoryProvider>,
+    }
+
+    impl ArchiveOpener for FakeArchives {
+        fn root_of(&self, file: &VfsPath) -> Option<VfsPath> {
+            file.file_name()?.ends_with(".pack").then(|| VfsPath::parse("mem://pack/").unwrap())
+        }
+
+        fn provider_for<'a>(
+            &'a self,
+            _root: &'a VfsPath,
+        ) -> BoxFuture<'a, Result<Arc<dyn Provider>>> {
+            let inner: Arc<dyn Provider> = self.inner.clone();
+            Box::pin(async move { Ok(inner) })
+        }
+    }
+
+    async fn run_with_archives(criteria: SearchCriteria) -> Vec<SearchHit> {
+        let outer = MemoryProvider::new();
+        outer.put_file("/data/inner.pack", "binary");
+        outer.put_file("/data/plain.txt", "needle outside");
+        let inner = MemoryProvider::new();
+        inner.put_file("/docs/readme.txt", "needle inside\n");
+        inner.put_file("/docs/other.txt", "nothing\n");
+        let opener = Arc::new(FakeArchives { inner: Arc::new(inner) });
+        let root = VfsPath::parse("mem://t/").unwrap();
+        let mut rx =
+            search_in_archives(Arc::new(outer), root, criteria, CancellationToken::new(), opener);
+        let mut hits = Vec::new();
+        while let Some(hit) = rx.recv().await {
+            hits.push(hit.unwrap());
+        }
+        hits
+    }
+
+    #[tokio::test]
+    async fn archives_are_searched_only_when_asked() {
+        let content = || Some(ContentQuery::text("needle", true));
+        let without =
+            run_with_archives(SearchCriteria { content: content(), ..Default::default() }).await;
+        assert_eq!(paths(&without), ["/data/plain.txt"]);
+
+        let with = run_with_archives(SearchCriteria {
+            content: content(),
+            archives: true,
+            ..Default::default()
+        })
+        .await;
+        let mut found = paths(&with);
+        found.sort_unstable();
+        assert_eq!(found, ["/data/plain.txt", "/docs/readme.txt"], "{found:?}");
+        let inside = with.iter().find(|h| h.path.path() == "/docs/readme.txt").unwrap();
+        assert_eq!(inside.first_match.as_ref().unwrap().1, "needle inside");
+    }
+
+    #[tokio::test]
+    async fn archives_are_searched_by_name_too() {
+        let hits = run_with_archives(SearchCriteria {
+            name: Mask::parse("*.txt").unwrap(),
+            archives: true,
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(hits.len(), 3, "plain.txt, readme.txt, other.txt: {:?}", paths(&hits));
     }
 }

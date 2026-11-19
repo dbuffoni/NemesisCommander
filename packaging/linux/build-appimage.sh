@@ -24,7 +24,13 @@ install -Dm755 "$bin_dir/nmc" "$appdir/usr/bin/nmc"
 install -Dm755 "$bin_dir/nmc-gui" "$appdir/usr/bin/nmc-gui"
 install -Dm755 "$here/nemesiscommander" "$appdir/usr/bin/nemesiscommander"
 install -Dm644 "$here/nemesiscommander.desktop" "$appdir/usr/share/applications/nemesiscommander.desktop"
-install -Dm644 "$here/nemesiscommander.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/nemesiscommander.svg"
+# The icon, from assets/branding: the SVG and every PNG size.
+brand="$here/../../assets/branding"
+install -Dm644 "$brand/nemesiscommander.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/nemesiscommander.svg"
+for size in 16 24 32 48 64 128 256 512; do
+    install -Dm644 "$brand/nemesiscommander-$size.png" \
+        "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/nemesiscommander.png"
+done
 
 # Downloads a linuxdeploy tool unless its variable names one already.
 fetch() {
@@ -50,7 +56,7 @@ export LINUXDEPLOY_OUTPUT_VERSION="$version"
     --executable "$appdir/usr/bin/nmc-gui" \
     --plugin qt \
     --desktop-file "$appdir/usr/share/applications/nemesiscommander.desktop" \
-    --icon-file "$appdir/usr/share/icons/hicolor/scalable/apps/nemesiscommander.svg" \
+    --icon-file "$appdir/usr/share/icons/hicolor/512x512/apps/nemesiscommander.png" \
     --output appimage
 
 echo "built NemesisCommander-$version-$arch.AppImage"

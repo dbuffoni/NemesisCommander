@@ -109,12 +109,23 @@ impl Diff {
         let mark = Style { mark: true, ..Style::default() };
         let removed = Style { removed: true, ..Style::default() };
         let added = Style { code: true, ..Style::default() };
+        // Unchanged lines are coloured as the source they are; changed ones
+        // keep the red and green that show the change.
+        let language = nmc_preview::syntax::Language::of(&self.left_name, "")
+            .or_else(|| nmc_preview::syntax::Language::of(&self.right_name, ""));
         let cell = |side: &Option<(usize, String)>, style: Style| -> Vec<Span> {
             match side {
-                Some((n, text)) => vec![
-                    Span::styled(format!("{n:>4} "), mark),
-                    Span::styled(fit(text, half), style),
-                ],
+                Some((n, text)) => {
+                    let mut spans = vec![Span::styled(format!("{n:>4} "), mark)];
+                    match language.filter(|_| style == plain) {
+                        Some(language) => spans.extend(nmc_preview::syntax::highlight_line(
+                            language,
+                            &fit(text, half),
+                        )),
+                        None => spans.push(Span::styled(fit(text, half), style)),
+                    }
+                    spans
+                }
                 None => vec![Span::plain(" ".repeat(NUMBER + half))],
             }
         };
@@ -167,6 +178,21 @@ mod tests {
     #[test]
     fn same_text_has_no_diff() {
         assert!(Diff::new("a", "x\ny\n", "b", "x\ny\n").is_none());
+    }
+
+    #[test]
+    fn unchanged_source_lines_are_coloured_in_a_comparison() {
+        use nmc_preview::rich::Tone;
+        let diff =
+            Diff::new("a.rs", "fn one() {}\nlet x = 1;\n", "b.rs", "fn one() {}\nlet x = 2;\n")
+                .unwrap();
+        let lines = diff.render(80);
+        let keyword = |line: &Line| line.iter().any(|s| s.style.tone == Tone::Keyword);
+        assert!(keyword(&lines[1]), "{:?}", lines[1]);
+        // The changed pair keeps its red and green.
+        assert!(!keyword(&lines[2]));
+        let text: String = lines[1].iter().map(|s| s.text.as_str()).collect();
+        assert!(text.contains("fn one() {}"));
     }
 
     #[test]

@@ -9,6 +9,9 @@
 //! * [`pdf`]: PDF pages as pictures (pure Rust, `hayro`).
 //! * [`model`]: STL, OBJ, PLY and glTF models drawn shaded from any angle
 //!   by a small software renderer.
+//! * [`syntax`]: colours for source and data files (shell, YAML, JSON,
+//!   XML, HTML, SQL, TypeScript, Rust, Python) from a small hand-written
+//!   lexer.
 //!
 //! Formatted text is laid out by [`rich`] into lines of styled spans that
 //! a terminal or a window draws with one fixed-width font. Everything here
@@ -20,6 +23,7 @@ pub mod office;
 pub mod pdf;
 pub mod rich;
 pub mod samples;
+pub mod syntax;
 
 /// What kind of preview a file gets, from its name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

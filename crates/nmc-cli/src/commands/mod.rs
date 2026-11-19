@@ -4,6 +4,7 @@ mod ai;
 mod archive;
 mod files;
 mod find;
+mod pick;
 mod rename;
 mod script;
 mod script_test;
@@ -51,6 +52,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Plugin(args) => script::plugin(&context, args).await,
         Command::Test(args) => script_test::test(&context, args).await,
         Command::Ai(args) => ai::ai(&context, args).await,
+        Command::Pick(args) => pick::pick(context, args).await,
     }
 }
 

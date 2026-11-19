@@ -50,6 +50,12 @@ ApplicationWindow {
     readonly property color headingColor: dark ? "#e0b050" : "#8a5a00"
     readonly property color codeColor: dark ? "#8fd18f" : "#1d7a33"
     readonly property color linkColor: dark ? "#7fb2ff" : "#1f5fbf"
+    // Source code: the colours of syntax highlighting.
+    readonly property color keywordColor: dark ? "#d69bf0" : "#8a2ea8"
+    readonly property color stringColor: dark ? "#8fd18f" : "#1d7a33"
+    readonly property color numberColor: dark ? "#f0c674" : "#a35f00"
+    readonly property color commentColor: dark ? "#8a929c" : "#6b7480"
+    readonly property color nameColor: dark ? "#6fd0e0" : "#0b6e80"
     readonly property color removedColor: dark ? "#ff7b72" : "#c62828"
     readonly property color selectionTint: Qt.rgba(0.78, 0.56, 0.10, dark ? 0.22 : 0.16)
     readonly property color selectedText: dark ? "#f0c060" : "#7a4d00"

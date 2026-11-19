@@ -29,7 +29,7 @@ use nmc_vfs::VfsPath;
 pub use mouse::{Pointer, hit};
 pub use nmc_frontend::{
     App, AppEvent, ChoosePurpose, ConfirmPurpose, External, InputPurpose, KeyPress, Overlay,
-    Status, TextField, display_location, resolve_location,
+    PickMode, Status, TextField, display_location, resolve_location,
 };
 pub use terminal::key_press;
 pub use ui::draw;
@@ -43,8 +43,81 @@ pub async fn run(
     left: Option<VfsPath>,
     right: Option<VfsPath>,
 ) -> io::Result<()> {
+    run_app(context, left, right, None).await.map(|_| ())
+}
+
+/// Runs the terminal interface as a chooser (`nmc pick`) and returns what
+/// the user chose, `None` when they cancelled.
+///
+/// The interface is drawn on standard error, so that standard output can be
+/// a pipe or `$(...)` that receives the answer.
+pub async fn pick(
+    context: AppContext,
+    start: Option<VfsPath>,
+    mode: PickMode,
+) -> io::Result<Option<Vec<VfsPath>>> {
+    run_app(context, start, None, Some(mode)).await
+}
+
+/// Where the interface is drawn: standard output, or standard error in pick
+/// mode. Switches the terminal to the alternate screen in raw mode.
+struct Screen {
+    terminal: ratatui::Terminal<ratatui::backend::CrosstermBackend<Box<dyn io::Write>>>,
+    to_stderr: bool,
+}
+
+impl Screen {
+    fn writer(to_stderr: bool) -> Box<dyn io::Write> {
+        if to_stderr { Box::new(io::stderr()) } else { Box::new(io::stdout()) }
+    }
+
+    fn open(to_stderr: bool) -> io::Result<Self> {
+        use crossterm::terminal::{EnterAlternateScreen, enable_raw_mode};
+        // Give the terminal back even if the program panics.
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            Screen::restore(to_stderr);
+            previous(info);
+        }));
+        enable_raw_mode()?;
+        let mut writer = Self::writer(to_stderr);
+        crossterm::execute!(writer, EnterAlternateScreen, EnableMouseCapture)?;
+        let backend = ratatui::backend::CrosstermBackend::new(writer);
+        let terminal = ratatui::Terminal::new(backend)?;
+        Ok(Screen { terminal, to_stderr })
+    }
+
+    fn restore(to_stderr: bool) {
+        use crossterm::terminal::{LeaveAlternateScreen, disable_raw_mode};
+        let mut writer = Self::writer(to_stderr);
+        let _ = crossterm::execute!(
+            writer,
+            DisableMouseCapture,
+            LeaveAlternateScreen,
+            crossterm::cursor::Show
+        );
+        let _ = disable_raw_mode();
+    }
+}
+
+impl Drop for Screen {
+    fn drop(&mut self) {
+        Screen::restore(self.to_stderr);
+    }
+}
+
+async fn run_app(
+    context: AppContext,
+    left: Option<VfsPath>,
+    right: Option<VfsPath>,
+    pick: Option<PickMode>,
+) -> io::Result<Option<Vec<VfsPath>>> {
     use std::io::IsTerminal;
-    if !io::stdout().is_terminal() || !io::stdin().is_terminal() {
+    // A chooser draws on standard error, so only that has to be a terminal.
+    let drawn_on_stderr = pick.is_some();
+    let drawing_ok =
+        if drawn_on_stderr { io::stderr().is_terminal() } else { io::stdout().is_terminal() };
+    if !drawing_ok || !io::stdin().is_terminal() {
         return Err(io::Error::other(
             "the terminal UI needs a terminal; see `nmc --help` for commands that work in scripts",
         ));
@@ -53,15 +126,15 @@ pub async fn run(
     let left = left.unwrap_or_else(|| here.clone());
     let right = right.unwrap_or(here);
     let (mut app, mut events) = App::new(context, left, right).map_err(io::Error::other)?;
+    if let Some(mode) = pick {
+        app.set_picker(mode);
+    }
 
-    // `init` switches to the alternate screen in raw mode and restores the
-    // terminal if the program panics.
-    let mut terminal = ratatui::init();
-    let _ = crossterm::execute!(io::stdout(), EnableMouseCapture);
+    let mut screen = Screen::open(drawn_on_stderr)?;
     let mut pointer = Pointer::default();
     let mut keys = EventStream::new();
     let result = loop {
-        if let Err(e) = terminal.draw(|frame| draw(frame, &mut app)) {
+        if let Err(e) = screen.terminal.draw(|frame| draw(frame, &mut app)) {
             break Err(e);
         }
         if !app.is_running() {
@@ -104,20 +177,17 @@ pub async fn run(
             clipboard::write(&text);
         }
         if let Some(external) = app.take_external() {
-            let _ = crossterm::execute!(io::stdout(), DisableMouseCapture);
-            ratatui::restore();
             drop(keys);
+            drop(screen);
             let status = run_external(&external);
-            terminal = ratatui::init();
-            let _ = crossterm::execute!(io::stdout(), EnableMouseCapture);
+            screen = Screen::open(drawn_on_stderr)?;
             keys = EventStream::new();
-            terminal.clear()?;
+            screen.terminal.clear()?;
             app.after_external(&external, status);
         }
     };
-    let _ = crossterm::execute!(io::stdout(), DisableMouseCapture);
-    ratatui::restore();
-    result
+    drop(screen);
+    result.map(|()| app.picked().map(<[VfsPath]>::to_vec))
 }
 
 /// Runs an external program (the editor) in the foreground.

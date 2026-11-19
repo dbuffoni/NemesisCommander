@@ -14,5 +14,7 @@ pub mod search;
 pub mod sort;
 
 pub use mask::{Mask, MaskError};
-pub use search::{ContentQuery, SearchCriteria, SearchHit, search};
+pub use search::{
+    ArchiveOpener, ContentQuery, SearchCriteria, SearchHit, search, search_in_archives,
+};
 pub use sort::{SortKey, SortSpec, natural_cmp, sort_entries};

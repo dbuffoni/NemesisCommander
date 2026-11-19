@@ -40,6 +40,15 @@ Item {
                 text = "<font color=\"" + viewer.theme.removedColor + "\">" + text + "</font>"
             if (style.indexOf("mark") >= 0)
                 text = "<font color=\"" + viewer.theme.dim + "\">" + text + "</font>"
+            const tones = { keyword: viewer.theme.keywordColor, string: viewer.theme.stringColor,
+                            number: viewer.theme.numberColor, comment: viewer.theme.commentColor,
+                            name: viewer.theme.nameColor }
+            for (const tone in tones) {
+                if (style.indexOf(tone) >= 0)
+                    text = "<font color=\"" + tones[tone] + "\">" + text + "</font>"
+            }
+            if (style.indexOf("comment") >= 0)
+                text = "<i>" + text + "</i>"
             if (style.indexOf("italic") >= 0)
                 text = "<i>" + text + "</i>"
             if (style.indexOf("bold") >= 0 || level > 0)
@@ -89,12 +98,16 @@ Item {
                     model: viewer.view && !viewer.isPicture && !viewer.isDocument
                            ? viewer.view.lines : []
                     delegate: Text {
-                        text: modelData
+                        // Source and data files come with colours.
+                        readonly property bool tinted:
+                            viewer.view.tinted.length > index
+                        text: tinted ? viewer.styledLine(viewer.view.tinted[index].spans, 0)
+                                     : modelData
                         font: viewer.theme.fixedFont
                         color: palette.text
                         height: viewer.theme.rowHeight
                         verticalAlignment: Text.AlignVCenter
-                        textFormat: Text.PlainText
+                        textFormat: tinted ? Text.StyledText : Text.PlainText
                     }
                 }
             }

@@ -365,6 +365,30 @@ async fn the_command_list_runs_commands() {
     assert!(matches!(h.app.overlay(), Some(Overlay::Help)), "a click runs the row");
 }
 
+/// The number of screen rows from the title border to the bottom border of
+/// the command list.
+fn command_list_height(screen: &str) -> usize {
+    let lines: Vec<&str> = screen.lines().collect();
+    let top = lines.iter().position(|l| l.contains(" Commands ")).expect("title border");
+    lines[top..].iter().position(|l| l.contains('└')).expect("bottom border")
+}
+
+#[tokio::test]
+async fn the_command_list_keeps_its_height() {
+    // SC-69: the window must not change size as the filter narrows the list.
+    let mut h = Harness::new().await;
+    h.key("F9");
+    let full = command_list_height(&h.screen());
+    h.type_text("settings");
+    assert_eq!(command_list_height(&h.screen()), full);
+    h.key("Esc");
+    h.type_text("zzz");
+    assert_eq!(command_list_height(&h.screen()), full);
+    h.key("Esc");
+    h.key("F1");
+    assert_eq!(command_list_height(&h.screen()), full, "with the help line");
+}
+
 #[tokio::test]
 async fn typing_in_the_command_list_finds_commands() {
     let mut h = Harness::new().await;
@@ -473,6 +497,67 @@ async fn viewer_shows_text_and_hex() {
     h.press(KeyPress::char('h'));
     let screen = h.screen();
     assert!(screen.contains("[hex]") && screen.contains("74 68 65"), "{screen}");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
+async fn viewer_colours_source_files_by_language() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/main.rs"), "fn main() {\n    let n = 42; // answer\n}\n").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("main.rs");
+    h.key("F3");
+    h.settle().await;
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let colour_of = |word: &str| -> Option<ratatui::style::Color> {
+        let area = buffer.area;
+        (0..area.height).find_map(|y| {
+            let row: String = (0..area.width).map(|x| buffer[(x, y)].symbol()).collect();
+            let at = row.find(word)?;
+            let x = row[..at].chars().count() as u16;
+            Some(buffer[(x, y)].fg)
+        })
+    };
+    use ratatui::style::Color;
+    assert_eq!(colour_of("fn main"), Some(Color::Magenta), "keyword");
+    assert_eq!(colour_of("42"), Some(Color::Yellow), "number");
+    assert_eq!(colour_of("// answer"), Some(Color::DarkGray), "comment");
+    assert!(h.screen().contains("Rust"), "the language is named");
+    // Plain text stays plain.
+    h.key("Esc");
+    h.focus("notes.txt");
+    h.key("F3");
+    h.settle().await;
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let plain = terminal.backend().buffer().content().iter().any(|c| c.fg == Color::Magenta);
+    assert!(!plain);
+}
+
+#[tokio::test]
+async fn about_shows_the_logo_and_the_version() {
+    let mut h = Harness::new().await;
+    h.app.perform(nmc_config::keymap::Action::About);
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let text: String = buffer.content().iter().map(|c| c.symbol()).collect();
+    assert!(text.contains("NemesisCommander 0.1.0"), "version");
+    assert!(text.contains("MIT"), "license");
+    assert!(text.contains("github.com/dbuffoni/NemesisCommander"), "source");
+    // The logo is drawn with half blocks, some of them the purple band.
+    let purple = buffer
+        .content()
+        .iter()
+        .filter(
+            |c| matches!(c.fg, ratatui::style::Color::Rgb(r, g, b) if b > 200 && r > 60 && g < 80),
+        )
+        .count();
+    assert!(purple > 5, "{purple} purple cells");
     h.key("Esc");
     assert!(h.app.overlay().is_none());
 }
@@ -2305,4 +2390,96 @@ async fn the_basket_packs_what_it_holds() {
     h.settle().await;
     assert_eq!(h.status(), "Packed 2 entries into basket.zip");
     assert!(h.path("right/basket.zip").exists());
+}
+
+// ------------------------------------------------------------- pick mode
+
+fn paths(h: &Harness) -> Vec<PathBuf> {
+    h.app.picked().expect("something was chosen").iter().filter_map(|p| p.to_local_path()).collect()
+}
+
+#[tokio::test]
+async fn pick_mode_chooses_the_file_under_the_cursor() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode::default());
+    // The cursor starts on `..`; folders are entered, files are chosen.
+    h.key("Down");
+    h.key("Down"); // docs/ is first, then a.txt
+    h.key("Enter");
+    h.settle().await;
+    assert!(!h.app.is_running());
+    assert_eq!(paths(&h), vec![h.path("left/a.txt")]);
+}
+
+#[tokio::test]
+async fn pick_mode_enters_folders_and_esc_cancels() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode::default());
+    h.key("Down"); // docs/
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.is_running(), "a folder is entered, not chosen");
+    assert!(h.screen().contains("readme.md"));
+    h.key("Esc");
+    assert!(!h.app.is_running());
+    assert!(h.app.picked().is_none(), "cancelled: nothing chosen");
+}
+
+#[tokio::test]
+async fn pick_mode_with_several_files_gives_the_marked_ones() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode { folder: false, multiple: true });
+    h.key("Down");
+    h.key("Down"); // a.txt
+    h.key("Space"); // marks a.txt and moves to notes.txt
+    h.key("Space");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(paths(&h), vec![h.path("left/a.txt"), h.path("left/notes.txt")]);
+}
+
+#[tokio::test]
+async fn pick_mode_for_a_folder_gives_the_one_shown() {
+    let mut h = Harness::new().await;
+    h.app.set_picker(nmc_tui::PickMode { folder: true, multiple: false });
+    h.key("Down"); // docs/
+    h.key("Enter");
+    h.settle().await;
+    h.key("Alt+Y");
+    assert!(!h.app.is_running());
+    assert_eq!(paths(&h), vec![h.path("left/docs")]);
+}
+
+#[tokio::test]
+async fn choosing_does_nothing_outside_pick_mode() {
+    let mut h = Harness::new().await;
+    h.key("Alt+Y");
+    assert!(h.app.is_running());
+    assert!(h.app.picked().is_none());
+}
+
+#[tokio::test]
+async fn the_flat_view_lists_files_below_with_their_folder() {
+    let mut h = Harness::new().await;
+    h.key("Alt+V");
+    h.settle().await;
+    let screen = h.screen();
+    // (The title may be cut on long temporary paths; the column says it too.)
+    assert!(screen.contains("Folder"), "a folder column: {screen}");
+    let line = screen.lines().find(|l| l.contains("readme.md")).expect("the nested file is listed");
+    assert!(line.contains("docs"), "with its folder: {line}");
+    assert!(!screen.contains("docs/ "), "folders themselves are not rows");
+    // Operations act on the real file: view it with F3.
+    h.key("Backspace");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(!screen.contains("Folder "), "Backspace leaves the flat view: {screen}");
+    assert!(h.app.is_running());
+    h.key("Alt+V");
+    h.settle().await;
+    assert!(h.screen().contains("Folder "), "Alt+V enters it again");
+    h.key("Alt+V");
+    h.settle().await;
+    assert!(!h.screen().contains("Folder "), "and leaves it");
+    assert!(screen.contains("docs"), "{screen}");
 }

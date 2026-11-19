@@ -18,6 +18,7 @@
 //! * `preview`: documents, PDF pages and 3D models for the viewer.
 //! * `view`: what the screen shows, as plain data (and shared text helpers).
 
+pub mod about;
 mod app;
 pub mod commands;
 mod dialogs;
@@ -39,7 +40,9 @@ pub mod usage;
 pub mod view;
 pub mod viewer;
 
-pub use app::{App, AppEvent, External, Status, display_location, resolve_location, side_index};
+pub use app::{
+    App, AppEvent, External, PickMode, Status, display_location, resolve_location, side_index,
+};
 pub use dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
     JobsView, MessageDialog, Overlay, PendingConflict, menu_actions,

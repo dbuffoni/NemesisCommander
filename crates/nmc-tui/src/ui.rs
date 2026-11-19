@@ -11,6 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 
+use nmc_frontend::about;
 use nmc_frontend::commands::CommandPalette;
 use nmc_frontend::drives::drive_label;
 use nmc_frontend::icons::icon_for;
@@ -98,7 +99,21 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
                 lines.push(Line::raw(""));
                 lines.push(Line::styled(dialog.hint(), dim()));
-                draw_box(frame, &dialog.title, lines);
+                if dialog.logo {
+                    // The logo takes the first rows of the box.
+                    let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
+                    lines.splice(0..0, blank);
+                    let area = draw_box(frame, &dialog.title, lines);
+                    let top = Rect::new(
+                        area.x + 1,
+                        area.y + 1,
+                        area.width.saturating_sub(2),
+                        about::LOGO_ROWS,
+                    );
+                    draw_image(frame, about::logo(), Zoom::default(), top);
+                } else {
+                    draw_box(frame, &dialog.title, lines);
+                }
             }
             Overlay::Viewer(viewer) => {
                 let page = draw_viewer(frame, viewer, frame.area());
@@ -133,10 +148,11 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
 
     let mut block = Block::bordered().border_style(border).title(Line::styled(
         format!(
-            " [{}] {}{} ",
+            " [{}] {}{}{} ",
             drive_label(&app.context().config, panel.location()),
             git.as_ref().map(|g| format!("⎇ {}  ", g.summary())).unwrap_or_default(),
-            display_location(panel.location())
+            display_location(panel.location()),
+            if panel.is_branch() { "  (flat)" } else { "" }
         ),
         bold(),
     ));
@@ -173,14 +189,18 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     // One more for the size bar, once folder sizes were counted here.
     let biggest = biggest_size(app.folder_sizes(), panel);
     let bar_width = if biggest.is_some() { 2 } else { 0 };
-    let name_width = width
+    let mut name_width = width
         .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width + bar_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
+    // The flat view gives a third of the name column to the folder.
+    let folder_width = if panel.is_branch() { (name_width / 3).clamp(0, 28) } else { 0 };
+    name_width = name_width.saturating_sub(folder_width + usize::from(folder_width > 0));
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{}{} {}{:>SIZE_WIDTH$}{}",
+        "{}{} {}{}{:>SIZE_WIDTH$}{}",
         " ".repeat(mark_width),
         fit(&name_title, name_width),
+        if folder_width > 0 { format!("{} ", fit("Folder", folder_width)) } else { String::new() },
         " ".repeat(bar_width),
         size_title,
         if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
@@ -200,6 +220,14 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     }
     for (i, entry) in panel.entries().iter().enumerate().skip(offset).take(rows) {
         let mut name = entry.name.clone();
+        let mut folder = String::new();
+        if panel.is_branch()
+            && entry.name != PARENT
+            && let Some((parents, file)) = entry.name.rsplit_once('/')
+        {
+            folder = parents.to_owned();
+            name = file.to_owned();
+        }
         if entry.is_dir() && entry.name != PARENT {
             name.push('/');
         }
@@ -222,6 +250,12 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             String::new()
         };
         let name_text = format!("{} ", fit(&name, name_width));
+        // The deepest folders are the useful end of a long path.
+        let folder_text = if folder_width > 0 {
+            format!("{} ", fit_end(&folder, folder_width))
+        } else {
+            String::new()
+        };
         let rest = format!("{:>SIZE_WIDTH$}{date}", size);
 
         let mut style = Style::new();
@@ -254,6 +288,9 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             spans.push(Span::styled("  ", style));
         }
         spans.push(Span::styled(name_text, style));
+        if !folder_text.is_empty() {
+            spans.push(Span::styled(folder_text, if i == cursor { style } else { dim() }));
+        }
         if let Some((glyph, ratio)) = bar {
             let mut colour = style;
             if let Some(ratio) = ratio
@@ -293,6 +330,20 @@ pub fn fit(text: &str, width: usize) -> String {
     let mut cut: String = text.chars().take(width - 1).collect();
     cut.push('…');
     cut
+}
+
+/// `text` padded to `width`, or cut at the start with `…` when longer (the
+/// end of a folder path is the part that tells folders apart).
+fn fit_end(text: &str, width: usize) -> String {
+    let count = text.chars().count();
+    if count <= width {
+        return format!("{text:<width$}");
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let tail: String = text.chars().skip(count - (width - 1)).collect();
+    format!("…{tail}")
 }
 
 fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {
@@ -377,7 +428,7 @@ pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     }
 }
 
-fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) {
+fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) -> Rect {
     let content_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
     let width = (content_width + 4).max(title.chars().count() as u16 + 6).max(30);
     let area = centered(
@@ -388,6 +439,7 @@ fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) {
     frame.render_widget(Clear, area);
     let block = Block::bordered().title(Line::styled(format!(" {title} "), bold()));
     frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    area
 }
 
 fn draw_help(frame: &mut Frame, app: &App) {
@@ -433,13 +485,18 @@ fn draw_help(frame: &mut Frame, app: &App) {
     frame.render_widget(Paragraph::new(right), b);
 }
 
+/// Rows of the command list window, borders included (it never resizes).
+const COMMANDS_HEIGHT: u16 = 24;
+
 /// The command list: category buttons, what was typed, then the commands
 /// as `Category/Command` with their shortcuts on the right.
 fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
     let view = commands_view(app, palette);
     let area = frame.area();
     let width = 96.min(area.width.saturating_sub(4)).max(20);
-    let height = (view.rows.len() as u16 + 6).clamp(8, area.height.saturating_sub(2).max(8));
+    // A fixed height (SC-69): the window must not grow and shrink as the
+    // typed filter narrows the list.
+    let height = COMMANDS_HEIGHT.min(area.height.saturating_sub(2)).max(8);
     let rect = Rect { y: area.y + 1, ..centered(area, width, height) };
     frame.render_widget(Clear, rect);
     let block = Block::bordered()
@@ -634,7 +691,12 @@ fn draw_content(frame: &mut Frame, viewer: &Viewer, area: Rect) {
         frame.render_widget(Paragraph::new(lines), area);
         return;
     }
-    let lines: Vec<Line> = viewer.visible_rows(page).into_iter().map(Line::raw).collect();
+    let tinted = viewer.visible_tinted(page);
+    let lines: Vec<Line> = if tinted.is_empty() {
+        viewer.visible_rows(page).into_iter().map(Line::raw).collect()
+    } else {
+        tinted.iter().map(rich_line).collect()
+    };
     let mut paragraph = Paragraph::new(lines);
     if viewer.wrap && !viewer.hex {
         paragraph = paragraph.wrap(Wrap { trim: false });
@@ -653,6 +715,7 @@ fn rich_line(line: &nmc_preview::rich::Line) -> Line<'static> {
 
 /// How a document style looks in a terminal.
 fn rich_style(style: &nmc_preview::rich::Style) -> Style {
+    use nmc_preview::rich::Tone;
     let mut out = Style::new();
     match style.heading {
         0 => {}
@@ -677,6 +740,14 @@ fn rich_style(style: &nmc_preview::rich::Style) -> Style {
     }
     if style.removed {
         out = out.fg(Color::Red);
+    }
+    match style.tone {
+        Tone::Plain => {}
+        Tone::Keyword => out = out.fg(Color::Magenta),
+        Tone::Str => out = out.fg(Color::Green),
+        Tone::Number => out = out.fg(Color::Yellow),
+        Tone::Comment => out = out.fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+        Tone::Name => out = out.fg(Color::Cyan),
     }
     out
 }

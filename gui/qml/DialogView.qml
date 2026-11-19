@@ -186,7 +186,9 @@ Item {
             ListView {
                 id: rows
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(contentHeight, dialogs.height * 0.6)
+                // A fixed height (SC-69): the window keeps its size whatever
+                // the filter leaves in the list.
+                Layout.preferredHeight: Math.min(16 * dialogs.theme.rowHeight, dialogs.height * 0.6)
                 implicitWidth: 600
                 interactive: false
                 clip: true
@@ -223,19 +225,17 @@ Item {
                     }
                 }
             }
+            // F1: what the highlighted command does. Its room is always
+            // reserved, so showing or hiding it does not move the window.
             Label {
-                visible: dialogs.view.rows.length === 0
-                text: "Nothing matches"
-                color: dialogs.theme.dim
-            }
-            // F1: what the highlighted command does.
-            Label {
-                visible: dialogs.view.help !== ""
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                text: dialogs.view.help
+                Layout.preferredHeight: 2 * dialogs.theme.rowHeight
+                verticalAlignment: Text.AlignTop
+                clip: true
+                text: dialogs.view.rows.length === 0 ? "Nothing matches" : dialogs.view.help
                 wrapMode: Text.Wrap
-                color: dialogs.theme.accent
+                color: dialogs.view.rows.length === 0 ? dialogs.theme.dim : dialogs.theme.accent
             }
         }
     }
@@ -309,6 +309,17 @@ Item {
         Box {
             title: dialogs.view.title
             hint: dialogs.view.hint
+            // About: the logo above the text.
+            Image {
+                visible: !!dialogs.view.logo_url
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: visible ? 128 : 0
+                Layout.preferredHeight: visible ? 128 : 0
+                source: dialogs.view.logo_url ? dialogs.view.logo_url : ""
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+            }
             Lines { model: dialogs.view.lines }
         }
     }
