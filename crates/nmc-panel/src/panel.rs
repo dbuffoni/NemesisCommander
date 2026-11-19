@@ -14,6 +14,9 @@ pub struct LoadRequest {
     pub id: u64,
     /// Directory to list.
     pub path: VfsPath,
+    /// List every file below `path` (the branch, or flat, view) instead of
+    /// the folder itself.
+    pub branch: bool,
 }
 
 /// The answer to a [`LoadRequest`].
@@ -23,18 +26,67 @@ pub struct Listing {
     pub id: u64,
     /// Directory listed.
     pub path: VfsPath,
+    /// The entries are every file below `path` (see [`LoadRequest::branch`]).
+    pub branch: bool,
+    /// A branch listing stopped at [`BRANCH_LIMIT`] files.
+    pub truncated: bool,
     /// Entries or the error.
     pub result: Result<Vec<Entry>>,
 }
 
+/// The most files a branch (flat) view lists; deeper trees are cut there.
+pub const BRANCH_LIMIT: usize = 100_000;
+
 /// Lists a directory for a [`LoadRequest`].
 pub async fn load(registry: &ProviderRegistry, request: LoadRequest) -> Listing {
+    let mut truncated = false;
     let result = async {
         let provider = registry.provider_for(&request.path).await?;
-        collect_listing(provider.as_ref(), &request.path).await
+        if request.branch {
+            let (entries, cut) = collect_branch(provider.as_ref(), &request.path).await?;
+            truncated = cut;
+            Ok(entries)
+        } else {
+            collect_listing(provider.as_ref(), &request.path).await
+        }
     }
     .await;
-    Listing { id: request.id, path: request.path, result }
+    Listing { id: request.id, path: request.path, branch: request.branch, truncated, result }
+}
+
+/// Every file below `root`, named by its path relative to `root`
+/// (`sub/deeper/file.txt`), and whether the walk stopped at
+/// [`BRANCH_LIMIT`]. Folders are not listed, only walked; a folder that
+/// cannot be read is skipped. Symbolic links to folders are listed but not
+/// followed, so a link cycle cannot loop.
+async fn collect_branch(
+    provider: &dyn nmc_vfs::Provider,
+    root: &VfsPath,
+) -> Result<(Vec<Entry>, bool)> {
+    let mut files = Vec::new();
+    let mut pending = vec![(root.clone(), String::new())];
+    let mut first = true;
+    while let Some((folder, prefix)) = pending.pop() {
+        let listing = match collect_listing(provider, &folder).await {
+            Ok(listing) => listing,
+            // The folder asked for must be readable; deeper ones may not be.
+            Err(e) if first => return Err(e),
+            Err(_) => continue,
+        };
+        first = false;
+        for mut entry in listing {
+            if entry.kind == EntryKind::Directory {
+                pending.push((folder.join(&entry.name), format!("{prefix}{}/", entry.name)));
+                continue;
+            }
+            entry.name = format!("{prefix}{}", entry.name);
+            files.push(entry);
+            if files.len() >= BRANCH_LIMIT {
+                return Ok((files, true));
+            }
+        }
+    }
+    Ok((files, false))
 }
 
 /// Totals of the current selection, for the status line.
@@ -68,9 +120,18 @@ pub struct Panel {
     focus_after_load: Option<String>,
     pending: Option<u64>,
     loading_error: Option<String>,
+    /// The listing is the branch (flat) view: every file below `location`.
+    branch: bool,
+    /// The branch listing was cut at [`BRANCH_LIMIT`].
+    truncated: bool,
 }
 
 static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+
+/// `true` if any part of a relative path (`a/.cache/x`) starts with a dot.
+fn is_hidden_path(name: &str) -> bool {
+    name.split('/').any(|part| part.starts_with('.') && part != "..")
+}
 
 /// Name of the synthetic "parent directory" row.
 pub const PARENT: &str = "..";
@@ -93,6 +154,8 @@ impl Panel {
             focus_after_load: None,
             pending: None,
             loading_error: None,
+            branch: false,
+            truncated: false,
         }
     }
 
@@ -103,13 +166,35 @@ impl Panel {
         // listing to every panel and exactly the one that asked takes it.
         let id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         self.pending = Some(id);
-        LoadRequest { id, path }
+        LoadRequest { id, path, branch: false }
     }
 
     /// Lists the current location again, keeping cursor and selection.
     pub fn reload(&mut self) -> LoadRequest {
         self.focus_after_load = self.current_entry().map(|e| e.name.clone());
-        self.request(self.location.clone())
+        let mut request = self.request(self.location.clone());
+        request.branch = self.branch;
+        request
+    }
+
+    /// Switches between the folder and the branch (flat) view: every file
+    /// below it in one list, named by its path inside the folder.
+    pub fn toggle_branch(&mut self) -> LoadRequest {
+        let on = !self.branch;
+        self.focus_after_load = None;
+        let mut request = self.request(self.location.clone());
+        request.branch = on;
+        request
+    }
+
+    /// `true` while the panel shows the branch (flat) view.
+    pub fn is_branch(&self) -> bool {
+        self.branch
+    }
+
+    /// `true` when the branch view stopped at [`BRANCH_LIMIT`] files.
+    pub fn branch_truncated(&self) -> bool {
+        self.branch && self.truncated
     }
 
     /// Lists the current location again and puts the cursor on `name` (for
@@ -168,12 +253,14 @@ impl Panel {
         self.pending = None;
         match listing.result {
             Ok(entries) => {
-                if listing.path != self.location {
+                if listing.path != self.location || listing.branch != self.branch {
                     self.selected.clear();
                     self.filter.clear();
                     self.cursor = 0;
                 }
                 self.location = listing.path;
+                self.branch = listing.branch;
+                self.truncated = listing.truncated;
                 self.loading_error = None;
                 self.all = entries;
                 sort_entries(&mut self.all, self.sort);
@@ -198,13 +285,14 @@ impl Panel {
     fn rebuild(&mut self, focus: Option<&str>) {
         let filter = Mask::parse(&quick_filter_mask(&self.filter)).unwrap_or_default();
         let mut visible = Vec::with_capacity(self.all.len() + 1);
-        if self.location.parent().is_some() {
+        // In the branch view `..` always leaves the view.
+        if self.branch || self.location.parent().is_some() {
             visible.push(Entry::new(PARENT, EntryKind::Directory));
         }
         visible.extend(
             self.all
                 .iter()
-                .filter(|e| self.show_hidden || !e.is_hidden())
+                .filter(|e| self.show_hidden || !is_hidden_path(&e.name))
                 .filter(|e| filter.matches(&e.name))
                 .cloned(),
         );
@@ -277,8 +365,12 @@ impl Panel {
     }
 
     /// Goes to the parent directory, with the cursor on where we came from.
-    /// At an archive root this leaves the archive.
+    /// At an archive root this leaves the archive. In the branch view it
+    /// leaves the view instead and shows the folder itself.
     pub fn parent(&mut self) -> Option<LoadRequest> {
+        if self.branch {
+            return Some(self.go(self.location.clone(), None));
+        }
         let parent = self.location.parent()?;
         let came_from = if self.location.is_root() {
             self.location.container().and_then(|c| c.file_name()).map(str::to_owned)
@@ -552,6 +644,52 @@ mod tests {
         run(&mut panel, &registry, request).await;
         assert_eq!(panel.location(), &p("/"));
         assert_eq!(panel.current_entry().unwrap().name, "home");
+    }
+
+    #[tokio::test]
+    async fn the_branch_view_lists_every_file_below() {
+        let registry = registry();
+        let m = MemoryProvider::new();
+        m.put_file("/t/top.txt", "1");
+        m.put_file("/t/sub/deep/inner.txt", "22");
+        m.put_file("/t/sub/.secret/x", "3");
+        m.put_file("/t/sub/side.md", "4");
+        let mut registry = registry;
+        registry.insert(&p("/t"), Arc::new(m));
+        let mut panel = Panel::new(p("/t"), SortSpec::default(), false);
+        let request = panel.reload();
+        run(&mut panel, &registry, Some(request)).await;
+        assert!(!panel.is_branch());
+
+        let request = panel.toggle_branch();
+        run(&mut panel, &registry, Some(request)).await;
+        assert!(panel.is_branch());
+        // Files only, named by their path in the folder, hidden ones left out.
+        assert_eq!(names(&panel), ["..", "sub/deep/inner.txt", "sub/side.md", "top.txt"]);
+        // The names resolve to real paths, so operations work on them.
+        panel.focus("sub/deep/inner.txt");
+        assert_eq!(panel.targets(), [p("/t/sub/deep/inner.txt")]);
+
+        // A reload keeps the view; the parent row leaves it.
+        let request = panel.reload();
+        run(&mut panel, &registry, Some(request)).await;
+        assert!(panel.is_branch());
+        panel.set_cursor(0);
+        let request = panel.enter();
+        run(&mut panel, &registry, request).await;
+        assert!(!panel.is_branch());
+        assert_eq!(panel.location(), &p("/t"));
+        assert_eq!(names(&panel), ["..", "sub", "top.txt"]);
+    }
+
+    #[tokio::test]
+    async fn the_branch_view_shows_hidden_files_on_request() {
+        let (mut panel, registry) = home().await;
+        panel.set_show_hidden(true);
+        let request = panel.toggle_branch();
+        run(&mut panel, &registry, Some(request)).await;
+        assert!(names(&panel).contains(&".hidden"));
+        assert!(names(&panel).contains(&"docs/readme.md"));
     }
 
     #[tokio::test]

@@ -2397,3 +2397,29 @@ async fn choosing_does_nothing_outside_pick_mode() {
     assert!(h.app.is_running());
     assert!(h.app.picked().is_none());
 }
+
+#[tokio::test]
+async fn the_flat_view_lists_files_below_with_their_folder() {
+    let mut h = Harness::new().await;
+    h.key("Alt+V");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains("(flat)"), "{screen}");
+    assert!(screen.contains("Folder"), "a folder column: {screen}");
+    let line = screen.lines().find(|l| l.contains("readme.md")).expect("the nested file is listed");
+    assert!(line.contains("docs"), "with its folder: {line}");
+    assert!(!screen.contains("docs/ "), "folders themselves are not rows");
+    // Operations act on the real file: view it with F3.
+    h.key("Backspace");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(!screen.contains("(flat)"), "Backspace leaves the flat view: {screen}");
+    assert!(h.app.is_running());
+    h.key("Alt+V");
+    h.settle().await;
+    assert!(h.screen().contains("(flat)"), "Alt+V enters it again");
+    h.key("Alt+V");
+    h.settle().await;
+    assert!(!h.screen().contains("(flat)"), "and leaves it");
+    assert!(screen.contains("docs"), "{screen}");
+}

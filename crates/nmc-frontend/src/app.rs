@@ -1576,6 +1576,10 @@ impl App {
                     InputPurpose::ImportSettings,
                 );
             }
+            Action::FlatView => {
+                let request = self.workspace.active_mut().toggle_branch();
+                self.load(request);
+            }
             Action::Choose => self.choose_now(),
             Action::Quit => self.running = false,
         }

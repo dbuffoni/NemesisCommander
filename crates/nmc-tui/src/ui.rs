@@ -133,10 +133,11 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
 
     let mut block = Block::bordered().border_style(border).title(Line::styled(
         format!(
-            " [{}] {}{} ",
+            " [{}] {}{}{} ",
             drive_label(&app.context().config, panel.location()),
             git.as_ref().map(|g| format!("⎇ {}  ", g.summary())).unwrap_or_default(),
-            display_location(panel.location())
+            display_location(panel.location()),
+            if panel.is_branch() { "  (flat)" } else { "" }
         ),
         bold(),
     ));
@@ -173,14 +174,18 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     // One more for the size bar, once folder sizes were counted here.
     let biggest = biggest_size(app.folder_sizes(), panel);
     let bar_width = if biggest.is_some() { 2 } else { 0 };
-    let name_width = width
+    let mut name_width = width
         .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width + bar_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
+    // The flat view gives a third of the name column to the folder.
+    let folder_width = if panel.is_branch() { (name_width / 3).clamp(0, 28) } else { 0 };
+    name_width = name_width.saturating_sub(folder_width + usize::from(folder_width > 0));
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{}{} {}{:>SIZE_WIDTH$}{}",
+        "{}{} {}{}{:>SIZE_WIDTH$}{}",
         " ".repeat(mark_width),
         fit(&name_title, name_width),
+        if folder_width > 0 { format!("{} ", fit("Folder", folder_width)) } else { String::new() },
         " ".repeat(bar_width),
         size_title,
         if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
@@ -200,6 +205,14 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     }
     for (i, entry) in panel.entries().iter().enumerate().skip(offset).take(rows) {
         let mut name = entry.name.clone();
+        let mut folder = String::new();
+        if panel.is_branch()
+            && entry.name != PARENT
+            && let Some((parents, file)) = entry.name.rsplit_once('/')
+        {
+            folder = parents.to_owned();
+            name = file.to_owned();
+        }
         if entry.is_dir() && entry.name != PARENT {
             name.push('/');
         }
@@ -222,6 +235,12 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             String::new()
         };
         let name_text = format!("{} ", fit(&name, name_width));
+        // The deepest folders are the useful end of a long path.
+        let folder_text = if folder_width > 0 {
+            format!("{} ", fit_end(&folder, folder_width))
+        } else {
+            String::new()
+        };
         let rest = format!("{:>SIZE_WIDTH$}{date}", size);
 
         let mut style = Style::new();
@@ -254,6 +273,9 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             spans.push(Span::styled("  ", style));
         }
         spans.push(Span::styled(name_text, style));
+        if !folder_text.is_empty() {
+            spans.push(Span::styled(folder_text, if i == cursor { style } else { dim() }));
+        }
         if let Some((glyph, ratio)) = bar {
             let mut colour = style;
             if let Some(ratio) = ratio
@@ -293,6 +315,20 @@ pub fn fit(text: &str, width: usize) -> String {
     let mut cut: String = text.chars().take(width - 1).collect();
     cut.push('…');
     cut
+}
+
+/// `text` padded to `width`, or cut at the start with `…` when longer (the
+/// end of a folder path is the part that tells folders apart).
+fn fit_end(text: &str, width: usize) -> String {
+    let count = text.chars().count();
+    if count <= width {
+        return format!("{text:<width$}");
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let tail: String = text.chars().skip(count - (width - 1)).collect();
+    format!("…{tail}")
 }
 
 fn draw_quick_view(frame: &mut Frame, app: &App, area: Rect) {

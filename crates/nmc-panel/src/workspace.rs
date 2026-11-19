@@ -228,6 +228,8 @@ mod tests {
         let listing = |request: &LoadRequest| Listing {
             id: request.id,
             path: request.path.clone(),
+            branch: false,
+            truncated: false,
             result: Ok(vec![nmc_vfs::Entry::new("x", nmc_vfs::EntryKind::File)]),
         };
         assert!(ws.apply(listing(&tab)));

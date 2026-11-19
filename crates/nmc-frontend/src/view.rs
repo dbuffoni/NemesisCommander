@@ -95,6 +95,8 @@ pub struct PanelView {
     /// Rows carry size bars (folder sizes were counted): the front end
     /// leaves room for them.
     pub bars: bool,
+    /// The panel shows the flat (branch) view: rows carry a folder column.
+    pub flat: bool,
 }
 
 /// A tab of a panel.
@@ -109,8 +111,11 @@ pub struct TabView {
 /// One entry of a listing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RowView {
-    /// Name; folders end with `/`.
+    /// Name; folders end with `/`. In the flat view only the file name.
     pub name: String,
+    /// In the flat view, the folder of the file inside the panel's folder
+    /// (`sub/deeper`); empty elsewhere.
+    pub folder: String,
     /// Size, `<DIR>`, or `UP` for the parent entry.
     pub size: String,
     /// Modification time.
@@ -568,7 +573,12 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         })
         .collect();
     let view = PanelView {
-        title: display_location(panel.location()),
+        title: if panel.is_branch() {
+            format!("{}  (every file below)", display_location(panel.location()))
+        } else {
+            display_location(panel.location())
+        },
+        flat: panel.is_branch(),
         drive: {
             let label = crate::drives::drive_label(&app.context().config, panel.location());
             let state =
@@ -691,11 +701,20 @@ fn row_view(
 ) -> RowView {
     let icon = (icons && entry.name != PARENT).then(|| crate::icons::icon_for(entry));
     let mut name = entry.name.clone();
+    let mut folder = String::new();
+    if panel.is_branch()
+        && entry.name != PARENT
+        && let Some((parents, file)) = entry.name.rsplit_once('/')
+    {
+        folder = parents.to_owned();
+        name = file.to_owned();
+    }
     if entry.is_dir() && entry.name != PARENT {
         name.push('/');
     }
     RowView {
         name,
+        folder,
         size: size_text_counted(entry, human, counted),
         date: entry.modified.map(local_time).unwrap_or_default(),
         dir: entry.is_dir(),
@@ -776,6 +795,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         quick_view: Some(quick_view),
         headers: Default::default(),
         bars: false,
+        flat: false,
     }
 }
 
@@ -1017,6 +1037,9 @@ pub fn panel_footer(panel: &Panel) -> String {
     };
     if !panel.filter().is_empty() {
         text.push_str(&format!("  filter: {} (Esc clears)", panel.filter()));
+    }
+    if panel.branch_truncated() {
+        text.push_str(&format!("  (first {} files only)", nmc_panel::BRANCH_LIMIT));
     }
     if panel.is_loading() {
         text.push_str("  loading…");

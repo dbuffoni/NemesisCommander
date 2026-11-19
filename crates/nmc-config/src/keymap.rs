@@ -137,6 +137,7 @@ actions! {
     SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Ctrl+Up", "Alt+O"];
     OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", ["Ctrl+Left"];
     OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", ["Ctrl+Right"];
+    FlatView      = "nav.flat-view",        Navigate, false, "Flat (branch) view",    ["Alt+V"];
     Basket        = "nav.basket",           Navigate, false, "Basket…",               ["Ctrl+B"];
     SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+Down", "Ctrl+U"];
     // View
@@ -339,6 +340,9 @@ impl Action {
             }
             Action::ImportConfig => {
                 "Reads settings, bookmarks and connections from a file written by Export, replacing or merging."
+            }
+            Action::FlatView => {
+                "Lists every file below this folder in one flat list, with its subfolder in a column. Press it again, or Backspace, to come back."
             }
             Action::Choose => {
                 "Only in nmc pick: gives the marked items, the item under the cursor or, when asked for a folder, the current folder to the program that started nmc pick."

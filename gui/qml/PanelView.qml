@@ -123,6 +123,13 @@ Rectangle {
                 color: panel.theme.dim
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
+            Label {
+                visible: panel.view !== null && panel.view.flat
+                Layout.preferredWidth: 150
+                text: "Folder"
+                color: panel.theme.dim
+                font.pointSize: panel.theme.font.pointSize * 0.9
+            }
             Item {
                 visible: panel.view !== null && panel.view.bars
                 Layout.preferredWidth: 40
@@ -156,7 +163,7 @@ Rectangle {
             clip: true
             visible: panel.view !== null && !panel.view.quick_view
             readonly property var blank: ({ cursor: false, selected: false, hidden: false,
-                dir: false, name: "", size: "", date: "", git: "", icon: "", icon_color: "",
+                dir: false, name: "", folder: "", size: "", date: "", git: "", icon: "", icon_color: "",
                 url: "", bar: -1, bar_color: "" })
 
             WheelHandler {
@@ -277,6 +284,15 @@ Rectangle {
                                 elide: Text.ElideRight
                                 color: row.textColor
                                 font.bold: entry.dir || entry.selected
+                            }
+                            // The flat view: where the file is, the deepest folder
+                            // kept when the path is long.
+                            Label {
+                                visible: panel.view.flat
+                                Layout.preferredWidth: 150
+                                text: entry.folder
+                                elide: Text.ElideLeft
+                                color: panel.theme.dim
                             }
                             // Once folder sizes are counted: how big it is against
                             // the biggest here, from green to red.
