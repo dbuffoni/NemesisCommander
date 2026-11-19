@@ -7,7 +7,8 @@ use nmc_index::{ContentQuery, Mask, SearchCriteria};
 use nmc_panel::format::parse_size;
 
 /// Parses the size and age conditions: words such as `>10M`, `<1G`,
-/// `newer:7d`, `older:2w` (units `h`, `d`, `w`, `m` for 30 days, `y`).
+/// `newer:7d`, `older:2w` (units `h`, `d`, `w`, `m` for 30 days, `y`), and
+/// `archives` to search inside archive files too.
 pub fn apply_filters(
     criteria: &mut SearchCriteria,
     text: &str,
@@ -24,8 +25,12 @@ pub fn apply_filters(
             criteria.modified_after = Some(now - parse_age(age)?);
         } else if let Some(age) = word.strip_prefix("older:") {
             criteria.modified_before = Some(now - parse_age(age)?);
+        } else if word == "archives" {
+            criteria.archives = true;
         } else {
-            return Err(format!("Not understood: {word} (use >10M, <1G, newer:7d, older:2w)"));
+            return Err(format!(
+                "Not understood: {word} (use >10M, <1G, newer:7d, older:2w, archives)"
+            ));
         }
     }
     Ok(())
@@ -92,6 +97,8 @@ mod tests {
         assert_eq!(c.modified_after, Some(now - Duration::from_secs(7 * 86_400)));
         assert_eq!(c.modified_before, Some(now - Duration::from_secs(86_400)));
         assert!(c.content.is_none());
+        assert!(!c.archives);
+        assert!(criteria("*", "", "archives >1k", now).unwrap().archives);
     }
 
     #[test]

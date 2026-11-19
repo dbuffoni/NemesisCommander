@@ -244,6 +244,9 @@ pub struct FindArgs {
     /// Maximum depth.
     #[arg(long)]
     pub max_depth: Option<usize>,
+    /// Also search inside archive files (zip, tar, 7z, ...).
+    #[arg(long)]
+    pub archives: bool,
     /// One JSON object per hit.
     #[arg(long)]
     pub json: bool,

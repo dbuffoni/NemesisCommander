@@ -3695,9 +3695,11 @@ name = "nmc-app"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "futures",
  "nmc-agent",
  "nmc-archive",
  "nmc-config",
+ "nmc-index",
  "nmc-ops",
  "nmc-providers",
  "nmc-s3",

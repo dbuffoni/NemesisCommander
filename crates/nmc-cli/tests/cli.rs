@@ -337,3 +337,33 @@ fn pick_needs_a_terminal() {
         .failure()
         .stderr(predicate::str::contains("needs a terminal"));
 }
+
+#[test]
+fn find_looks_inside_archives_when_asked() {
+    let sandbox = Sandbox::new();
+    sandbox.nmc().args(["pack", "src", "-o", "bundle.zip"]).assert().success();
+    fs::remove_dir_all(sandbox.path("src")).unwrap();
+    fs::create_dir_all(sandbox.path("work")).unwrap();
+    fs::rename(sandbox.path("bundle.zip"), sandbox.path("work/bundle.zip")).unwrap();
+
+    // Without the option the archive is just a file.
+    sandbox
+        .nmc()
+        .args(["find", "work", "--content", "hello world"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::is_empty());
+
+    sandbox
+        .nmc()
+        .args(["find", "work", "--content", "hello world", "--archives"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hello.txt:1: hello world"));
+    sandbox
+        .nmc()
+        .args(["find", "work", "--name", "code.rs", "--archives"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("code.rs"));
+}

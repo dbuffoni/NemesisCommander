@@ -1801,7 +1801,7 @@ impl App {
             }
             InputPurpose::SearchContent { mask } => self.ask(
                 "Search",
-                "Size and age (>10M <1G newer:7d older:2w; empty: any):",
+                "Size, age, archives (>10M <1G newer:7d older:2w archives; empty: any):",
                 "",
                 InputPurpose::SearchFilters { mask, content: text },
             ),
@@ -2071,7 +2071,8 @@ impl App {
                 Ok(provider) => provider,
                 Err(e) => return AppEvent::SearchDone(Some(e.to_string())),
             };
-            let mut hits = nmc_index::search(provider, root, criteria, cancel);
+            let opener = Arc::new(nmc_app::RegistryArchives(registry.clone()));
+            let mut hits = nmc_index::search_in_archives(provider, root, criteria, cancel, opener);
             let mut error = None;
             while let Some(hit) = hits.recv().await {
                 match hit {

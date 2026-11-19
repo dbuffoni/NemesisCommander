@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::time::{Duration, SystemTime};
 
 use nmc_app::AppContext;
-use nmc_index::{ContentQuery, Mask, SearchCriteria, search};
+use nmc_index::{ContentQuery, Mask, SearchCriteria, search_in_archives};
 use tokio_util::sync::CancellationToken;
 
 use super::CmdResult;
@@ -36,9 +36,12 @@ pub async fn find(context: &AppContext, args: FindArgs) -> CmdResult {
         modified_before: args.older_than_days.map(|d| now - DAY * d as u32),
         include_directories: args.dirs,
         max_depth: args.max_depth,
+        archives: args.archives,
     };
     let provider = context.registry.provider_for(&root).await?;
-    let mut results = search(provider, root.clone(), criteria, CancellationToken::new());
+    let opener = std::sync::Arc::new(nmc_app::RegistryArchives(context.registry.clone()));
+    let mut results =
+        search_in_archives(provider, root.clone(), criteria, CancellationToken::new(), opener);
     let mut found = 0usize;
     while let Some(result) = results.recv().await {
         match result {
