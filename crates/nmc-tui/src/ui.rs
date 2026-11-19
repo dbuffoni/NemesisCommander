@@ -433,13 +433,18 @@ fn draw_help(frame: &mut Frame, app: &App) {
     frame.render_widget(Paragraph::new(right), b);
 }
 
+/// Rows of the command list window, borders included (it never resizes).
+const COMMANDS_HEIGHT: u16 = 24;
+
 /// The command list: category buttons, what was typed, then the commands
 /// as `Category/Command` with their shortcuts on the right.
 fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
     let view = commands_view(app, palette);
     let area = frame.area();
     let width = 96.min(area.width.saturating_sub(4)).max(20);
-    let height = (view.rows.len() as u16 + 6).clamp(8, area.height.saturating_sub(2).max(8));
+    // A fixed height (SC-69): the window must not grow and shrink as the
+    // typed filter narrows the list.
+    let height = COMMANDS_HEIGHT.min(area.height.saturating_sub(2)).max(8);
     let rect = Rect { y: area.y + 1, ..centered(area, width, height) };
     frame.render_widget(Clear, rect);
     let block = Block::bordered()

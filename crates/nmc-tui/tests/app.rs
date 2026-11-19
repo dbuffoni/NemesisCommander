@@ -365,6 +365,31 @@ async fn the_command_list_runs_commands() {
     assert!(matches!(h.app.overlay(), Some(Overlay::Help)), "a click runs the row");
 }
 
+/// The number of screen rows from the title border to the bottom border of
+/// the command list.
+fn command_list_height(screen: &str) -> usize {
+    let lines: Vec<&str> = screen.lines().collect();
+    let top = lines.iter().position(|l| l.contains(" Commands ")).expect("title border");
+    let bottom = lines[top..].iter().position(|l| l.contains('└')).expect("bottom border");
+    bottom
+}
+
+#[tokio::test]
+async fn the_command_list_keeps_its_height() {
+    // SC-69: the window must not change size as the filter narrows the list.
+    let mut h = Harness::new().await;
+    h.key("F9");
+    let full = command_list_height(&h.screen());
+    h.type_text("settings");
+    assert_eq!(command_list_height(&h.screen()), full);
+    h.key("Esc");
+    h.type_text("zzz");
+    assert_eq!(command_list_height(&h.screen()), full);
+    h.key("Esc");
+    h.key("F1");
+    assert_eq!(command_list_height(&h.screen()), full, "with the help line");
+}
+
 #[tokio::test]
 async fn typing_in_the_command_list_finds_commands() {
     let mut h = Harness::new().await;
