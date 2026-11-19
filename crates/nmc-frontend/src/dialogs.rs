@@ -309,6 +309,8 @@ pub struct MessageDialog {
     pub lines: Vec<String>,
     /// Pressing Enter opens this follow-up dialog (e.g. "change permissions").
     pub then: Option<InputDialog>,
+    /// The logo is shown above the text (About).
+    pub logo: bool,
 }
 
 impl MessageDialog {

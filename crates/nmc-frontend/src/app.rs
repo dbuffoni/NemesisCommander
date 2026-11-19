@@ -893,6 +893,7 @@ impl App {
                             title: title.clone(),
                             lines: text,
                             then: None,
+                            logo: false,
                         }));
                     }
                 }
@@ -1581,6 +1582,7 @@ impl App {
                 self.load(request);
             }
             Action::Choose => self.choose_now(),
+            Action::About => self.overlay = Some(Overlay::Message(crate::about::dialog())),
             Action::Quit => self.running = false,
         }
     }
@@ -1906,6 +1908,7 @@ impl App {
                     title,
                     lines,
                     then: None,
+                    logo: false,
                 })));
             }
             lines.push(format!("Rename {changed} items?"));
@@ -2395,8 +2398,12 @@ impl App {
             &suggestion,
             InputPurpose::Attributes(vec![path.clone()]),
         ));
-        self.overlay =
-            Some(Overlay::Message(MessageDialog { title: "Properties".into(), lines, then }));
+        self.overlay = Some(Overlay::Message(MessageDialog {
+            title: "Properties".into(),
+            lines,
+            then,
+            logo: false,
+        }));
     }
 
     fn checksum_current(&mut self) {
@@ -2425,6 +2432,7 @@ impl App {
                     title: "Checksums".into(),
                     lines,
                     then: None,
+                    logo: false,
                 }))),
                 Err(e) => done(Err(e), None),
             }

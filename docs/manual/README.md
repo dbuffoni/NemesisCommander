@@ -92,6 +92,10 @@ shortcuts on the right.
 In the window there is no menu bar: this list is the menu. Clicking **F9
 Commands** in the bar at the bottom opens it too.
 
+The command **App/About NemesisCommander** (no shortcut; give it one in the
+settings if you like) shows the logo, the version and the commit this build
+was made from, the license and where the source is.
+
 ## The panels
 
 Each panel lists one folder: an icon, name, size and modification date. The title of
@@ -183,6 +187,14 @@ if the row is part of it): you are asked where to copy to, as with F5.
 In the window you can also drag files **to and from other programs**
 (local files only): drop them on a panel to copy them into its folder, or
 drag a row out to your desktop or another application.
+
+### The flat view
+
+**Alt+V** lists every file below the current folder in one list, with the
+subfolder of each file in a *Folder* column, so you can see, sort, select and
+copy files from a whole tree at once. Press it again, or Backspace, to come
+back to the folder. Hidden files follow the usual setting, folders are not
+listed, and listings stop at 100 000 files (the footer says so).
 
 ### Git marks
 
@@ -332,6 +344,13 @@ and the footer gives details (pages, picture size, zoom). **Esc** closes.
 **Text** is shown with tabs expanded; F2 wraps long lines. Files that are not
 text open as hex. Very large files are read only in part.
 
+**Source and data files** are coloured: keywords, strings, numbers, comments
+and names (keys, types, tags, variables). Shell scripts, YAML, JSON, XML and
+HTML, SQL, TypeScript and JavaScript, Rust and Python are recognised by the
+file name, or by the `#!` line when the name does not say. The language shows
+in the footer. The same colours appear in the quick view and, for unchanged
+lines, in a comparison (Alt+C). Files over 50 000 lines stay plain.
+
 ![Text](images/viewer-text.png)
 
 **Markdown** is shown formatted: headings, emphasis, lists, quotes, code
@@ -403,6 +422,12 @@ panel. On the command line, `nmc find` also searches by regular expression,
 size and age.
 
 ![Search](images/search.png)
+
+The search asks one more thing in its conditions: the word `archives` makes
+it look inside ZIP, 7-Zip, tar and RAR archives it meets (and in archives
+inside archives, up to three levels). Found files are listed with the archive
+in their path. On the command line it is
+`nmc find --archives`.
 
 **Alt+C** compares: two files (one under the cursor in each panel) by
 content, or two folders, selecting the entries that differ. Two different
@@ -710,7 +735,8 @@ jobs. Every command accepts the same locations as the panels.
 | `nmc mkdir PATH...` | Create folders |
 | `nmc cat FILE` | Print a file |
 | `nmc hash FILE...` | Checksums (`--algorithm blake3`, `xxh3` or `sha256`) |
-| `nmc find DIR` | Search by `--name`, `--content` (`--regex`), size and age |
+| `nmc find DIR` | Search by `--name`, `--content` (`--regex`), size and age; `--archives` looks inside archives |
+| `nmc pick [LOCATION]` | Use the terminal interface as a file chooser: the choice is printed on standard output (`--dir`, `--multiple`, `-0`) |
 | `nmc pack` / `nmc unpack` | Create and extract archives |
 | `nmc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace); `--preview` shows the new names only |
 | `nmc jobs` | Show and control the transfer queue |
@@ -721,6 +747,19 @@ jobs. Every command accepts the same locations as the panels.
 | `nmc test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
 | `nmc ai new` / `nmc ai rename` / `nmc ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
 | `nmc agent --stdio`, `nmc serve`, `nmc tls` | The server side (Linux) |
+
+**`nmc pick`** turns the terminal interface into a file chooser for scripts:
+the interface is drawn on the terminal (standard error) and what you choose
+is printed on standard output, one path per line (`-0` ends each with a NUL
+byte for names with newlines). Enter chooses the file under the cursor, **Alt+Y**
+chooses the marked files, or the current folder with `--dir`; **Esc** quits
+with exit code 1 and prints nothing. Every other command still works while
+choosing.
+
+```sh
+file=$(nmc pick ~/Documents) && echo "chose $file"
+cd "$(nmc pick --dir ~/Projects)"
+```
 
 For example:
 

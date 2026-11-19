@@ -11,6 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 
+use nmc_frontend::about;
 use nmc_frontend::commands::CommandPalette;
 use nmc_frontend::drives::drive_label;
 use nmc_frontend::icons::icon_for;
@@ -98,7 +99,21 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
                 lines.push(Line::raw(""));
                 lines.push(Line::styled(dialog.hint(), dim()));
-                draw_box(frame, &dialog.title, lines);
+                if dialog.logo {
+                    // The logo takes the first rows of the box.
+                    let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
+                    lines.splice(0..0, blank);
+                    let area = draw_box(frame, &dialog.title, lines);
+                    let top = Rect::new(
+                        area.x + 1,
+                        area.y + 1,
+                        area.width.saturating_sub(2),
+                        about::LOGO_ROWS,
+                    );
+                    draw_image(frame, about::logo(), Zoom::default(), top);
+                } else {
+                    draw_box(frame, &dialog.title, lines);
+                }
             }
             Overlay::Viewer(viewer) => {
                 let page = draw_viewer(frame, viewer, frame.area());
@@ -413,7 +428,7 @@ pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     }
 }
 
-fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) {
+fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) -> Rect {
     let content_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
     let width = (content_width + 4).max(title.chars().count() as u16 + 6).max(30);
     let area = centered(
@@ -424,6 +439,7 @@ fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) {
     frame.render_widget(Clear, area);
     let block = Block::bordered().title(Line::styled(format!(" {title} "), bold()));
     frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    area
 }
 
 fn draw_help(frame: &mut Frame, app: &App) {

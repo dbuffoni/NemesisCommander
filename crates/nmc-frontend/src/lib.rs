@@ -18,6 +18,7 @@
 //! * `preview`: documents, PDF pages and 3D models for the viewer.
 //! * `view`: what the screen shows, as plain data (and shared text helpers).
 
+pub mod about;
 mod app;
 pub mod commands;
 mod dialogs;

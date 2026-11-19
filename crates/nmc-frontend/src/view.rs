@@ -217,6 +217,9 @@ pub enum OverlayView {
         has_next: bool,
         /// The keys line below the text.
         hint: String,
+        /// The logo to show above the text (About): a `file://` URL of
+        /// a PNG for a window.
+        logo_url: Option<String>,
     },
     /// F3: the viewer.
     Viewer(ViewerView),
@@ -844,6 +847,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             lines: dialog.lines.clone(),
             has_next: dialog.then.is_some(),
             hint: dialog.hint(),
+            logo_url: dialog.logo.then(crate::about::logo_url).flatten(),
         },
         Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
         Overlay::Jobs(view) => OverlayView::Jobs {

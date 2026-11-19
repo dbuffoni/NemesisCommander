@@ -539,6 +539,30 @@ async fn viewer_colours_source_files_by_language() {
 }
 
 #[tokio::test]
+async fn about_shows_the_logo_and_the_version() {
+    let mut h = Harness::new().await;
+    h.app.perform(nmc_config::keymap::Action::About);
+    let mut terminal = Terminal::new(TestBackend::new(110, 32)).unwrap();
+    terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let text: String = buffer.content().iter().map(|c| c.symbol()).collect();
+    assert!(text.contains("NemesisCommander 0.1.0"), "version");
+    assert!(text.contains("MIT"), "license");
+    assert!(text.contains("github.com/dbuffoni/NemesisCommander"), "source");
+    // The logo is drawn with half blocks, some of them the purple band.
+    let purple = buffer
+        .content()
+        .iter()
+        .filter(
+            |c| matches!(c.fg, ratatui::style::Color::Rgb(r, g, b) if b > 200 && r > 60 && g < 80),
+        )
+        .count();
+    assert!(purple > 5, "{purple} purple cells");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+}
+
+#[tokio::test]
 async fn viewer_draws_images() {
     let mut h = Harness::new().await;
     // A small solid green PNG.

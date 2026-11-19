@@ -309,6 +309,17 @@ Item {
         Box {
             title: dialogs.view.title
             hint: dialogs.view.hint
+            // About: the logo above the text.
+            Image {
+                visible: !!dialogs.view.logo_url
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: visible ? 128 : 0
+                Layout.preferredHeight: visible ? 128 : 0
+                source: dialogs.view.logo_url ? dialogs.view.logo_url : ""
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+            }
             Lines { model: dialogs.view.lines }
         }
     }
