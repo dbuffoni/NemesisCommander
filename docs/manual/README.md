@@ -227,7 +227,6 @@ default; the destination can be edited before you confirm.
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
 | Shift+F5 / Shift+F9 | Pack into an archive / unpack one |
-| Ctrl+Shift+F5 | Advanced pack: format, level and password |
 | Alt+Enter | Properties, and change the dates and permissions |
 | F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
@@ -519,8 +518,8 @@ single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
 Shift+F9 unpacks.
 
-**Advanced pack** (**Ctrl+Shift+F5**, or F9, Files/Advanced pack…) asks, one
-step at a time, for the format, the compression level (fastest, fast, normal,
+The Pack question has **more options**: press **Ctrl+O** in it (the typed name,
+such as `site.7z`, picks the format to start on). It asks, one step at a time, for the format, the compression level (fastest, fast, normal,
 smallest; formats that have none skip it), a **password** and where to write
 the archive. The password question appears for ZIP and 7z only: both use
 AES-256, and 7z hides the file names too. It is typed twice, shown as dots and
@@ -890,7 +889,7 @@ on the settings screen (Ctrl+,).
 | F8, Delete | Delete (to trash) |
 | Shift+F8, Shift+Delete | Delete permanently |
 | Shift+F5 | Pack into archive |
-| Ctrl+Shift+F5 | Advanced pack: format, level, password |
+| Ctrl+O (in the Pack question) | More options: format, level, password |
 | Shift+F9 | Unpack archive (asks the password of an encrypted one) |
 | Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |

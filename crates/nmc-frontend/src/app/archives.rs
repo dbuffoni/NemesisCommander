@@ -40,8 +40,9 @@ fn has_level(format: ArchiveFormat) -> bool {
 }
 
 impl App {
-    /// Advanced pack, first question: the format.
-    pub(super) fn ask_pack_format(&mut self, paths: Vec<VfsPath>) {
+    /// The advanced options of Pack (Ctrl+O in its question), first the
+    /// format; the cursor starts on the one the typed name asks for.
+    pub(super) fn ask_pack_format(&mut self, paths: Vec<VfsPath>, typed: &str) {
         let one = paths.len() == 1;
         let formats: Vec<ArchiveFormat> = ArchiveFormat::writable()
             .into_iter()
@@ -50,8 +51,12 @@ impl App {
             .collect();
         let title = format!("Advanced pack: {}", Self::count_text(&paths));
         let rows = formats.iter().map(|&f| describe(f)).collect();
+        let name = typed.trim().rsplit(['/', '\\']).next().unwrap_or_default();
+        let start = ArchiveFormat::from_file_name(name)
+            .and_then(|wanted| formats.iter().position(|&f| f == wanted));
         let mut dialog =
             ChooseDialog::new(&title, rows, ChoosePurpose::PackFormat { paths, formats });
+        dialog.cursor = start.unwrap_or(0);
         dialog.footer = "Enter: choose the format   Esc: cancel".into();
         self.overlay = Some(Overlay::Choose(dialog));
     }

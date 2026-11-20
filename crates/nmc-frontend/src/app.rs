@@ -1093,6 +1093,14 @@ impl App {
                     self.submit_input(dialog);
                     return back;
                 }
+                if let InputPurpose::PackInto(paths) = &dialog.purpose
+                    && press.chord.ctrl
+                    && press.chord.key == Key::Char('o')
+                {
+                    // The advanced options: the typed name picks the format.
+                    self.ask_pack_format(paths.clone(), dialog.field.text());
+                    return None;
+                }
                 if dialog.purpose.is_address()
                     && press.chord.ctrl
                     && press.chord.key == Key::Char('t')
@@ -1451,13 +1459,11 @@ impl App {
                         .map(|p| display_location(&p))
                         .unwrap_or_default();
                 let prompt = format!(
-                    "Pack {} into (format from the extension):",
+                    "Pack {} into (format from the extension; Ctrl+O: more options):",
                     Self::count_text(&targets)
                 );
                 self.ask("Pack", &prompt, &output, InputPurpose::PackInto(targets));
             }
-            Action::PackAdvanced if nothing => self.set_error("Nothing to pack"),
-            Action::PackAdvanced => self.ask_pack_format(targets),
             Action::Unpack => self.unpack_current(),
             Action::Properties => self.show_properties(),
             Action::Attributes if nothing => self.set_error("Nothing to change"),
