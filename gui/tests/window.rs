@@ -277,3 +277,14 @@ fn ctrl_v_pastes_the_clipboard_into_a_question() {
     let text = overlay["text"].as_str().unwrap_or_default();
     assert!(text.ends_with("notes.txt"), "pasted: {text:?}");
 }
+
+#[test]
+fn the_pack_question_lists_its_keys_in_the_key_row() {
+    let home = home();
+    let run = run(home.path(), "Down Shift+F5", None);
+    assert_no_qml_warnings(&run);
+    let overlay = &run.screen["overlay"];
+    assert_eq!(overlay["kind"], "input", "{overlay}");
+    assert!(!overlay["prompt"].as_str().unwrap().contains("Ctrl+O"), "{overlay}");
+    assert!(overlay["hint"].as_str().unwrap().contains("Ctrl+O: more options"), "{overlay}");
+}

@@ -29,9 +29,7 @@ impl App {
         initial: &str,
         purpose: InputPurpose,
     ) {
-        let mut dialog = InputDialog::new(title, prompt, initial, purpose);
-        dialog.preview = vec!["Ctrl+T: test the connection".into()];
-        self.overlay = Some(Overlay::Input(dialog));
+        self.overlay = Some(Overlay::Input(InputDialog::new(title, prompt, initial, purpose)));
     }
 
     /// The question for the address, with the examples showing at once.

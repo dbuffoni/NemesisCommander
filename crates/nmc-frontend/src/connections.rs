@@ -295,10 +295,9 @@ pub fn check(text: &str) -> Result<Checked, String> {
 }
 
 /// The lines under the address field while it is typed: the samples while
-/// there is nothing yet, then what was understood (or what is wrong), then
-/// the key that tests it.
+/// there is nothing yet, then what was understood (or what is wrong).
 pub fn hints(text: &str) -> Vec<String> {
-    let mut lines = if text.trim().is_empty() || text.trim().ends_with("://") {
+    if text.trim().is_empty() || text.trim().ends_with("://") {
         examples()
     } else {
         match check(text) {
@@ -311,9 +310,7 @@ pub fn hints(text: &str) -> Vec<String> {
             }
             Err(e) => vec![format!("✗ {e}")],
         }
-    };
-    lines.push("Ctrl+T: test the connection".into());
-    lines
+    }
 }
 
 /// Opens the connection and reads its folder, telling each step. The last
@@ -459,14 +456,13 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("sftp://user@host:22/path") && l.contains("SFTP")));
         assert!(lines.iter().all(|l| !l.to_lowercase().contains("password")), "{lines:?}");
         assert_eq!(hints("sftp://"), lines);
-        assert_eq!(lines.last().unwrap(), "Ctrl+T: test the connection");
         assert!(!prompt().to_lowercase().contains("password"));
     }
 
     #[test]
     fn hints_follow_the_typing() {
         assert_eq!(hints("sftp://me@nas")[0], "✓ SFTP over SSH · host nas · user me");
-        assert_eq!(hints("sftp://me@nas").len(), 2, "no password talk");
+        assert_eq!(hints("sftp://me@nas").len(), 1, "one line, no password talk");
         assert!(hints("ftp://x")[0].starts_with("✗ "));
     }
 

@@ -1460,7 +1460,7 @@ impl App {
                         .map(|p| display_location(&p))
                         .unwrap_or_default();
                 let prompt = format!(
-                    "Pack {} into (format from the extension; Ctrl+O: more options):",
+                    "Pack {} into (format from the extension):",
                     Self::count_text(&targets)
                 );
                 self.ask("Pack", &prompt, &output, InputPurpose::PackInto(targets));

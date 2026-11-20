@@ -308,6 +308,18 @@ impl InputDialog {
         }
     }
 
+    /// The keys shown under the field: the usual ones, then those this
+    /// question adds (kept out of the prompt text).
+    pub fn hint(&self) -> String {
+        let mut hint = String::from("Enter: OK    Esc: cancel    Ctrl+U: clear");
+        match &self.purpose {
+            InputPurpose::PackInto(_) => hint.push_str("    Ctrl+O: more options"),
+            purpose if purpose.testable() => hint.push_str("    Ctrl+T: test the connection"),
+            _ => {}
+        }
+        hint
+    }
+
     /// The field as it is drawn: dots for a password.
     pub fn shown(&self) -> TextField {
         if !self.secret {

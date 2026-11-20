@@ -244,7 +244,7 @@ Item {
         id: input
         Box {
             title: dialogs.view.title
-            hint: "Enter: OK    Esc: cancel    Ctrl+U: clear"
+            hint: dialogs.view.hint
             Label {
                 text: dialogs.view.prompt
                 Layout.fillWidth: true
