@@ -1,0 +1,316 @@
+//! The login of a connection that needs a password: where it is kept
+//! (asked every time, or saved in `~/.netrc`), and testing a connection
+//! while it is being created.
+
+use nmc_vfs::{VfsPath, netrc};
+
+use super::App;
+use crate::connections::{self, check, host_of, user_of, uses_password, with_user};
+use crate::dialogs::{ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, Overlay, Secret};
+
+/// The connection being edited: its name and location now.
+type Replace = Option<(String, String)>;
+
+/// Whether `name` is acceptable as a user name.
+fn valid_user(user: &str) -> bool {
+    !user.is_empty() && !user.contains(|c: char| c.is_whitespace() || c == '@' || c == ':')
+}
+
+impl App {
+    /// The questions for a new name field: the test hint under it.
+    pub(super) fn ask_name(
+        &mut self,
+        title: &str,
+        prompt: &str,
+        initial: &str,
+        purpose: InputPurpose,
+    ) {
+        let mut dialog = InputDialog::new(title, prompt, initial, purpose);
+        dialog.preview = vec!["Ctrl+T: test the connection".into()];
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
+    /// The question for the address, with the examples showing at once.
+    pub(super) fn ask_address(&mut self, title: &str, initial: &str, purpose: InputPurpose) {
+        let mut dialog = InputDialog::new(title, connections::prompt(), initial, purpose);
+        dialog.preview = connections::hints(initial);
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
+    /// The connection has its name and address: asks where the login is
+    /// kept when it needs a password, then stores it.
+    pub(super) fn finish_connection(
+        &mut self,
+        name: String,
+        uri: String,
+        replace: Replace,
+        secret: Secret,
+    ) {
+        let needs_login = VfsPath::parse(&uri).is_ok_and(|p| uses_password(&p));
+        if !needs_login {
+            return self.store_connection(name, uri, replace, false);
+        }
+        let asks = replace.as_ref().is_some_and(|(_, old)| self.connection_asks(old));
+        let rows = vec![
+            "Ask for the password every time (kept in memory only)".to_owned(),
+            "Save the login in ~/.netrc (a file only you can read)".to_owned(),
+            "Keep it as it is (use ~/.netrc if it has the login)".to_owned(),
+        ];
+        let mut dialog = ChooseDialog::new(
+            "Password for this connection",
+            rows,
+            ChoosePurpose::ConnectionLogin { name, uri, replace, secret: secret.clone() },
+        );
+        dialog.cursor = if !secret.0.is_empty() {
+            1
+        } else if asks {
+            0
+        } else {
+            2
+        };
+        dialog.footer = "NemesisCommander never writes a password in its own settings".into();
+        self.overlay = Some(Overlay::Choose(dialog));
+    }
+
+    /// The answer of the login question.
+    pub(super) fn chosen_login(&mut self, purpose: ChoosePurpose, cursor: usize) {
+        let ChoosePurpose::ConnectionLogin { name, uri, replace, secret } = purpose else {
+            return;
+        };
+        match cursor {
+            0 => self.login_step(name, uri, replace, true, secret),
+            1 => self.login_step(name, uri, replace, false, secret),
+            _ => self.store_connection(name, uri, replace, false),
+        }
+    }
+
+    /// Asks for the user name if the address has none, then goes on.
+    fn login_step(
+        &mut self,
+        name: String,
+        uri: String,
+        replace: Replace,
+        ask: bool,
+        secret: Secret,
+    ) {
+        let parsed = VfsPath::parse(&uri);
+        let user = parsed.as_ref().ok().and_then(user_of);
+        let Some(user) = user else {
+            let purpose = InputPurpose::ConnectionUser { name, uri, replace, ask, secret };
+            let dialog = InputDialog::new("Login", "User name for this server:", "", purpose);
+            self.overlay = Some(Overlay::Input(dialog));
+            return;
+        };
+        let host = parsed.as_ref().map(host_of).unwrap_or_default();
+        if ask {
+            if !secret.0.is_empty() {
+                netrc::set_session(&host, &user, &secret.0);
+            }
+            return self.store_connection(name, uri, replace, true);
+        }
+        if secret.0.is_empty() {
+            let mut dialog = InputDialog::new(
+                "Login",
+                &format!("Password of {user} (saved in ~/.netrc, readable only by you):"),
+                "",
+                InputPurpose::ConnectionPassword { name, uri, replace },
+            );
+            dialog.secret = true;
+            self.overlay = Some(Overlay::Input(dialog));
+        } else {
+            self.save_login(name, uri, replace, &secret.0);
+        }
+    }
+
+    /// An answer of the login questions typed in a dialog.
+    pub(super) fn submit_login(
+        &mut self,
+        purpose: InputPurpose,
+        text: String,
+        dialog: InputDialog,
+    ) {
+        match purpose {
+            InputPurpose::ConnectionUser { name, uri, replace, ask, secret } => {
+                let user = text.trim().to_owned();
+                let with = VfsPath::parse(&uri).ok().and_then(|p| with_user(&p, &user));
+                match with {
+                    Some(path) if valid_user(&user) => {
+                        self.login_step(name, path.to_string(), replace, ask, secret)
+                    }
+                    _ => {
+                        let purpose =
+                            InputPurpose::ConnectionUser { name, uri, replace, ask, secret };
+                        self.ask_again(
+                            InputDialog { purpose, ..dialog },
+                            "A user name has no spaces, @ or :".to_owned(),
+                        )
+                    }
+                }
+            }
+            InputPurpose::ConnectionPassword { name, uri, replace } => {
+                if text.is_empty() {
+                    let purpose = InputPurpose::ConnectionPassword { name, uri, replace };
+                    return self.ask_again(
+                        InputDialog { purpose, ..dialog },
+                        "Type the password".to_owned(),
+                    );
+                }
+                self.save_login(name, uri, replace, &text);
+            }
+            InputPurpose::ConnectionOpen { uri, test } => {
+                let Ok(path) = VfsPath::parse(&uri) else { return };
+                if text.is_empty() {
+                    let purpose = InputPurpose::ConnectionOpen { uri, test };
+                    return self.ask_again(
+                        InputDialog { purpose, ..dialog },
+                        "Type the password".to_owned(),
+                    );
+                }
+                netrc::set_session(&host_of(&path), &user_of(&path).unwrap_or_default(), &text);
+                self.context.registry.forget(&path);
+                if test {
+                    self.test_connection(uri, None);
+                } else {
+                    let request = self.workspace.active_mut().navigate(path);
+                    self.load(request);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Writes the login to `~/.netrc` and stores the connection.
+    fn save_login(&mut self, name: String, uri: String, replace: Replace, password: &str) {
+        let Ok(path) = VfsPath::parse(&uri) else { return };
+        let (host, user) = (host_of(&path), user_of(&path).unwrap_or_default());
+        match netrc::save(&host, &user, password) {
+            Ok(file) => {
+                netrc::set_session(&host, &user, password);
+                self.store_connection(name, uri, replace, false);
+                self.set_status(format!("Login of {user}@{host} saved in {}", file.display()));
+            }
+            Err(e) => self.set_error(format!("Cannot save the login: {e}")),
+        }
+    }
+
+    /// Whether the saved connection at `uri` asks for its password.
+    pub(super) fn connection_asks(&self, uri: &str) -> bool {
+        self.context
+            .config
+            .connections
+            .iter()
+            .any(|c| c.uri == uri && c.options.get("password").is_some_and(|v| v == "ask"))
+    }
+
+    /// Stores the connection (a new one, or the edited one) and opens a new
+    /// one in the active panel.
+    pub(super) fn store_connection(
+        &mut self,
+        name: String,
+        uri: String,
+        replace: Replace,
+        ask: bool,
+    ) {
+        let set = |options: &mut std::collections::BTreeMap<String, String>| {
+            if ask {
+                options.insert("password".into(), "ask".into());
+            } else {
+                options.remove("password");
+            }
+        };
+        match replace {
+            Some((old_name, old_uri)) => {
+                let Some(c) = self
+                    .context
+                    .config
+                    .connections
+                    .iter_mut()
+                    .find(|c| c.name == old_name && c.uri == old_uri)
+                else {
+                    return;
+                };
+                c.name = name.clone();
+                c.uri = uri;
+                set(&mut c.options);
+                if self.save_settings() {
+                    self.set_status(format!("Saved the changes to {name}"));
+                }
+            }
+            None => {
+                let mut connection = nmc_config::Connection {
+                    name: name.clone(),
+                    uri: uri.clone(),
+                    identity_file: None,
+                    options: Default::default(),
+                };
+                set(&mut connection.options);
+                self.context.config.connections.push(connection);
+                if !self.save_settings() {
+                    return;
+                }
+                self.set_status(format!("Saved {name} in the drive list"));
+                match VfsPath::parse(&uri) {
+                    Ok(path) => {
+                        let request = self.workspace.active_mut().navigate(path);
+                        self.load(request);
+                    }
+                    Err(e) => self.set_error(e.to_string()),
+                }
+            }
+        }
+    }
+
+    /// Opens (or tests) `path`; when its saved connection asks for the
+    /// password every time and none was typed yet, asks for it first.
+    pub(super) fn open_connection(&mut self, uri: &str, path: VfsPath, test: bool) {
+        let user = user_of(&path);
+        let needs = self.connection_asks(uri)
+            && uses_password(&path)
+            && user.as_ref().is_some_and(|u| !netrc::has_session(&host_of(&path), u));
+        if needs {
+            let mut dialog = InputDialog::new(
+                "Password",
+                &format!(
+                    "Password of {}@{} (kept in memory until you quit):",
+                    user.unwrap_or_default(),
+                    host_of(&path)
+                ),
+                "",
+                InputPurpose::ConnectionOpen { uri: uri.to_owned(), test },
+            );
+            dialog.secret = true;
+            self.overlay = Some(Overlay::Input(dialog));
+        } else if test {
+            self.test_connection(uri.to_owned(), None);
+        } else {
+            let request = self.workspace.active_mut().navigate(path);
+            self.load(request);
+        }
+    }
+
+    /// Ctrl+T in a connection question: tests what was typed so far and
+    /// comes back to the question.
+    pub(super) fn test_typed(&mut self, dialog: InputDialog) {
+        let (location, secret) = match &dialog.purpose {
+            InputPurpose::NewConnection | InputPurpose::EditConnection { .. } => {
+                match check(dialog.field.text()) {
+                    Ok(c) => (c.path.to_string(), c.secret.unwrap_or_default()),
+                    Err(e) => return self.ask_again(dialog, e),
+                }
+            }
+            InputPurpose::NameConnection { uri, secret }
+            | InputPurpose::EditConnectionName { new_uri: uri, secret, .. } => {
+                (uri.clone(), secret.0.clone())
+            }
+            _ => return,
+        };
+        if !secret.is_empty()
+            && let Ok(path) = VfsPath::parse(&location)
+            && let Some(user) = user_of(&path)
+        {
+            netrc::set_session(&host_of(&path), &user, &secret);
+            self.context.registry.forget(&path);
+        }
+        self.test_connection(location, Some(dialog));
+    }
+}

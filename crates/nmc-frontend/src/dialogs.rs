@@ -37,6 +37,17 @@ pub enum Overlay {
     Settings(SettingsScreen),
 }
 
+/// A password carried along while a dialog asks the next question. It never
+/// shows in debug output.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Secret(***)")
+    }
+}
+
 /// What an [`InputDialog`] is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputPurpose {
@@ -58,7 +69,12 @@ pub enum InputPurpose {
     /// A new connection: first its location...
     NewConnection,
     /// ...then the name it is saved under.
-    NameConnection(String),
+    NameConnection {
+        /// The location (without any password).
+        uri: String,
+        /// A password found in the typed address.
+        secret: Secret,
+    },
     /// Change the location of a saved connection (F4 in the drive list)...
     EditConnection {
         /// The name now.
@@ -74,6 +90,37 @@ pub enum InputPurpose {
         uri: String,
         /// The new location.
         new_uri: String,
+        /// A password found in the typed address.
+        secret: Secret,
+    },
+    /// The user name of a login that has none yet.
+    ConnectionUser {
+        /// The name of the connection.
+        name: String,
+        /// Its location.
+        uri: String,
+        /// The connection being edited (name, location), if any.
+        replace: Option<(String, String)>,
+        /// Ask for the password every time (else save it).
+        ask: bool,
+        /// A password found in the typed address.
+        secret: Secret,
+    },
+    /// The password to save in `~/.netrc`.
+    ConnectionPassword {
+        /// The name of the connection.
+        name: String,
+        /// Its location (with the user).
+        uri: String,
+        /// The connection being edited (name, location), if any.
+        replace: Option<(String, String)>,
+    },
+    /// The password of a connection that asks for it every time.
+    ConnectionOpen {
+        /// Its location.
+        uri: String,
+        /// Test it instead of opening it.
+        test: bool,
     },
     /// A new name for a saved connection (F2 in the drive list).
     RenameConnection {
@@ -177,6 +224,15 @@ impl InputPurpose {
         matches!(self, InputPurpose::NewConnection | InputPurpose::EditConnection { .. })
     }
 
+    /// Whether Ctrl+T can test the connection being set up.
+    pub fn testable(&self) -> bool {
+        self.is_address()
+            || matches!(
+                self,
+                InputPurpose::NameConnection { .. } | InputPurpose::EditConnectionName { .. }
+            )
+    }
+
     /// The settings screen a dialog opened from, to go back to.
     pub fn settings_screen(&self) -> Option<&SettingsScreen> {
         match self {
@@ -270,6 +326,17 @@ pub enum ChoosePurpose {
     Bookmarks(Vec<JumpRow>),
     /// Open one of a bookmark's target folders in the other panel.
     BookmarkTarget(Vec<String>),
+    /// Where the login of a connection with a password is kept.
+    ConnectionLogin {
+        /// The name of the connection.
+        name: String,
+        /// Its location.
+        uri: String,
+        /// The connection being edited (name, location), if any.
+        replace: Option<(String, String)>,
+        /// A password found in the typed address.
+        secret: Secret,
+    },
     /// Open a drive or saved connection, one per row (the last row asks
     /// for a new connection; Delete removes a saved one).
     Drives(Vec<crate::drives::Drive>),

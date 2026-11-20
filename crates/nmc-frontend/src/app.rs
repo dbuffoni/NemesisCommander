@@ -15,7 +15,7 @@ use std::time::SystemTime;
 use async_trait::async_trait;
 use nmc_app::AppContext;
 use nmc_archive::{ArchiveFormat, PackOptions, archive_root};
-use nmc_config::{Action, Bookmark, Connection, ExportBundle, ImportMode, Key, Keymap};
+use nmc_config::{Action, Bookmark, ExportBundle, ImportMode, Key, Keymap};
 use nmc_index::{Mask, SearchCriteria, SearchHit, SortKey, SortSpec};
 use nmc_ops::{
     Conflict, ConflictAction, ConflictResolver, DeleteOptions, RenameRule, Resolution,
@@ -29,7 +29,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
-    JobsView, JumpRow, MessageDialog, Overlay, PendingConflict,
+    JobsView, JumpRow, MessageDialog, Overlay, PendingConflict, Secret,
 };
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
@@ -37,6 +37,7 @@ use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 mod archives;
 mod diskwork;
 mod features;
+mod logins;
 mod palette;
 mod plugins;
 mod pointer;
@@ -1101,11 +1102,11 @@ impl App {
                     self.ask_pack_format(paths.clone(), dialog.field.text());
                     return None;
                 }
-                if dialog.purpose.is_address()
+                if dialog.purpose.testable()
                     && press.chord.ctrl
                     && press.chord.key == Key::Char('t')
                 {
-                    self.test_connection(dialog.field.text().to_owned(), Some(dialog));
+                    self.test_typed(dialog);
                     return None;
                 }
                 if dialog.field.handle(&press) {
@@ -1796,11 +1797,14 @@ impl App {
             }
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
             InputPurpose::NewConnection => match crate::connections::check(&text) {
-                Ok(checked) => self.ask(
+                Ok(checked) => self.ask_name(
                     "New connection",
                     "Name of this connection in the drive list (so you recognise it later):",
                     &crate::drives::suggested_name(&checked.path),
-                    InputPurpose::NameConnection(checked.path.to_string()),
+                    InputPurpose::NameConnection {
+                        uri: checked.path.to_string(),
+                        secret: Secret(checked.secret.unwrap_or_default()),
+                    },
                 ),
                 // Stay in the question, with the reason under the field.
                 Err(e) => self.ask_again(dialog, e),
@@ -1810,7 +1814,7 @@ impl App {
                     let purpose = InputPurpose::EditConnection { name, uri };
                     self.ask_again(InputDialog { purpose, ..dialog }, e)
                 }
-                Ok(checked) => self.ask(
+                Ok(checked) => self.ask_name(
                     "Edit connection",
                     "Name of this connection in the drive list:",
                     &name.clone(),
@@ -1818,10 +1822,11 @@ impl App {
                         name,
                         uri,
                         new_uri: checked.path.to_string(),
+                        secret: Secret(checked.secret.unwrap_or_default()),
                     },
                 ),
             },
-            InputPurpose::EditConnectionName { name, uri, new_uri } => {
+            InputPurpose::EditConnectionName { name, uri, new_uri, secret } => {
                 let new_name = text.trim().to_owned();
                 if new_name.is_empty() {
                     return self.set_error("no name given".to_owned());
@@ -1831,26 +1836,20 @@ impl App {
                     return self
                         .set_error(format!("There is already a connection called {new_name}"));
                 }
-                if let Some(c) = self
-                    .context
-                    .config
-                    .connections
-                    .iter_mut()
-                    .find(|c| c.name == name && c.uri == uri)
-                {
-                    c.name = new_name.clone();
-                    c.uri = new_uri;
-                    if self.save_settings() {
-                        self.set_status(format!("Saved the changes to {new_name}"));
-                    }
-                }
+                self.finish_connection(new_name, new_uri, Some((name, uri)), secret);
             }
-            InputPurpose::NameConnection(uri) => {
+            InputPurpose::NameConnection { uri, secret } => {
                 let name = text.trim().to_owned();
                 if name.is_empty() {
                     return self.set_error("no name given".to_owned());
                 }
-                self.save_connection(name, uri);
+                self.finish_connection(name, uri, None, secret);
+            }
+            purpose @ (InputPurpose::ConnectionUser { .. }
+            | InputPurpose::ConnectionPassword { .. }
+            | InputPurpose::ConnectionOpen { .. }) => {
+                let dialog = InputDialog { purpose: InputPurpose::GoTo, ..dialog };
+                self.submit_login(purpose, text, dialog)
             }
             InputPurpose::RenameConnection { name, uri } => {
                 if text.is_empty() {
@@ -2105,18 +2104,10 @@ impl App {
             }
             ChoosePurpose::Drives(drives) => match drives.get(cursor) {
                 Some(drive) => match resolve_location(&drive.location, &here) {
-                    Ok(path) => {
-                        let request = self.workspace.active_mut().navigate(path);
-                        self.load(request);
-                    }
+                    Ok(path) => self.open_connection(&drive.location, path, false),
                     Err(e) => self.set_error(e),
                 },
-                None => self.ask(
-                    "New connection",
-                    &crate::connections::prompt(),
-                    "sftp://",
-                    InputPurpose::NewConnection,
-                ),
+                None => self.ask_address("New connection", "sftp://", InputPurpose::NewConnection),
             },
             ChoosePurpose::SearchResults(paths) => {
                 if let Some(cancel) = self.search_cancel.take() {
@@ -2132,6 +2123,7 @@ impl App {
                     self.plugin_chosen(choices.swap_remove(cursor));
                 }
             }
+            purpose @ ChoosePurpose::ConnectionLogin { .. } => self.chosen_login(purpose, cursor),
             purpose @ (ChoosePurpose::PackFormat { .. } | ChoosePurpose::PackLevel { .. }) => {
                 self.chosen_pack(purpose, cursor)
             }
@@ -2407,27 +2399,6 @@ impl App {
         self.context.keymap = keymap;
         if !warnings.is_empty() {
             self.set_error(warnings.join("; "));
-        }
-    }
-
-    /// Saves a new connection and opens it in the active panel.
-    fn save_connection(&mut self, name: String, uri: String) {
-        self.context.config.connections.push(Connection {
-            name: name.clone(),
-            uri: uri.clone(),
-            identity_file: None,
-            options: Default::default(),
-        });
-        if !self.save_settings() {
-            return;
-        }
-        self.set_status(format!("Saved {name} in the drive list"));
-        match VfsPath::parse(&uri) {
-            Ok(path) => {
-                let request = self.workspace.active_mut().navigate(path);
-                self.load(request);
-            }
-            Err(e) => self.set_error(e.to_string()),
         }
     }
 

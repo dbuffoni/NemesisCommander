@@ -576,28 +576,42 @@ The last row, **New connection…**, asks for a location (for example
 suggested), opens it and keeps it in the list. **Delete** removes a saved
 connection; the drives of this computer stay.
 
-While you type the location, the line under the field says what it understood
-(`✓ SFTP over SSH · host nas · port 22 · user me`, and where the password
-comes from) or what is wrong (`✗ Port 99999 is not between 1 and 65535`, a
-missing host or share, a bad bucket name, a password written in the address).
-Enter on a wrong address keeps the question open with the reason. The prompt
-lists a sample of every kind with user and port; a password is never part of
-the address, because it would be saved as plain text.
+The location question shows one example per line (every kind, with user and
+port) as soon as it opens. While you type, the line under the field says what
+it understood (`✓ SFTP over SSH · host nas · port 22 · user me`) or what is
+wrong (`✗ Port 99999 is not between 1 and 65535`, a missing host or share, a
+bad bucket name). Enter on a wrong address keeps the question open with the
+reason. If you type a password in the address (`dav://anna:secret@host`), a
+`⚠` line warns that it would be saved as plain text; the password is taken out
+of the address and you are offered the safe ways below.
 
 **F4** edits a saved connection (the location, then the name, in place).
-**Ctrl+T** tests it, in the list or in the location question before you save:
-a log window shows each step with its time (address, connection, reading the
+**Ctrl+T** tests it: in the list, and also while you create or edit one, in
+the location question and in the name question, before anything is saved. A
+log window shows each step with its time (address, connection, reading the
 folder, number of entries), and a failure says where it stopped with a hint
-(wrong credentials, closed port, unknown host). In the location question,
-Enter in the log goes back to the question. Connections are also kept in
-`[[connections]]` in the settings file, so they travel with exported and
-shared settings.
+(wrong credentials, closed port, unknown host). Enter in the log goes back to
+the question. Connections are also kept in `[[connections]]` in the settings
+file, so they travel with exported and shared settings.
+
+### The login of a connection
+
+For WebDAV and SMB, after the name a list asks where the login is kept:
+
+- **Ask for the password every time**: the connection is saved with the user
+  only; the password is asked (hidden) the first time you open or test it and
+  kept in memory until you quit.
+- **Save the login in `~/.netrc`**: user and password go to that file, which
+  only you can read (mode 600; `_netrc` on Windows), and which curl, git and
+  other tools use too.
+- **Keep it as it is**: nothing is asked; use the login `~/.netrc` already has.
+
+If the address has no user, it is asked. NemesisCommander never writes a
+password in its own settings. SFTP and the agent use SSH (keys, agent,
+`~/.ssh/config`) and S3 reads the usual `~/.aws` files and environment
+variables, so they ask nothing.
 
 ![A new connection](images/drives-new.png)
-
-Passwords are never stored in NemesisCommander's settings: SFTP and the agent
-use SSH (keys, agent, `~/.ssh/config`), WebDAV and SMB read `~/.netrc`, S3
-reads the usual `~/.aws` files and environment variables.
 
 ### Naming connections
 
