@@ -1526,7 +1526,8 @@ async fn connections_have_no_key_setting_ssh_finds_its_keys() {
     );
     h.key("Esc");
 
-    // A new SFTP connection is saved after its name, without a key question.
+    // A new SFTP connection is saved after its name and the login question
+    // (the cursor is on "keep it as it is": SSH finds its keys).
     h.key("Ctrl+N");
     for _ in 0..40 {
         h.key("Down");
@@ -1535,6 +1536,9 @@ async fn connections_have_no_key_setting_ssh_finds_its_keys() {
     h.type_text("sftp://me@other.invalid/");
     h.key("Enter");
     h.type_text("other");
+    h.key("Enter");
+    let Some(Overlay::Choose(login)) = h.app.overlay() else { panic!("no login question") };
+    assert_eq!(login.cursor, 2);
     h.key("Enter");
     assert!(h.status().contains("Saved other"), "{}", h.status());
     assert_eq!(h.app.context().config.connections.len(), 2);
@@ -2577,6 +2581,9 @@ async fn a_connection_is_edited_with_guidance_and_tested_with_a_log() {
     assert_eq!(dialog.field.text(), "backup", "the name is offered");
     h.type_text("nas backup");
     h.key("Enter");
+    let Some(Overlay::Choose(login)) = h.app.overlay() else { panic!("no login question") };
+    assert!(login.items[2].contains("SSH keys"), "{:?}", login.items);
+    h.key("Enter");
     let saved = &h.app.context().config.connections;
     assert_eq!(
         (saved[0].name.as_str(), saved[0].uri.as_str()),
@@ -2874,4 +2881,63 @@ async fn a_new_connection_can_be_tested_before_it_is_saved() {
     let Some(Overlay::Input(name)) = h.app.overlay() else { panic!("back to the name") };
     assert!(matches!(name.purpose, nmc_frontend::InputPurpose::NameConnection { .. }));
     assert!(h.app.context().config.connections.is_empty(), "nothing saved by testing");
+}
+
+#[tokio::test]
+async fn ssh_and_s3_connections_offer_the_login_choice_too() {
+    let dir = TempDir::new().unwrap();
+    let aws = dir.path().join("credentials");
+    nmc_s3::settings::set_credentials_file(Some(aws.clone()));
+    nmc_vfs::netrc::set_file(Some(dir.path().join("netrc")));
+    let mut h = Harness::new().await;
+
+    // S3: save the keys (access key, then hidden secret).
+    h.key("Shift+F1");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("s3://store-bucket/");
+    h.key("Enter");
+    h.type_text("store");
+    h.key("Enter");
+    let Some(Overlay::Choose(choice)) = h.app.overlay() else { panic!("no keys question") };
+    assert_eq!(choice.title, "Keys for this connection");
+    assert!(choice.items[1].contains("~/.aws/credentials"), "{:?}", choice.items);
+    h.key("Up");
+    h.key("Enter");
+    let Some(Overlay::Input(access)) = h.app.overlay() else { panic!("no access key asked") };
+    assert!(access.prompt.contains("Access key ID"));
+    h.type_text("AKTEST");
+    h.key("Enter");
+    let Some(Overlay::Input(secret)) = h.app.overlay() else { panic!("no secret asked") };
+    assert!(secret.secret);
+    h.type_text("topsecret");
+    h.key("Enter");
+    h.settle().await;
+    let keys = fs::read_to_string(&aws).unwrap();
+    assert!(keys.contains("aws_access_key_id = AKTEST"), "{keys}");
+    let settings = format!("{:?}", h.app.context().config.connections);
+    assert!(!settings.contains("topsecret"), "{settings}");
+    assert!(nmc_s3::settings::has_session(None));
+
+    // SFTP: ask every time; the user is asked, nothing is written.
+    h.key("Shift+F1");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("sftp://box.invalid/");
+    h.key("Enter");
+    h.type_text("box");
+    h.key("Enter");
+    h.key("Home");
+    h.key("Enter");
+    let Some(Overlay::Input(user)) = h.app.overlay() else { panic!("no user asked") };
+    assert!(user.prompt.contains("User name"));
+    h.type_text("carol");
+    h.key("Enter");
+    let saved = h.app.context().config.connections.last().unwrap().clone();
+    assert_eq!(saved.uri, "sftp://carol@box.invalid/");
+    assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
 }

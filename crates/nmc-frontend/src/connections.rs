@@ -95,11 +95,24 @@ pub fn examples() -> Vec<String> {
     lines
 }
 
-/// Whether connecting to `path` uses a login and password that
-/// NemesisCommander can keep or ask for (WebDAV and SMB; SFTP and the agent
-/// use SSH keys, S3 its own keys).
+/// Whether connecting to `path` uses a login that NemesisCommander can keep
+/// or ask for: a password (WebDAV, SMB, SFTP, agent) or the keys of S3.
+/// Only `nmc serve` (scs) has none: it uses a certificate.
 pub fn uses_password(path: &VfsPath) -> bool {
-    matches!(kind_of(path.scheme()), Some(k) if matches!(k.scheme, "dav" | "davs" | "smb"))
+    matches!(
+        kind_of(path.scheme()),
+        Some(k) if matches!(k.scheme, "dav" | "davs" | "smb" | "sftp" | "agent" | "s3")
+    )
+}
+
+/// Whether the login of `path` is a pair of S3 keys, not a password.
+pub fn uses_keys(path: &VfsPath) -> bool {
+    path.scheme() == "s3"
+}
+
+/// The S3 profile of an address (`s3://profile@bucket`), if it names one.
+pub fn profile_of(path: &VfsPath) -> Option<String> {
+    user_of(path)
 }
 
 /// The user name of an address (`user@host`), if it has one.
@@ -469,7 +482,10 @@ mod tests {
             with_user(&bare, "zoe").unwrap().to_string(),
             "davs://zoe@cloud.example.org/dav"
         );
-        assert!(!uses_password(&VfsPath::parse("sftp://me@nas/").unwrap()));
+        for uri in ["sftp://me@nas/", "agent://me@nas/", "s3://bucket/", "dav://nas/"] {
+            assert!(uses_password(&VfsPath::parse(uri).unwrap()), "{uri}");
+        }
+        assert!(!uses_password(&VfsPath::parse("scs://nas:7443/").unwrap()));
     }
 
     #[tokio::test]

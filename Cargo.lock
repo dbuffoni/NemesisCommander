@@ -3824,6 +3824,7 @@ dependencies = [
  "nmc-panel",
  "nmc-preview",
  "nmc-providers",
+ "nmc-s3",
  "nmc-script",
  "nmc-ssh",
  "nmc-transfer",
@@ -4044,6 +4045,7 @@ dependencies = [
 name = "nmc-ssh"
 version = "0.1.0"
 dependencies = [
+ "nmc-vfs",
  "tokio",
 ]
 
@@ -4097,6 +4099,7 @@ dependencies = [
  "nmc-preview",
  "nmc-proto",
  "nmc-providers",
+ "nmc-s3",
  "nmc-transfer",
  "nmc-vfs",
  "ratatui",

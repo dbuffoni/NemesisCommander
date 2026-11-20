@@ -5,8 +5,12 @@
 use nmc_vfs::{VfsPath, netrc};
 
 use super::App;
-use crate::connections::{self, check, host_of, user_of, uses_password, with_user};
-use crate::dialogs::{ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, Overlay, Secret};
+use crate::connections::{
+    self, check, host_of, profile_of, user_of, uses_keys, uses_password, with_user,
+};
+use crate::dialogs::{
+    ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, Overlay, S3Next, Secret,
+};
 
 /// The connection being edited: its name and location now.
 type Replace = Option<(String, String)>;
@@ -51,13 +55,30 @@ impl App {
             return self.store_connection(name, uri, replace, false);
         }
         let asks = replace.as_ref().is_some_and(|(_, old)| self.connection_asks(old));
-        let rows = vec![
-            "Ask for the password every time (kept in memory only)".to_owned(),
-            "Save the login in ~/.netrc (a file only you can read)".to_owned(),
-            "Keep it as it is (use ~/.netrc if it has the login)".to_owned(),
-        ];
+        let parsed = VfsPath::parse(&uri).ok();
+        let keys = parsed.as_ref().is_some_and(uses_keys);
+        let ssh = parsed.as_ref().is_some_and(|p| matches!(p.scheme(), "sftp" | "agent"));
+        let rows = if keys {
+            vec![
+                "Ask for the keys every time (kept in memory only)".to_owned(),
+                "Save the keys in ~/.aws/credentials (a file only you can read)".to_owned(),
+                "Keep it as it is (use the keys already set up: ~/.aws, environment)".to_owned(),
+            ]
+        } else {
+            let keep = if ssh {
+                "Keep it as it is (SSH keys, ssh-agent or ~/.ssh/config)"
+            } else {
+                "Keep it as it is (use ~/.netrc if it has the login)"
+            };
+            vec![
+                "Ask for the password every time (kept in memory only)".to_owned(),
+                "Save the login in ~/.netrc (a file only you can read)".to_owned(),
+                keep.to_owned(),
+            ]
+        };
+        let title = if keys { "Keys for this connection" } else { "Password for this connection" };
         let mut dialog = ChooseDialog::new(
-            "Password for this connection",
+            title,
             rows,
             ChoosePurpose::ConnectionLogin { name, uri, replace, secret: secret.clone() },
         );
@@ -94,6 +115,13 @@ impl App {
         secret: Secret,
     ) {
         let parsed = VfsPath::parse(&uri);
+        if parsed.as_ref().is_ok_and(uses_keys) {
+            // S3 has keys, no user: the profile in the address is optional.
+            if ask {
+                return self.store_connection(name, uri, replace, true);
+            }
+            return self.ask_s3_keys(S3Next::Save { name, uri, replace });
+        }
         let user = parsed.as_ref().ok().and_then(user_of);
         let Some(user) = user else {
             let purpose = InputPurpose::ConnectionUser { name, uri, replace, ask, secret };
@@ -120,6 +148,13 @@ impl App {
         } else {
             self.save_login(name, uri, replace, &secret.0);
         }
+    }
+
+    /// Asks for the access key ID, then the secret access key.
+    fn ask_s3_keys(&mut self, next: S3Next) {
+        let dialog =
+            InputDialog::new("S3 keys", "Access key ID:", "", InputPurpose::S3AccessKey { next });
+        self.overlay = Some(Overlay::Input(dialog));
     }
 
     /// An answer of the login questions typed in a dialog.
@@ -157,6 +192,34 @@ impl App {
                 }
                 self.save_login(name, uri, replace, &text);
             }
+            InputPurpose::S3AccessKey { next } => {
+                let access = text.trim().to_owned();
+                if access.is_empty() {
+                    let purpose = InputPurpose::S3AccessKey { next };
+                    return self.ask_again(
+                        InputDialog { purpose, ..dialog },
+                        "Type the access key ID".to_owned(),
+                    );
+                }
+                let mut ask = InputDialog::new(
+                    "S3 keys",
+                    "Secret access key (hidden):",
+                    "",
+                    InputPurpose::S3Secret { next, access },
+                );
+                ask.secret = true;
+                self.overlay = Some(Overlay::Input(ask));
+            }
+            InputPurpose::S3Secret { next, access } => {
+                if text.is_empty() {
+                    let purpose = InputPurpose::S3Secret { next, access };
+                    return self.ask_again(
+                        InputDialog { purpose, ..dialog },
+                        "Type the secret access key".to_owned(),
+                    );
+                }
+                self.use_s3_keys(next, &access, &text);
+            }
             InputPurpose::ConnectionOpen { uri, test } => {
                 let Ok(path) = VfsPath::parse(&uri) else { return };
                 if text.is_empty() {
@@ -176,6 +239,35 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Uses the S3 keys for what they were asked for.
+    fn use_s3_keys(&mut self, next: S3Next, access: &str, secret: &str) {
+        match next {
+            S3Next::Open { uri, test } => {
+                let Ok(path) = VfsPath::parse(&uri) else { return };
+                nmc_s3::settings::set_session(profile_of(&path).as_deref(), access, secret);
+                self.context.registry.forget(&path);
+                if test {
+                    self.test_connection(uri, None);
+                } else {
+                    let request = self.workspace.active_mut().navigate(path);
+                    self.load(request);
+                }
+            }
+            S3Next::Save { name, uri, replace } => {
+                let Ok(path) = VfsPath::parse(&uri) else { return };
+                let profile = profile_of(&path);
+                match nmc_s3::settings::save(profile.as_deref(), access, secret) {
+                    Ok(file) => {
+                        nmc_s3::settings::set_session(profile.as_deref(), access, secret);
+                        self.store_connection(name, uri, replace, false);
+                        self.set_status(format!("S3 keys saved in {}", file.display()));
+                    }
+                    Err(e) => self.set_error(format!("Cannot save the keys: {e}")),
+                }
+            }
         }
     }
 
@@ -263,9 +355,16 @@ impl App {
     /// Opens (or tests) `path`; when its saved connection asks for the
     /// password every time and none was typed yet, asks for it first.
     pub(super) fn open_connection(&mut self, uri: &str, path: VfsPath, test: bool) {
+        if self.connection_asks(uri)
+            && uses_keys(&path)
+            && !nmc_s3::settings::has_session(profile_of(&path).as_deref())
+        {
+            return self.ask_s3_keys(S3Next::Open { uri: uri.to_owned(), test });
+        }
         let user = user_of(&path);
         let needs = self.connection_asks(uri)
             && uses_password(&path)
+            && !uses_keys(&path)
             && user.as_ref().is_some_and(|u| !netrc::has_session(&host_of(&path), u));
         if needs {
             let mut dialog = InputDialog::new(

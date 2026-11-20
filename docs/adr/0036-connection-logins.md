@@ -19,21 +19,31 @@ editing), and a safe way to keep the login or to type it every time.
   returned address has no password, a `⚠` line warns that it would be plain
   text, and the password is carried (as `Secret`, which never prints in debug
   output) to the login question. It is never put in the settings (ADR 0009).
-- **Where the login lives** (WebDAV and SMB, the kinds that use passwords; SFTP,
-  the agent and `nmc serve` use SSH keys, S3 its own keys): after the name a list
-  offers *ask every time*, *save in ~/.netrc* and *keep as it is*. Asking every
-  time saves the option `password = "ask"` in the connection; opening or testing
-  it prompts (hidden) unless a login is already in memory. Saving writes
-  `machine H login U password P` to the netrc file, mode 600, replacing the entry
-  of the same host and user. Both providers already read `nmc-vfs::netrc`, which
-  now looks first in a per-process login map (`set_session`), so a typed password
-  works without touching the disk. A user name is asked when the address has none.
+- **Where the login lives** (WebDAV, SMB, SFTP, agent and S3; not scs, which
+  uses a certificate): after the name a list offers *ask every time*, *save* and
+  *keep as it is*. Asking every time saves the option `password = "ask"` in the
+  connection; opening or testing it prompts (hidden) unless a login is already in
+  memory. Saving a password writes `machine H login U password P` to the netrc
+  file, mode 600, replacing the entry of the same host and user; S3 keys go to
+  the profile in `~/.aws/credentials`, other keys and profiles kept. WebDAV and
+  SMB already read `nmc-vfs::netrc`, which now looks first in a per-process login
+  map (`set_session`); S3 has the same map for keys (`settings::set_session`). A
+  user name is asked when the address has none.
+- **SSH passwords.** `nmc-ssh` looks up a login for the target's host and user
+  (session map, then netrc). If there is one, `ssh` runs without batch mode,
+  with `NumberOfPasswordPrompts=1`, `SSH_ASKPASS_REQUIRE=force` and
+  `SSH_ASKPASS` pointing to a small script in the temp folder that prints
+  `$NMC_SSH_PASSWORD`; the password is only in the environment of that `ssh`
+  process. Keys and the agent are still tried first. Without a login nothing
+  changes (batch mode). An unknown host key still fails, since the helper would
+  answer the yes/no question with the password.
 - **Test while creating.** Ctrl+T works in the address and in the name
   questions (new and edit), on the address as typed; a password found in it
   is used for the test through the session map. Enter in the log returns to the
   question.
-- **Test hook.** `netrc::set_file` overrides the file for one process, because
-  the workspace forbids `unsafe` and so `std::env::set_var` in tests.
+- **Test hook.** `netrc::set_file` and `settings::set_credentials_file` override
+  the files for one process, because the workspace forbids `unsafe` and so
+  `std::env::set_var` in tests.
 
 ## Consequences
 

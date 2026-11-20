@@ -596,20 +596,27 @@ file, so they travel with exported and shared settings.
 
 ### The login of a connection
 
-For WebDAV and SMB, after the name a list asks where the login is kept:
+After the name, a list asks where the login is kept. It appears for WebDAV,
+SMB, SFTP, agent and S3 (not for `nmc serve`, which uses a certificate):
 
-- **Ask for the password every time**: the connection is saved with the user
-  only; the password is asked (hidden) the first time you open or test it and
-  kept in memory until you quit.
-- **Save the login in `~/.netrc`**: user and password go to that file, which
-  only you can read (mode 600; `_netrc` on Windows), and which curl, git and
-  other tools use too.
-- **Keep it as it is**: nothing is asked; use the login `~/.netrc` already has.
+- **Ask every time**: the connection is saved with the user only (S3: no keys);
+  the password (S3: access key ID and secret access key, both asked) is asked,
+  hidden, the first time you open or test it, and kept in memory until you
+  quit.
+- **Save it**: WebDAV, SMB, SFTP and agent logins go to `~/.netrc` (a file only
+  you can read, mode 600; `_netrc` on Windows); S3 keys go to the profile in
+  `~/.aws/credentials`, the file the AWS tools use.
+- **Keep it as it is**: nothing is asked. SFTP and agent use your SSH keys,
+  ssh-agent and `~/.ssh/config`; S3 uses `~/.aws` and the environment; WebDAV
+  and SMB use the login `~/.netrc` already has.
 
 If the address has no user, it is asked. NemesisCommander never writes a
-password in its own settings. SFTP and the agent use SSH (keys, agent,
-`~/.ssh/config`) and S3 reads the usual `~/.aws` files and environment
-variables, so they ask nothing.
+password in its own settings.
+
+SFTP and agent with a password run `ssh` with `SSH_ASKPASS`, which hands the
+password to `ssh` through a small helper script and the process environment:
+keys are tried first and the password once. The server's host key must already
+be known (`ssh user@host` once), as without a password.
 
 ![A new connection](images/drives-new.png)
 

@@ -65,7 +65,8 @@ enum StartError {
 /// Starts the agent process and performs the handshake.
 async fn start(authority: &str) -> std::result::Result<AgentProvider, StartError> {
     let (program, args) = agent_command(authority).map_err(StartError::Other)?;
-    let mut child = nmc_ssh::spawn(&program, &args)
+    let env = nmc_ssh::password_env(authority);
+    let mut child = nmc_ssh::spawn_env(&program, &args, &env)
         .map_err(|e| StartError::Other(format!("cannot start {program}: {e}")))?;
     let stdin = child.stdin.take().expect("piped");
     let stdout = child.stdout.take().expect("piped");
@@ -138,6 +139,7 @@ pub(crate) async fn ssh_run(
 ) -> std::result::Result<String, String> {
     let mut command = Command::new("ssh");
     command
+        .envs(nmc_ssh::target_env(target))
         .args(ssh_args(target, Remote::Script(script))?)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

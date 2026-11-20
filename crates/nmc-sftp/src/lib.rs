@@ -64,8 +64,9 @@ impl SftpProvider {
                 ("ssh".into(), args)
             }
         };
-        let mut child =
-            nmc_ssh::spawn(&program, &args).map_err(|e| format!("cannot start {program}: {e}"))?;
+        let env = nmc_ssh::password_env(authority);
+        let mut child = nmc_ssh::spawn_env(&program, &args, &env)
+            .map_err(|e| format!("cannot start {program}: {e}"))?;
         let stdin = child.stdin.take().expect("piped");
         let stdout = child.stdout.take().expect("piped");
         let mut stderr = child.stderr.take().expect("piped");

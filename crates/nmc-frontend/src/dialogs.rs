@@ -48,6 +48,27 @@ impl std::fmt::Debug for Secret {
     }
 }
 
+/// What typed S3 keys are used for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum S3Next {
+    /// Open (or test) the saved connection at `uri` with them.
+    Open {
+        /// Its location.
+        uri: String,
+        /// Test it instead of opening it.
+        test: bool,
+    },
+    /// Save them in `~/.aws/credentials` with the connection.
+    Save {
+        /// The name of the connection.
+        name: String,
+        /// Its location.
+        uri: String,
+        /// The connection being edited (name, location), if any.
+        replace: Option<(String, String)>,
+    },
+}
+
 /// What an [`InputDialog`] is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputPurpose {
@@ -114,6 +135,18 @@ pub enum InputPurpose {
         uri: String,
         /// The connection being edited (name, location), if any.
         replace: Option<(String, String)>,
+    },
+    /// The access key ID of an S3 connection...
+    S3AccessKey {
+        /// What the keys are for.
+        next: S3Next,
+    },
+    /// ...then its secret access key.
+    S3Secret {
+        /// What the keys are for.
+        next: S3Next,
+        /// The access key ID just typed.
+        access: String,
     },
     /// The password of a connection that asks for it every time.
     ConnectionOpen {

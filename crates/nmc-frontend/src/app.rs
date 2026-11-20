@@ -1847,7 +1847,9 @@ impl App {
             }
             purpose @ (InputPurpose::ConnectionUser { .. }
             | InputPurpose::ConnectionPassword { .. }
-            | InputPurpose::ConnectionOpen { .. }) => {
+            | InputPurpose::ConnectionOpen { .. }
+            | InputPurpose::S3AccessKey { .. }
+            | InputPurpose::S3Secret { .. }) => {
                 let dialog = InputDialog { purpose: InputPurpose::GoTo, ..dialog };
                 self.submit_login(purpose, text, dialog)
             }

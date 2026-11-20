@@ -11,6 +11,7 @@ license.workspace = true
 nmc-frontend.workspace = true
 nmc-preview.workspace = true
 nmc-vfs.workspace = true
+nmc-s3.workspace = true
 nmc-config.workspace = true
 nmc-panel.workspace = true
 nmc-transfer.workspace = true
