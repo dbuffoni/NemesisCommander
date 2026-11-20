@@ -34,6 +34,7 @@ use crate::dialogs::{
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
+mod archives;
 mod diskwork;
 mod features;
 mod palette;
@@ -242,6 +243,9 @@ pub struct App {
     pub basket: Vec<VfsPath>,
     /// Text waiting to go to the system clipboard.
     clipboard: Option<String>,
+    /// Encrypted archives whose password the user refused to give (until
+    /// they are left).
+    password_declined: HashSet<String>,
     /// How often and how recently folders were opened (the jump command).
     frecency: crate::frecency::Frecency,
     /// The installed font families, for the font settings (empty in a terminal).
@@ -481,6 +485,7 @@ impl App {
         let mut app = App {
             basket: Vec::new(),
             clipboard: None,
+            password_declined: HashSet::new(),
             frecency,
             fonts: Vec::new(),
             folder_sizes: HashMap::new(),
@@ -702,6 +707,11 @@ impl App {
 
     /// Applies the result of background work.
     pub fn handle_event(&mut self, event: AppEvent) {
+        self.apply_event(event);
+        self.ask_archive_password();
+    }
+
+    fn apply_event(&mut self, event: AppEvent) {
         let event = match event {
             AppEvent::Undoable(step, inner) => {
                 if !matches!(*inner, AppEvent::TaskDone { error: true, .. }) {
@@ -951,6 +961,27 @@ impl App {
         self.update_quick_view();
     }
 
+    /// Text pasted from the system clipboard (Ctrl+V in the window, the
+    /// terminal's own paste in the text UI). It goes where typing would:
+    /// the field of a question, the filter of a list or the command search.
+    /// Anywhere else it is ignored, so pasted text never runs commands.
+    /// Only the first line is used; the questions are one line.
+    pub fn paste(&mut self, text: &str) {
+        let accepts = match &self.overlay {
+            Some(Overlay::Input(_)) => true,
+            Some(Overlay::Choose(dialog)) => dialog.query.is_some(),
+            Some(Overlay::Commands(palette)) => !palette.recording,
+            _ => false,
+        };
+        if !accepts || !self.conflicts.is_empty() {
+            return;
+        }
+        let line = text.lines().next().unwrap_or_default();
+        for c in line.chars().filter(|c| !c.is_control()) {
+            self.handle_key(KeyPress::char(c));
+        }
+    }
+
     /// Which of Ctrl, Alt and Shift are held. Front ends call it when one is
     /// pressed or released; the function key bar then shows the commands of
     /// those combinations (`Shift+F5` shows what it does where `F5` copies).
@@ -1050,6 +1081,9 @@ impl App {
             Overlay::Input(mut dialog) => {
                 let back = dialog.purpose.settings_screen().cloned().map(Overlay::Settings);
                 if is_esc {
+                    if let InputPurpose::ArchivePassword(container) = &dialog.purpose {
+                        self.password_declined.insert(container.to_string());
+                    }
                     if dialog.purpose == InputPurpose::QuickFilter {
                         self.workspace.active_mut().set_filter("");
                     }
@@ -1059,8 +1093,18 @@ impl App {
                     self.submit_input(dialog);
                     return back;
                 }
+                if dialog.purpose.is_address()
+                    && press.chord.ctrl
+                    && press.chord.key == Key::Char('t')
+                {
+                    self.test_connection(dialog.field.text().to_owned(), Some(dialog));
+                    return None;
+                }
                 if dialog.field.handle(&press) {
                     match &dialog.purpose {
+                        InputPurpose::NewConnection | InputPurpose::EditConnection { .. } => {
+                            dialog.preview = crate::connections::hints(dialog.field.text())
+                        }
                         InputPurpose::QuickFilter => {
                             self.workspace.active_mut().set_filter(dialog.field.text())
                         }
@@ -1243,6 +1287,29 @@ impl App {
         }
     }
 
+    /// Shows `dialog` again with `reason` under the field (the answer was
+    /// not acceptable).
+    fn ask_again(&mut self, mut dialog: InputDialog, reason: String) {
+        dialog.preview = vec![format!("✗ {reason}")];
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
+    /// Tests the connection at `location` in the background and shows what
+    /// happened. Enter in the log goes back to `back`, if given.
+    pub(super) fn test_connection(&mut self, location: String, back: Option<InputDialog>) {
+        let registry = self.context.registry.clone();
+        self.set_status(format!("Testing {location}…"));
+        self.spawn_task(async move {
+            let lines = crate::connections::run_test(registry, location).await;
+            AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
+                title: "Test connection".into(),
+                lines,
+                then: back,
+                logo: false,
+            })))
+        });
+    }
+
     fn ask(&mut self, title: &str, prompt: &str, initial: &str, purpose: InputPurpose) {
         self.overlay = Some(Overlay::Input(InputDialog::new(title, prompt, initial, purpose)));
     }
@@ -1389,6 +1456,8 @@ impl App {
                 );
                 self.ask("Pack", &prompt, &output, InputPurpose::PackInto(targets));
             }
+            Action::PackAdvanced if nothing => self.set_error("Nothing to pack"),
+            Action::PackAdvanced => self.ask_pack_format(targets),
             Action::Unpack => self.unpack_current(),
             Action::Properties => self.show_properties(),
             Action::Attributes if nothing => self.set_error("Nothing to change"),
@@ -1544,7 +1613,7 @@ impl App {
                 items.push("New connection…".into());
                 let mut dialog = ChooseDialog::new("Drives", items, ChoosePurpose::Drives(drives));
                 dialog.footer =
-                    "Enter: open in this panel   F2: rename   Delete: remove a connection"
+                    "Enter: open   F2: rename   F4: edit   Ctrl+T: test   Delete: remove"
                         .into();
                 self.overlay = Some(Overlay::Choose(dialog));
             }
@@ -1720,15 +1789,56 @@ impl App {
                 self.confirm_renames(paths, &rule, None);
             }
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
-            InputPurpose::NewConnection => match VfsPath::parse(text.trim()) {
-                Ok(location) => self.ask(
+            InputPurpose::NewConnection => match crate::connections::check(&text) {
+                Ok(checked) => self.ask(
                     "New connection",
                     "Name of this connection in the drive list (so you recognise it later):",
-                    &crate::drives::suggested_name(&location),
-                    InputPurpose::NameConnection(location.to_string()),
+                    &crate::drives::suggested_name(&checked.path),
+                    InputPurpose::NameConnection(checked.path.to_string()),
                 ),
-                Err(e) => self.set_error(e.to_string()),
+                // Stay in the question, with the reason under the field.
+                Err(e) => self.ask_again(dialog, e),
             },
+            InputPurpose::EditConnection { name, uri } => match crate::connections::check(&text) {
+                Err(e) => {
+                    let purpose = InputPurpose::EditConnection { name, uri };
+                    self.ask_again(InputDialog { purpose, ..dialog }, e)
+                }
+                Ok(checked) => self.ask(
+                    "Edit connection",
+                    "Name of this connection in the drive list:",
+                    &name.clone(),
+                    InputPurpose::EditConnectionName {
+                        name,
+                        uri,
+                        new_uri: checked.path.to_string(),
+                    },
+                ),
+            },
+            InputPurpose::EditConnectionName { name, uri, new_uri } => {
+                let new_name = text.trim().to_owned();
+                if new_name.is_empty() {
+                    return self.set_error("no name given".to_owned());
+                }
+                let taken = self.context.config.connections.iter().any(|c| c.name == new_name);
+                if taken && new_name != name {
+                    return self
+                        .set_error(format!("There is already a connection called {new_name}"));
+                }
+                if let Some(c) = self
+                    .context
+                    .config
+                    .connections
+                    .iter_mut()
+                    .find(|c| c.name == name && c.uri == uri)
+                {
+                    c.name = new_name.clone();
+                    c.uri = new_uri;
+                    if self.save_settings() {
+                        self.set_status(format!("Saved the changes to {new_name}"));
+                    }
+                }
+            }
             InputPurpose::NameConnection(uri) => {
                 let name = text.trim().to_owned();
                 if name.is_empty() {
@@ -1791,6 +1901,12 @@ impl App {
                             .await;
                     done(result.map(|count| format!("Packed {count} entries into {name}")), None)
                 });
+            }
+            purpose @ (InputPurpose::PackPassword { .. }
+            | InputPurpose::PackPasswordAgain { .. }
+            | InputPurpose::PackAdvanced { .. }
+            | InputPurpose::ArchivePassword(_)) => {
+                self.submit_archive_input(purpose, dialog.field.text())
             }
             InputPurpose::SearchName => {
                 let mask = if text.is_empty() { "*".to_owned() } else { text };
@@ -1991,7 +2107,7 @@ impl App {
                 },
                 None => self.ask(
                     "New connection",
-                    "Location (sftp://user@host/path, davs://host/path, s3://bucket/path, smb://host/share, agent://host/path, scs://host:7443/path, …):",
+                    &crate::connections::prompt(),
                     "sftp://",
                     InputPurpose::NewConnection,
                 ),
@@ -2009,6 +2125,9 @@ impl App {
                 if cursor < choices.len() {
                     self.plugin_chosen(choices.swap_remove(cursor));
                 }
+            }
+            purpose @ (ChoosePurpose::PackFormat { .. } | ChoosePurpose::PackLevel { .. }) => {
+                self.chosen_pack(purpose, cursor)
             }
             purpose @ (ChoosePurpose::CopyPath(_)
             | ChoosePurpose::ExportFormat { .. }

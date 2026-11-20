@@ -10,18 +10,23 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use nmc_vfs::{Entry, EntryKind};
 
 use crate::index::{ArchiveIndex, IndexEntry, Locator, normalize_member};
-use crate::{ArchiveFormat, Compression, time};
+use crate::{ArchiveFormat, Compression, password, time};
 
 fn invalid(e: impl std::fmt::Display) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e.to_string())
 }
 
-/// Reads the table of contents of `file`.
-pub(crate) fn build_index(file: &Path, format: ArchiveFormat) -> io::Result<ArchiveIndex> {
+/// Reads the table of contents of `file`. `key` names the archive for its
+/// password (see [`password`]).
+pub(crate) fn build_index(
+    file: &Path,
+    format: ArchiveFormat,
+    key: &str,
+) -> io::Result<ArchiveIndex> {
     match format {
         ArchiveFormat::Zip => zip_index(file),
         ArchiveFormat::Tar(_) => tar_index(file),
-        ArchiveFormat::SevenZ => sevenz_index(file),
+        ArchiveFormat::SevenZ => sevenz_index(file, key),
         ArchiveFormat::Rar => rar_index(file),
         ArchiveFormat::Compressed(c) => single_index(file, c),
     }
@@ -33,17 +38,13 @@ pub(crate) fn extract(
     format: ArchiveFormat,
     item: &IndexEntry,
     out: &mut dyn Write,
+    key: &str,
 ) -> io::Result<()> {
     match (&item.locator, format) {
         (Locator::Synthetic, _) => Err(io::Error::new(io::ErrorKind::IsADirectory, "directory")),
-        (Locator::Zip(index), _) => {
-            let mut archive =
-                zip::ZipArchive::new(BufReader::new(File::open(file)?)).map_err(invalid)?;
-            let mut member = archive.by_index(*index).map_err(invalid)?;
-            io::copy(&mut member, out).map(|_| ())
-        }
+        (Locator::Zip(index), _) => zip_extract(file, *index, out, key),
         (Locator::Named(name), ArchiveFormat::Tar(_)) => tar_extract(file, name, out),
-        (Locator::Named(name), ArchiveFormat::SevenZ) => sevenz_extract(file, name, out),
+        (Locator::Named(name), ArchiveFormat::SevenZ) => sevenz_extract(file, name, out, key),
         (Locator::Named(name), ArchiveFormat::Rar) => rar_extract(file, name, out),
         (Locator::Single, ArchiveFormat::Compressed(c)) => {
             let mut decoder = c.decoder(BufReader::new(File::open(file)?))?;
@@ -66,11 +67,52 @@ fn zip_time(t: zip::DateTime) -> Option<SystemTime> {
     )
 }
 
+/// Writes member `number` of a zip file to `out`, decrypting it with the
+/// archive's password when it is encrypted.
+fn zip_extract(file: &Path, number: usize, out: &mut dyn Write, key: &str) -> io::Result<()> {
+    use zip::result::ZipError;
+    let mut archive = zip::ZipArchive::new(BufReader::new(File::open(file)?)).map_err(invalid)?;
+    let encrypted = archive.by_index_raw(number).map_err(invalid)?.encrypted();
+    let opened = if encrypted {
+        match password::password_for(key) {
+            Some(password) => archive.by_index_decrypt(number, password.as_bytes()),
+            None => {
+                password::lock(key);
+                return Err(password::problem(false));
+            }
+        }
+    } else {
+        archive.by_index(number)
+    };
+    let mut member = match opened {
+        Ok(member) => member,
+        Err(ZipError::InvalidPassword) => {
+            password::refuse(key);
+            return Err(password::problem(true));
+        }
+        Err(ZipError::UnsupportedArchive(ZipError::PASSWORD_REQUIRED)) => {
+            password::lock(key);
+            return Err(password::problem(false));
+        }
+        Err(e) => return Err(invalid(e)),
+    };
+    // With ZipCrypto a wrong password may only show while reading.
+    io::copy(&mut member, out).map(|_| ()).map_err(|e| {
+        if encrypted && e.kind() == io::ErrorKind::InvalidData {
+            password::refuse(key);
+            password::problem(true)
+        } else {
+            e
+        }
+    })
+}
+
 fn zip_index(file: &Path) -> io::Result<ArchiveIndex> {
     let mut archive = zip::ZipArchive::new(BufReader::new(File::open(file)?)).map_err(invalid)?;
     let mut index = ArchiveIndex::default();
     for i in 0..archive.len() {
         let member = archive.by_index_raw(i).map_err(invalid)?;
+        index.locked |= member.encrypted();
         let name = member.name().map_err(invalid)?.into_owned();
         let kind = if member.is_dir() {
             EntryKind::Directory
@@ -165,8 +207,36 @@ fn tar_extract(file: &Path, name: &str, out: &mut dyn Write) -> io::Result<()> {
 
 // ---------------------------------------------------------------- 7z
 
-fn sevenz_index(file: &Path) -> io::Result<ArchiveIndex> {
-    let archive = sevenz_rust2::Archive::open(file).map_err(invalid)?;
+/// Converts an error of the 7z library, telling password problems apart.
+fn sevenz_error(e: sevenz_rust2::Error, key: &str, had_password: bool) -> io::Error {
+    match e {
+        sevenz_rust2::Error::PasswordRequired => {
+            password::lock(key);
+            password::problem(false)
+        }
+        sevenz_rust2::Error::MaybeBadPassword(_) if had_password => {
+            password::refuse(key);
+            password::problem(true)
+        }
+        sevenz_rust2::Error::MaybeBadPassword(_) => {
+            password::lock(key);
+            password::problem(false)
+        }
+        other => invalid(other),
+    }
+}
+
+fn sevenz_password(key: &str) -> (sevenz_rust2::Password, bool) {
+    match password::password_for(key) {
+        Some(text) => (sevenz_rust2::Password::from(text.as_str()), true),
+        None => (sevenz_rust2::Password::empty(), false),
+    }
+}
+
+fn sevenz_index(file: &Path, key: &str) -> io::Result<ArchiveIndex> {
+    let (password, had) = sevenz_password(key);
+    let archive = sevenz_rust2::Archive::open_with_password(file, &password)
+        .map_err(|e| sevenz_error(e, key, had))?;
     let mut index = ArchiveIndex::default();
     for member in &archive.files {
         if member.is_anti_item {
@@ -182,9 +252,10 @@ fn sevenz_index(file: &Path) -> io::Result<ArchiveIndex> {
     Ok(index)
 }
 
-fn sevenz_extract(file: &Path, name: &str, out: &mut dyn Write) -> io::Result<()> {
-    let mut reader = sevenz_rust2::ArchiveReader::open(file, sevenz_rust2::Password::empty())
-        .map_err(invalid)?;
+fn sevenz_extract(file: &Path, name: &str, out: &mut dyn Write, key: &str) -> io::Result<()> {
+    let (password, had) = sevenz_password(key);
+    let mut reader =
+        sevenz_rust2::ArchiveReader::open(file, password).map_err(|e| sevenz_error(e, key, had))?;
     let mut found = false;
     reader
         .for_each_entries(|entry, data| {
@@ -197,7 +268,7 @@ fn sevenz_extract(file: &Path, name: &str, out: &mut dyn Write) -> io::Result<()
             io::copy(data, &mut io::sink()).map_err(sevenz_rust2::Error::from)?;
             Ok(true)
         })
-        .map_err(invalid)?;
+        .map_err(|e| sevenz_error(e, key, had))?;
     if found {
         Ok(())
     } else {

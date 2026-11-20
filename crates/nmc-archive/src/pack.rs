@@ -30,6 +30,9 @@ pub struct PackOptions {
     pub format: ArchiveFormat,
     /// Compression level, 1 (fastest) to 9 (smallest).
     pub level: u32,
+    /// Encrypts the contents (zip: AES-256, 7z: AES-256 with the names too).
+    /// Only these two formats can; any other fails.
+    pub password: Option<String>,
     /// Called with the number of source bytes consumed.
     pub progress: Option<Arc<dyn Fn(u64) + Send + Sync>>,
     /// Cancels packing (the partial output is removed).
@@ -39,7 +42,13 @@ pub struct PackOptions {
 impl PackOptions {
     /// Default level 6 for `format`.
     pub fn new(format: ArchiveFormat) -> Self {
-        PackOptions { format, level: 6, progress: None, cancel: CancellationToken::new() }
+        PackOptions {
+            format,
+            level: 6,
+            password: None,
+            progress: None,
+            cancel: CancellationToken::new(),
+        }
     }
 }
 
@@ -77,6 +86,11 @@ pub async fn pack(
     if !options.format.can_write() {
         return Err(VfsError::unsupported("create archive", options.format.scheme()));
     }
+    if options.password.as_deref().is_some_and(|p| !p.is_empty())
+        && !matches!(options.format, ArchiveFormat::Zip | ArchiveFormat::SevenZ)
+    {
+        return Err(VfsError::Other("a password can protect zip and 7z archives only".into()));
+    }
     let single = matches!(options.format, ArchiveFormat::Compressed(_));
 
     // Write locally: next to the target if it is local, else in a temp file
@@ -97,7 +111,9 @@ pub async fn pack(
 
     let (tx, rx) = mpsc::channel::<Member>(16);
     let (format, level, target) = (options.format, options.level, local_target.clone());
-    let writer = tokio::task::spawn_blocking(move || write_archive(&target, format, level, rx));
+    let password = options.password.clone().filter(|p| !p.is_empty());
+    let writer =
+        tokio::task::spawn_blocking(move || write_archive(&target, format, level, password, rx));
 
     let feed = feed_members(registry, sources, &options, single, tx).await;
     let written = writer.await.map_err(|e| VfsError::Other(e.to_string()))?;
@@ -229,27 +245,38 @@ fn write_archive(
     target: &PathBuf,
     format: ArchiveFormat,
     level: u32,
+    password: Option<String>,
     rx: mpsc::Receiver<Member>,
 ) -> Result<u64> {
     let file = BufWriter::new(File::create(target).map_err(other)?);
     match format {
-        ArchiveFormat::Zip => write_zip(file, level, rx),
+        ArchiveFormat::Zip => write_zip(file, level, password, rx),
         ArchiveFormat::Tar(compression) => write_tar(file, compression, level, rx),
-        ArchiveFormat::SevenZ => write_7z(File::create(target).map_err(other)?, rx),
+        ArchiveFormat::SevenZ => write_7z(File::create(target).map_err(other)?, password, rx),
         ArchiveFormat::Compressed(compression) => write_single(file, compression, level, rx),
         ArchiveFormat::Rar => Err(VfsError::unsupported("create archive", "rar")),
     }
 }
 
-fn write_zip(file: BufWriter<File>, level: u32, mut rx: mpsc::Receiver<Member>) -> Result<u64> {
+fn write_zip(
+    file: BufWriter<File>,
+    level: u32,
+    password: Option<String>,
+    mut rx: mpsc::Receiver<Member>,
+) -> Result<u64> {
     use zip::write::SimpleFileOptions;
     let mut zip = zip::ZipWriter::new(file);
     let mut count = 0;
     let base = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .compression_level(Some(i64::from(level.clamp(1, 9))));
-    let with_meta = |modified: Option<SystemTime>, mode: Option<u32>| {
-        let mut options = base;
+    // Folders and links hold no data: only files are encrypted.
+    let encrypted = match &password {
+        Some(password) => base.with_aes_encryption(zip::AesMode::Aes256, password),
+        None => base,
+    };
+    let with_meta = |modified: Option<SystemTime>, mode: Option<u32>, secret: bool| {
+        let mut options = if secret { encrypted } else { base };
         if let Some(t) = modified {
             let (y, mo, d, h, mi, s) = time::to_civil(t);
             if let Ok(dt) = zip::DateTime::from_date_and_time(
@@ -267,13 +294,14 @@ fn write_zip(file: BufWriter<File>, level: u32, mut rx: mpsc::Receiver<Member>) 
         count += 1;
         match member {
             Member::Directory { name, modified, mode } => {
-                zip.add_directory(name, with_meta(modified, mode)).map_err(other)?;
+                zip.add_directory(name, with_meta(modified, mode, false)).map_err(other)?;
             }
             Member::Symlink { name, target } => {
                 zip.add_symlink(name, target, base).map_err(other)?;
             }
             Member::File { name, size, modified, mode, data } => {
-                let options = with_meta(modified, mode).large_file(size >= u64::from(u32::MAX));
+                let options =
+                    with_meta(modified, mode, true).large_file(size >= u64::from(u32::MAX));
                 zip.start_file(name, options).map_err(other)?;
                 io::copy(&mut ChannelReader::new(data), &mut zip).map_err(other)?;
             }
@@ -326,8 +354,15 @@ fn write_tar(
     Ok(count)
 }
 
-fn write_7z(file: File, mut rx: mpsc::Receiver<Member>) -> Result<u64> {
+fn write_7z(file: File, password: Option<String>, mut rx: mpsc::Receiver<Member>) -> Result<u64> {
     let mut archive = sevenz_rust2::ArchiveWriter::new(file).map_err(other)?;
+    if let Some(password) = &password {
+        // Content and (by default) the names are encrypted.
+        archive.set_content_methods(vec![
+            sevenz_rust2::encoder_options::AesEncoderOptions::new(password.as_str().into()).into(),
+            sevenz_rust2::EncoderMethod::LZMA2.into(),
+        ]);
+    }
     let mut count = 0;
     let nt_time = |t: SystemTime| {
         // 100 ns intervals since 1601-01-01.

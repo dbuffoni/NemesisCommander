@@ -22,6 +22,7 @@ nmc-ssh.workspace = true
 nmc-preview.workspace = true
 async-trait.workspace = true
 similar.workspace = true
+regex.workspace = true
 bytes.workspace = true
 futures.workspace = true
 serde.workspace = true

@@ -831,8 +831,8 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         Overlay::Input(dialog) => OverlayView::Input {
             title: dialog.title.clone(),
             prompt: dialog.prompt.clone(),
-            text: dialog.field.text().to_owned(),
-            cursor: dialog.field.cursor(),
+            text: dialog.shown().text().to_owned(),
+            cursor: dialog.shown().cursor(),
             preview: dialog.preview.clone(),
         },
         Overlay::Confirm(dialog) => {

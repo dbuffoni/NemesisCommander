@@ -1517,7 +1517,13 @@ async fn connections_have_no_key_setting_ssh_finds_its_keys() {
         h.key("Down");
     }
     h.key("F4");
-    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "F4 asks nothing any more");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("F4 edits the connection") };
+    assert_eq!(dialog.title, "Edit connection");
+    assert!(
+        !dialog.prompt.to_lowercase().contains("key file"),
+        "no key question: {}",
+        dialog.prompt
+    );
     h.key("Esc");
 
     // A new SFTP connection is saved after its name, without a key question.
@@ -2499,4 +2505,254 @@ async fn the_flat_view_lists_files_below_with_their_folder() {
     h.settle().await;
     assert!(!h.screen().contains("Folder "), "and leaves it");
     assert!(screen.contains("docs"), "{screen}");
+}
+
+#[tokio::test]
+async fn paste_goes_into_the_open_question_and_nowhere_else() {
+    let mut h = Harness::new().await;
+    // No window open: pasted text must not run commands.
+    h.app.paste("dddd\n");
+    assert!(h.app.overlay().is_none());
+
+    h.focus("notes.txt");
+    h.key("F6"); // rename/move dialog
+    h.key("Ctrl+U");
+    h.app.paste("/tmp/some folder/é\r\nsecond line");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("a question") };
+    assert_eq!(dialog.field.text(), "/tmp/some folder/é", "first line only");
+    h.app.paste("x\ty");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("a question") };
+    assert_eq!(dialog.field.text(), "/tmp/some folder/éxy", "control characters dropped");
+}
+
+/// Opens the drive list with the cursor on the row that holds `name`.
+fn drive_row(h: &mut Harness, name: &str) {
+    h.key("Shift+F1");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
+    let row = dialog.items.iter().position(|r| r.contains(&format!(" {name} "))).unwrap();
+    for _ in 0..row {
+        h.key("Down");
+    }
+}
+
+#[tokio::test]
+async fn a_connection_is_edited_with_guidance_and_tested_with_a_log() {
+    let backup = TempDir::new().unwrap();
+    fs::write(backup.path().join("saved.txt"), "kept\n").unwrap();
+    let uri = VfsPath::from_local(backup.path()).unwrap().to_string();
+    let mut h = Harness::with_settings(|config| {
+        config.connections.push(nmc_config::Connection {
+            name: "backup".into(),
+            uri: "sftp://me@nas.invalid/srv".into(),
+            identity_file: None,
+            options: Default::default(),
+        });
+    })
+    .await;
+
+    // F4 asks for the address (with samples, user and port) and then the name.
+    drive_row(&mut h, "backup");
+    h.key("F4");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
+    assert_eq!(dialog.field.text(), "sftp://me@nas.invalid/srv");
+    assert!(dialog.prompt.contains("sftp://user@host:22/path"), "{}", dialog.prompt);
+    assert!(dialog.prompt.contains(".netrc"), "passwords are explained");
+    assert_eq!(dialog.preview[0], "✓ SFTP over SSH · host nas.invalid · user me");
+
+    // While typing, the line under the field says what is wrong.
+    h.type_text("sftp://me:secret@nas/srv");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
+    assert!(dialog.preview[0].starts_with("✗ No password"), "{:?}", dialog.preview);
+    // Enter with a wrong address stays in the question, with the reason.
+    h.type_text("sftp://nas:99999/srv");
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("closed on a bad address") };
+    assert_eq!(dialog.title, "Edit connection");
+    assert!(dialog.preview[0].contains("1 and 65535"), "{:?}", dialog.preview);
+    assert_eq!(dialog.field.text(), "sftp://nas:99999/srv", "the text is kept");
+
+    h.type_text("sftp://me@nas.invalid:2222/data");
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no name asked") };
+    assert_eq!(dialog.field.text(), "backup", "the name is offered");
+    h.type_text("nas backup");
+    h.key("Enter");
+    let saved = &h.app.context().config.connections;
+    assert_eq!(
+        (saved[0].name.as_str(), saved[0].uri.as_str()),
+        ("nas backup", "sftp://me@nas.invalid:2222/data")
+    );
+    assert_eq!(saved.len(), 1, "edited in place, not added");
+
+    // Local drives cannot be edited.
+    h.key("Shift+F1");
+    h.key("Home");
+    h.key("F4");
+    assert!(h.status().contains("Only saved connections"), "{}", h.status());
+
+    // Ctrl+T in the address question tests it and shows a log; Enter goes
+    // back to the question.
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text(&uri);
+    h.key("Ctrl+T");
+    h.settle().await;
+    let Some(Overlay::Message(log)) = h.app.overlay() else { panic!("no log") };
+    let text = log.lines.join("\n");
+    assert!(text.contains("Connected"), "{text}");
+    assert!(text.contains("1 files"), "{text}");
+    assert!(text.contains("Result: it works"), "{text}");
+    assert!(h.screen().contains("Test connection"));
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("not back in the question") };
+    assert_eq!(dialog.field.text(), uri);
+
+    // A test of a connection that fails says where, with a hint.
+    h.key("Esc");
+    drive_row(&mut h, "nas backup");
+    h.key("Ctrl+T");
+    h.settle().await;
+    let Some(Overlay::Message(log)) = h.app.overlay() else { panic!("no log") };
+    let text = log.lines.join("\n");
+    assert!(text.contains("Opening the sftp:// connection"), "{text}");
+    assert_eq!(log.lines.last().unwrap(), "Result: failed", "{text}");
+    h.key("Esc");
+
+    // Local rows cannot be tested.
+    h.key("Shift+F1");
+    h.key("Home");
+    h.key("Ctrl+T");
+    assert!(h.status().contains("Only a remote connection"), "{}", h.status());
+}
+
+#[tokio::test]
+async fn advanced_pack_protects_an_archive_and_opening_it_asks_the_password() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Ctrl+Shift+F5");
+    // 1. The format.
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no format list") };
+    assert!(dialog.title.starts_with("Advanced pack"), "{}", dialog.title);
+    assert!(dialog.items[0].starts_with("zip"), "{:?}", dialog.items);
+    assert!(dialog.items.iter().any(|r| r.starts_with("7z")));
+    assert!(dialog.items.iter().any(|r| r.starts_with("tar.zst")));
+    assert!(
+        dialog.items.iter().any(|r| r.starts_with("gz")),
+        "one folder: a single file format is offered"
+    );
+    h.key("Enter"); // zip
+    // 2. The level, with "Normal" on the cursor.
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no level list") };
+    assert_eq!(dialog.cursor, 2);
+    h.key("Enter");
+    // 3. The password, typed twice; it is drawn as dots.
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no password asked") };
+    assert!(dialog.secret);
+    h.type_text("s3cret");
+    let screen = h.screen();
+    assert!(screen.contains("••••••") && !screen.contains("s3cret"), "{screen}");
+    h.key("Enter");
+    h.type_text("different");
+    h.key("Enter");
+    assert!(h.status().contains("differ"), "{}", h.status());
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("asked again") };
+    assert!(dialog.prompt.contains("Password"));
+    h.type_text("s3cret");
+    h.key("Enter");
+    h.type_text("s3cret");
+    h.key("Enter");
+    // 4. Where to write it; the extension is the chosen type's.
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no destination") };
+    assert!(dialog.field.text().ends_with("docs.zip"), "{}", dialog.field.text());
+    assert!(dialog.prompt.contains("password"), "{}", dialog.prompt);
+    let target = h.path("right/locked").display().to_string();
+    h.type_text(&target);
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("right/locked.zip").exists(), "the extension was added");
+
+    // The archive is encrypted: nothing readable without the password.
+    let bytes = fs::read(h.path("right/locked.zip")).unwrap();
+    assert!(!bytes.windows(8).any(|w| w == b"# readme"), "content is not in clear");
+
+    // Entering it works (names are visible); reading a member asks.
+    h.key("Tab");
+    h.focus("locked.zip");
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no password asked") };
+    assert_eq!(dialog.title, "Password");
+    assert!(dialog.prompt.contains("locked.zip is encrypted"), "{}", dialog.prompt);
+    // Esc declines: no second question while the archive stays open.
+    h.key("Esc");
+    assert!(h.app.overlay().is_none(), "declined: no second question");
+    h.settle().await;
+    assert!(h.app.overlay().is_none());
+
+    // Leave and enter again: it asks again. A wrong password is refused
+    // when something is read, and the question comes back.
+    h.focus("..");
+    h.key("Enter");
+    h.settle().await;
+    h.focus("locked.zip");
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Input(_)) = h.app.overlay() else { panic!("asked again after leaving") };
+    h.type_text("wrong one");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.overlay().is_none());
+    h.focus("docs");
+    h.key("Enter");
+    h.settle().await;
+    h.focus("readme.md");
+    h.key("F3");
+    h.settle().await;
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no second question") };
+    assert!(dialog.prompt.starts_with("Wrong password"), "{}", dialog.prompt);
+    h.type_text("s3cret");
+    h.key("Enter");
+    h.settle().await;
+    h.focus("readme.md");
+    h.key("F3");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains("══════"), "the member is read with the password:\n{screen}");
+}
+
+#[tokio::test]
+async fn advanced_pack_without_a_password_skips_the_questions_that_do_not_apply() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Ctrl+Shift+F5");
+    // tar.zst: a level, but no password question.
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no format list") };
+    let row = dialog.items.iter().position(|r| r.starts_with("tar.zst")).unwrap();
+    for _ in 0..row {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.key("Down");
+    h.key("Down");
+    h.key("Enter"); // "Smallest"
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no destination") };
+    assert!(!dialog.secret);
+    assert!(dialog.field.text().ends_with("docs.tar.zst"), "{}", dialog.field.text());
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("right/docs.tar.zst").exists());
+
+    // 7z with an empty password: no second question, no level.
+    h.key("Ctrl+Shift+F5");
+    h.key("Down");
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("password asked") };
+    assert!(dialog.secret);
+    h.key("Enter"); // empty: none
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no destination") };
+    assert!(dialog.field.text().ends_with("docs.7z"), "{}", dialog.field.text());
+    h.key("Esc");
 }

@@ -14,6 +14,9 @@ use crate::cli::{PackArgs, UnpackArgs};
 use crate::output::Progress;
 use crate::{location, prompt};
 
+/// The environment variable that holds the password of a zip or 7z archive.
+const PASSWORD_VARIABLE: &str = "NMC_ARCHIVE_PASSWORD";
+
 pub async fn pack(context: &AppContext, args: PackArgs) -> CmdResult {
     let sources = location::parse_all(&args.sources)?;
     let output = location::parse(&args.output)?;
@@ -31,6 +34,8 @@ pub async fn pack(context: &AppContext, args: PackArgs) -> CmdResult {
     let options = PackOptions {
         format,
         level: args.level,
+        // Never on the command line (it would show in `ps`).
+        password: std::env::var(PASSWORD_VARIABLE).ok().filter(|p| !p.is_empty()),
         progress: Some(Arc::new(move |n| tick.lock().unwrap_or_else(|e| e.into_inner()).add(n))),
         cancel: Default::default(),
     };
@@ -43,6 +48,9 @@ pub async fn pack(context: &AppContext, args: PackArgs) -> CmdResult {
 pub async fn unpack(context: &AppContext, args: UnpackArgs) -> CmdResult {
     let archive = location::parse(&args.archive)?;
     let root = archive_root(&archive).ok_or("not a recognized archive name")?;
+    if let Some(password) = std::env::var(PASSWORD_VARIABLE).ok().filter(|p| !p.is_empty()) {
+        nmc_archive::set_password(&archive, &password);
+    }
     let destination = location::parse(args.destination.as_deref().unwrap_or("."))?;
     let provider = context.registry.provider_for(&root).await?;
     let members: Vec<_> = collect_listing(provider.as_ref(), &root)

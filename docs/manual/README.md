@@ -227,6 +227,7 @@ default; the destination can be edited before you confirm.
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
 | Shift+F5 / Shift+F9 | Pack into an archive / unpack one |
+| Ctrl+Shift+F5 | Advanced pack: format, level and password |
 | Alt+Enter | Properties, and change the dates and permissions |
 | F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
@@ -246,6 +247,15 @@ Properties show the name, location, type, size, date and permissions; on
 systems with Unix permissions, Enter changes them (octal mode).
 
 ![Properties](images/properties.png)
+
+### Typing and pasting
+
+Every question (new folder, go to, a connection's address, a password…) is a
+one-line field: Left, Right, Home, End, Backspace and Delete edit, **Ctrl+U**
+empties it. **Ctrl+V** (or Shift+Insert) pastes the system clipboard into the
+field, the filter of a list or the command search; in a terminal the terminal's
+own paste does the same. Only the first line of the text is used, and pasting
+into the panels does nothing, so a paste can never run a command.
 
 ### Renaming many files
 
@@ -509,6 +519,24 @@ single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
 Shift+F9 unpacks.
 
+**Advanced pack** (**Ctrl+Shift+F5**, or F9, Files/Advanced pack…) asks, one
+step at a time, for the format, the compression level (fastest, fast, normal,
+smallest; formats that have none skip it), a **password** and where to write
+the archive. The password question appears for ZIP and 7z only: both use
+AES-256, and 7z hides the file names too. It is typed twice, shown as dots and
+never stored. Press Enter on an empty password for none. The name you type gets
+the extension of the chosen format when it lacks it.
+
+![Advanced pack](images/pack-advanced.png)
+
+Opening an **encrypted** archive asks for its password: for a 7z with hidden
+names as you enter it, for a ZIP as soon as it is opened (the names show, the
+contents need the password). A wrong password asks again; Esc leaves it
+locked until you leave the archive and enter it again. The password stays in
+memory only, for as long as the program runs. `nmc pack` and `nmc unpack` read
+it from the environment variable `NMC_ARCHIVE_PASSWORD` (never from the command
+line, where `ps` would show it).
+
 ![Inside an archive](images/archive.png)
 
 ## Remote locations
@@ -545,9 +573,24 @@ queue.
 ![The drive list](images/drives.png)
 
 The last row, **New connection…**, asks for a location (for example
-`sftp://me@nas/srv`), then for the name to save it under (the host is
+`sftp://me@nas:22/srv`), then for the name to save it under (the host is
 suggested), opens it and keeps it in the list. **Delete** removes a saved
-connection; the drives of this computer stay. Connections are also kept in
+connection; the drives of this computer stay.
+
+While you type the location, the line under the field says what it understood
+(`✓ SFTP over SSH · host nas · port 22 · user me`, and where the password
+comes from) or what is wrong (`✗ Port 99999 is not between 1 and 65535`, a
+missing host or share, a bad bucket name, a password written in the address).
+Enter on a wrong address keeps the question open with the reason. The prompt
+lists a sample of every kind with user and port; a password is never part of
+the address, because it would be saved as plain text.
+
+**F4** edits a saved connection (the location, then the name, in place).
+**Ctrl+T** tests it, in the list or in the location question before you save:
+a log window shows each step with its time (address, connection, reading the
+folder, number of entries), and a failure says where it stopped with a hint
+(wrong credentials, closed port, unknown host). In the location question,
+Enter in the log goes back to the question. Connections are also kept in
 `[[connections]]` in the settings file, so they travel with exported and
 shared settings.
 
@@ -847,7 +890,8 @@ on the settings screen (Ctrl+,).
 | F8, Delete | Delete (to trash) |
 | Shift+F8, Shift+Delete | Delete permanently |
 | Shift+F5 | Pack into archive |
-| Shift+F9 | Unpack archive |
+| Ctrl+Shift+F5 | Advanced pack: format, level, password |
+| Shift+F9 | Unpack archive (asks the password of an encrypted one) |
 | Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |
 | Alt+P | Copy path to clipboard |

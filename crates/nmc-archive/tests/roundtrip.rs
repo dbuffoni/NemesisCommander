@@ -220,3 +220,81 @@ async fn symlinks_are_kept_in_tar_and_zip() {
         assert_eq!(link.symlink_target.as_deref(), Some("hello.txt"), "{format:?}");
     }
 }
+
+// ------------------------------------------------------ encrypted archives
+
+/// Reads `file` in the archive `output`, which may fail.
+async fn try_read(
+    registry: &ProviderRegistry,
+    output: &VfsPath,
+    file: &str,
+) -> Result<Vec<u8>, String> {
+    let root = nmc_archive_root(output);
+    let path = root.join(file);
+    let provider = registry.provider_for(&path).await.map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    let mut stream = provider.read(&path, 0).await.map_err(|e| e.to_string())?;
+    stream.read_to_end(&mut out).await.map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+async fn encrypted_round_trip(format: ArchiveFormat) {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry();
+    let src = make_tree(dir.path());
+    let output =
+        VfsPath::from_local(dir.path().join(format!("secret.{}", format.extension()))).unwrap();
+    let mut options = PackOptions::new(format);
+    options.password = Some("pässword 1".into());
+    pack(&registry, &[src], &output, options).await.unwrap();
+    let container = output.clone();
+
+    // 7z hides the names too: opening already needs the password.
+    // zip lists the names, and asks when a file is read.
+    let first = try_read(&registry, &output, "src/hello.txt").await;
+    assert!(first.is_err(), "{format:?}: {first:?}");
+    assert!(first.unwrap_err().to_lowercase().contains("password"), "{format:?}");
+    assert!(nmc_archive::needs_password(&container), "{format:?}: the archive asks");
+
+    // A wrong password is refused, and the archive asks again.
+    nmc_archive::set_password(&container, "nope");
+    registry.forget(&nmc_archive_root(&output));
+    let wrong = try_read(&registry, &output, "src/hello.txt").await;
+    assert!(wrong.is_err(), "{format:?}: {wrong:?}");
+    assert!(nmc_archive::needs_password(&container), "{format:?}");
+    assert!(nmc_archive::was_refused(&container), "{format:?}");
+
+    // The right one opens everything.
+    nmc_archive::set_password(&container, "pässword 1");
+    registry.forget(&nmc_archive_root(&output));
+    assert!(!nmc_archive::needs_password(&container));
+    assert_eq!(try_read(&registry, &output, "src/hello.txt").await.unwrap(), b"hello archive");
+    assert_eq!(try_read(&registry, &output, "src/big.bin").await.unwrap(), big());
+    nmc_archive::forget_password(&container);
+}
+
+#[tokio::test]
+async fn zip_with_a_password_is_encrypted() {
+    encrypted_round_trip(ArchiveFormat::Zip).await;
+}
+
+#[tokio::test]
+async fn sevenz_with_a_password_is_encrypted() {
+    encrypted_round_trip(ArchiveFormat::SevenZ).await;
+}
+
+#[tokio::test]
+async fn only_zip_and_7z_can_have_a_password() {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = registry();
+    let src = make_tree(dir.path());
+    let output = VfsPath::from_local(dir.path().join("x.tar.gz")).unwrap();
+    let mut options = PackOptions::new(ArchiveFormat::Tar(Compression::Gzip));
+    options.password = Some("x".into());
+    let error = pack(&registry, std::slice::from_ref(&src), &output, options).await.unwrap_err();
+    assert!(error.to_string().contains("zip and 7z"), "{error}");
+    // An empty password means none.
+    let mut options = PackOptions::new(ArchiveFormat::Tar(Compression::Gzip));
+    options.password = Some(String::new());
+    pack(&registry, &[src], &output, options).await.unwrap();
+}
