@@ -1296,6 +1296,9 @@ async fn the_key_bar_follows_the_modifiers() {
     let screen = h.screen();
     assert!(screen.contains("F5Pack") && screen.contains("F9Unpac"), "{screen}");
     assert!(!screen.contains("F5Copy"), "{screen}");
+    // Alt does not change the bar.
+    h.app.set_modifiers(false, true, false);
+    assert!(h.screen().contains("F5Copy"), "{}", h.screen());
     h.app.set_modifiers(false, false, false);
     assert!(h.screen().contains("F5Copy"));
 }

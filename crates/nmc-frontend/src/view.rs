@@ -1091,10 +1091,12 @@ pub fn entry_details(panel: &Panel) -> String {
 /// What F`number` does with the modifiers held now, for the function key
 /// bar: empty when nothing is bound to that combination.
 pub fn key_bar_label(app: &App, number: u8) -> &'static str {
-    let (ctrl, alt, shift) = app.modifiers();
+    // Alt is left out: desktops use it themselves (GNOME shows its own
+    // window menu and moves windows with it), and no command is on Alt+F.
+    let (ctrl, _alt, shift) = app.modifiers();
     app.context()
         .keymap
-        .action_for(&KeyChord::normalized(Key::F(number), ctrl, alt, shift))
+        .action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
         .map(short_label)
         .unwrap_or("")
 }
