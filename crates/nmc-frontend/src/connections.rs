@@ -82,14 +82,57 @@ fn kind_of(scheme: &str) -> Option<&'static Kind> {
     KINDS.iter().find(|k| k.scheme == scheme)
 }
 
-/// The text above the address field: samples with user and port, and where
-/// passwords come from.
-pub fn prompt() -> String {
-    let samples: Vec<&str> = KINDS.iter().map(|k| k.sample).collect();
-    format!(
-        "Location, e.g. {}. Passwords are not written in the address (SSH keys, ~/.netrc, ~/.aws). Ctrl+T tests it.",
-        samples.join("   ")
+/// The text above the address field.
+pub fn prompt() -> &'static str {
+    "Address of the server or folder:"
+}
+
+/// One sample address of every kind of server, each on its own line, for
+/// under the field while nothing is typed yet.
+pub fn examples() -> Vec<String> {
+    let mut lines = vec!["Examples (user and port are optional):".to_owned()];
+    lines.extend(KINDS.iter().map(|k| format!("  {:<32} {}", k.sample, k.name)));
+    lines
+}
+
+/// Whether connecting to `path` uses a login that NemesisCommander can keep
+/// or ask for: a password (WebDAV, SMB, SFTP, agent) or the keys of S3.
+/// Only `nmc serve` (scs) has none: it uses a certificate.
+pub fn uses_password(path: &VfsPath) -> bool {
+    matches!(
+        kind_of(path.scheme()),
+        Some(k) if matches!(k.scheme, "dav" | "davs" | "smb" | "sftp" | "agent" | "s3")
     )
+}
+
+/// Whether the login of `path` is a pair of S3 keys, not a password.
+pub fn uses_keys(path: &VfsPath) -> bool {
+    path.scheme() == "s3"
+}
+
+/// The S3 profile of an address (`s3://profile@bucket`), if it names one.
+pub fn profile_of(path: &VfsPath) -> Option<String> {
+    user_of(path)
+}
+
+/// The user name of an address (`user@host`), if it has one.
+pub fn user_of(path: &VfsPath) -> Option<String> {
+    let authority = path.authority();
+    authority.rsplit_once('@').map(|(user, _)| user.to_owned()).filter(|u| !u.is_empty())
+}
+
+/// The host of an address, without user and port.
+pub fn host_of(path: &VfsPath) -> String {
+    let authority = path.authority();
+    let host = authority.rsplit('@').next().unwrap_or(authority);
+    host.rsplit_once(':').map_or(host, |(name, _)| name).to_owned()
+}
+
+/// `path` with `user@` in front of the host.
+pub fn with_user(path: &VfsPath, user: &str) -> Option<VfsPath> {
+    let authority = path.authority();
+    let host = authority.rsplit('@').next().unwrap_or(authority);
+    VfsPath::parse(&format!("{}://{user}@{host}{}", path.scheme(), path.path())).ok()
 }
 
 /// An address that passed [`check`].
@@ -101,6 +144,10 @@ pub struct Checked {
     pub summary: String,
     /// Where its password comes from, if it needs one.
     pub password: Option<&'static str>,
+    /// A warning about what was typed (a password in the address).
+    pub warning: Option<String>,
+    /// A password that was found in the address and taken out of it.
+    pub secret: Option<String>,
 }
 
 fn address() -> &'static Regex {
@@ -148,6 +195,8 @@ pub fn check(text: &str) -> Result<Checked, String> {
                     path,
                     summary: "A folder of this computer".into(),
                     password: None,
+                    warning: None,
+                    secret: None,
                 })
                 .map_err(|e| e.to_string()),
         };
@@ -155,7 +204,13 @@ pub fn check(text: &str) -> Result<Checked, String> {
     let scheme = parts["scheme"].to_ascii_lowercase();
     if scheme == "file" || ARCHIVE_SCHEMES.contains(&scheme.as_str()) {
         return VfsPath::parse(text)
-            .map(|path| Checked { path, summary: "A local location".into(), password: None })
+            .map(|path| Checked {
+                path,
+                summary: "A local location".into(),
+                password: None,
+                warning: None,
+                secret: None,
+            })
             .map_err(|e| e.to_string());
     }
     let Some(kind) = kind_of(&scheme) else {
@@ -170,17 +225,24 @@ pub fn check(text: &str) -> Result<Checked, String> {
         Some((user, hostport)) => (Some(user), hostport),
         None => (None, authority),
     };
-    if let Some(user) = user {
-        if user.contains(':') && kind.scheme != "s3" {
-            return Err(format!(
-                "No password in the address: it would be saved as plain text. Use {}",
-                kind.password
-            ));
+    // A password in the address is taken out (it would be saved as plain
+    // text) and reported as a warning; the next steps offer safe places.
+    let (user, secret) = match user {
+        Some(user) if user.contains(':') && kind.scheme != "s3" => {
+            let (name, password) = user.split_once(':').unwrap_or((user, ""));
+            (Some(name), Some(password.to_owned()).filter(|p| !p.is_empty()))
         }
-        if user.is_empty() {
-            return Err(format!("A user name is missing before @, e.g. {}", kind.sample));
-        }
+        other => (other, None),
+    };
+    if user.is_some_and(str::is_empty) {
+        return Err(format!("A user name is missing before @, e.g. {}", kind.sample));
     }
+    let warning = secret.as_ref().map(|_| {
+        format!(
+            "A password in the address would be saved as plain text. It is taken out; you choose where it is kept next ({})",
+            kind.password
+        )
+    });
     let path = parts.name("path").map_or("", |m| m.as_str());
     let mut details = vec![kind.name.to_owned()];
 
@@ -217,25 +279,41 @@ pub fn check(text: &str) -> Result<Checked, String> {
             return Err(format!("An SMB location needs the share: {}", kind.sample));
         }
     }
-    let path = VfsPath::parse(text).map_err(|e| e.to_string())?;
-    Ok(Checked { path, summary: details.join(" · "), password: Some(kind.password) })
+    // The address without the password.
+    let clean = match user {
+        Some(user) => format!("{scheme}://{user}@{hostport}{path}"),
+        None => format!("{scheme}://{hostport}{path}"),
+    };
+    let path = VfsPath::parse(&clean).map_err(|e| e.to_string())?;
+    Ok(Checked {
+        path,
+        summary: details.join(" · "),
+        password: Some(kind.password),
+        warning,
+        secret,
+    })
 }
 
-/// The lines under the address field while it is typed.
+/// The lines under the address field while it is typed: the samples while
+/// there is nothing yet, then what was understood (or what is wrong), then
+/// the key that tests it.
 pub fn hints(text: &str) -> Vec<String> {
-    if text.trim().is_empty() || text.trim().ends_with("://") {
-        return Vec::new();
-    }
-    match check(text) {
-        Ok(ok) => {
-            let mut lines = vec![format!("✓ {}", ok.summary)];
-            if let Some(password) = ok.password {
-                lines.push(format!("  Password: {password}"));
+    let mut lines = if text.trim().is_empty() || text.trim().ends_with("://") {
+        examples()
+    } else {
+        match check(text) {
+            Ok(ok) => {
+                let mut lines = vec![format!("✓ {}", ok.summary)];
+                if let Some(warning) = ok.warning {
+                    lines.push(format!("⚠ {warning}"));
+                }
+                lines
             }
-            lines
+            Err(e) => vec![format!("✗ {e}")],
         }
-        Err(e) => vec![format!("✗ {e}")],
-    }
+    };
+    lines.push("Ctrl+T: test the connection".into());
+    lines
 }
 
 /// Opens the connection and reads its folder, telling each step. The last
@@ -355,20 +433,59 @@ mod tests {
         assert!(bad("sftp://host:99999/x").contains("1 and 65535"));
         assert!(bad("sftp://host:0/x").contains("1 and 65535"));
         assert!(bad("sftp://ho st/x").contains("space"));
-        assert!(bad("sftp://me:secret@host/x").contains("No password"));
-        assert!(bad("davs://me:secret@host/x").contains(".netrc"));
         assert!(bad("smb://host").contains("share"));
         assert!(bad("s3://Bad_Bucket/x").contains("bucket"));
         assert!(bad("sftp://bad_host!/x").contains("not a host"));
     }
 
     #[test]
+    fn a_password_in_the_address_is_taken_out_with_a_warning() {
+        let ok = check("davs://me:s3cret@cloud.example.org/dav").unwrap();
+        assert_eq!(ok.path.to_string(), "davs://me@cloud.example.org/dav");
+        assert_eq!(ok.secret.as_deref(), Some("s3cret"));
+        assert!(ok.warning.unwrap().contains("plain text"));
+        let ok = check("smb://me:@nas/share").unwrap();
+        assert_eq!(ok.secret, None, "an empty password is nothing");
+        assert!(check("sftp://me@nas/x").unwrap().warning.is_none());
+        let lines = hints("davs://me:s3cret@host/x");
+        assert!(lines[0].starts_with("✓"), "{lines:?}");
+        assert!(lines[1].starts_with("⚠"), "{lines:?}");
+    }
+
+    #[test]
+    fn the_samples_are_one_per_line_and_say_nothing_of_passwords() {
+        let lines = hints("");
+        assert!(lines.len() > KINDS.len(), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("sftp://user@host:22/path") && l.contains("SFTP")));
+        assert!(lines.iter().all(|l| !l.to_lowercase().contains("password")), "{lines:?}");
+        assert_eq!(hints("sftp://"), lines);
+        assert_eq!(lines.last().unwrap(), "Ctrl+T: test the connection");
+        assert!(!prompt().to_lowercase().contains("password"));
+    }
+
+    #[test]
     fn hints_follow_the_typing() {
-        assert!(hints("").is_empty());
-        assert!(hints("sftp://").is_empty());
         assert_eq!(hints("sftp://me@nas")[0], "✓ SFTP over SSH · host nas · user me");
-        assert!(hints("sftp://me@nas")[1].contains("Password"));
+        assert_eq!(hints("sftp://me@nas").len(), 2, "no password talk");
         assert!(hints("ftp://x")[0].starts_with("✗ "));
+    }
+
+    #[test]
+    fn user_and_host_are_read_from_the_address() {
+        let path = VfsPath::parse("smb://me@nas:445/share").unwrap();
+        assert_eq!(user_of(&path).as_deref(), Some("me"));
+        assert_eq!(host_of(&path), "nas");
+        assert!(uses_password(&path));
+        let bare = VfsPath::parse("davs://cloud.example.org/dav").unwrap();
+        assert_eq!(user_of(&bare), None);
+        assert_eq!(
+            with_user(&bare, "zoe").unwrap().to_string(),
+            "davs://zoe@cloud.example.org/dav"
+        );
+        for uri in ["sftp://me@nas/", "agent://me@nas/", "s3://bucket/", "dav://nas/"] {
+            assert!(uses_password(&VfsPath::parse(uri).unwrap()), "{uri}");
+        }
+        assert!(!uses_password(&VfsPath::parse("scs://nas:7443/").unwrap()));
     }
 
     #[tokio::test]

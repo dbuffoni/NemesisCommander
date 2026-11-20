@@ -1526,7 +1526,8 @@ async fn connections_have_no_key_setting_ssh_finds_its_keys() {
     );
     h.key("Esc");
 
-    // A new SFTP connection is saved after its name, without a key question.
+    // A new SFTP connection is saved after its name and the login question
+    // (the cursor is on "keep it as it is": SSH finds its keys).
     h.key("Ctrl+N");
     for _ in 0..40 {
         h.key("Down");
@@ -1535,6 +1536,9 @@ async fn connections_have_no_key_setting_ssh_finds_its_keys() {
     h.type_text("sftp://me@other.invalid/");
     h.key("Enter");
     h.type_text("other");
+    h.key("Enter");
+    let Some(Overlay::Choose(login)) = h.app.overlay() else { panic!("no login question") };
+    assert_eq!(login.cursor, 2);
     h.key("Enter");
     assert!(h.status().contains("Saved other"), "{}", h.status());
     assert_eq!(h.app.context().config.connections.len(), 2);
@@ -2555,14 +2559,14 @@ async fn a_connection_is_edited_with_guidance_and_tested_with_a_log() {
     h.key("F4");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
     assert_eq!(dialog.field.text(), "sftp://me@nas.invalid/srv");
-    assert!(dialog.prompt.contains("sftp://user@host:22/path"), "{}", dialog.prompt);
-    assert!(dialog.prompt.contains(".netrc"), "passwords are explained");
     assert_eq!(dialog.preview[0], "✓ SFTP over SSH · host nas.invalid · user me");
+    assert!(dialog.preview.last().unwrap().contains("Ctrl+T"), "{:?}", dialog.preview);
 
-    // While typing, the line under the field says what is wrong.
+    // A password typed in the address is a warning, not an error.
     h.type_text("sftp://me:secret@nas/srv");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
-    assert!(dialog.preview[0].starts_with("✗ No password"), "{:?}", dialog.preview);
+    assert!(dialog.preview[0].starts_with("✓"), "{:?}", dialog.preview);
+    assert!(dialog.preview.iter().any(|l| l.starts_with("⚠")), "{:?}", dialog.preview);
     // Enter with a wrong address stays in the question, with the reason.
     h.type_text("sftp://nas:99999/srv");
     h.key("Enter");
@@ -2576,6 +2580,9 @@ async fn a_connection_is_edited_with_guidance_and_tested_with_a_log() {
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no name asked") };
     assert_eq!(dialog.field.text(), "backup", "the name is offered");
     h.type_text("nas backup");
+    h.key("Enter");
+    let Some(Overlay::Choose(login)) = h.app.overlay() else { panic!("no login question") };
+    assert!(login.items[2].contains("SSH keys"), "{:?}", login.items);
     h.key("Enter");
     let saved = &h.app.context().config.connections;
     assert_eq!(
@@ -2759,4 +2766,178 @@ async fn advanced_pack_without_a_password_skips_the_questions_that_do_not_apply(
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no destination") };
     assert!(dialog.field.text().ends_with("docs.7z"), "{}", dialog.field.text());
     h.key("Esc");
+}
+
+/// The login questions of a connection with a password; `netrc` is where
+/// the "save" answer writes.
+async fn webdav_harness(netrc: &std::path::Path) -> Harness {
+    nmc_vfs::netrc::set_file(Some(netrc.to_owned()));
+    Harness::new().await
+}
+
+#[tokio::test]
+async fn the_new_connection_prompt_lists_one_example_per_line() {
+    let mut h = Harness::new().await;
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
+    assert!(dialog.preview.len() > 4, "{:?}", dialog.preview);
+    assert!(dialog.preview.iter().any(|l| l.contains("sftp://user@host:22/path")));
+    assert!(
+        dialog.preview.iter().all(|l| !l.to_lowercase().contains("not stored")),
+        "no password note among the examples: {:?}",
+        dialog.preview
+    );
+    assert!(dialog.preview.last().unwrap().contains("Ctrl+T"));
+}
+
+#[tokio::test]
+async fn a_login_is_saved_in_netrc_or_asked_every_time() {
+    let dir = TempDir::new().unwrap();
+    let netrc = dir.path().join("netrc");
+    let mut h = webdav_harness(&netrc).await;
+
+    // Typing a password in the address warns, then offers where to keep it.
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("dav://anna:s3cret@files.invalid/docs");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
+    assert!(dialog.preview.iter().any(|l| l.starts_with("⚠")), "{:?}", dialog.preview);
+    h.key("Enter");
+    let Some(Overlay::Input(name)) = h.app.overlay() else { panic!("no name asked") };
+    assert!(name.preview[0].contains("Ctrl+T"), "the test is offered here too");
+    h.type_text("files");
+    h.key("Enter");
+    let Some(Overlay::Choose(choice)) = h.app.overlay() else { panic!("no login question") };
+    assert_eq!(choice.items.len(), 3);
+    assert_eq!(choice.cursor, 1, "the typed password is offered for saving");
+    h.key("Enter");
+    h.settle().await;
+    let saved = &h.app.context().config.connections[0];
+    assert_eq!(saved.uri, "dav://anna@files.invalid/docs", "no password in the settings");
+    assert!(!saved.options.contains_key("password"));
+    let text = fs::read_to_string(&netrc).unwrap();
+    assert!(text.contains("machine files.invalid login anna password s3cret"), "{text}");
+    let settings = format!("{:?}", h.app.context().config.connections);
+    assert!(!settings.contains("s3cret"), "the password never reaches the settings");
+
+    // Another connection, whose password is typed each time.
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("dav://files2.invalid/docs");
+    h.key("Enter");
+    h.type_text("second");
+    h.key("Enter");
+    let Some(Overlay::Choose(_)) = h.app.overlay() else { panic!("no login question") };
+    h.key("Home");
+    h.key("Enter");
+    // No user in the address: it is asked.
+    let Some(Overlay::Input(user)) = h.app.overlay() else { panic!("no user asked") };
+    assert!(user.prompt.contains("User name"), "{}", user.prompt);
+    h.type_text("bob");
+    h.key("Enter");
+    h.settle().await;
+    let saved = &h.app.context().config.connections[1];
+    assert_eq!(saved.uri, "dav://bob@files2.invalid/docs");
+    assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
+    assert!(!fs::read_to_string(&netrc).unwrap().contains("files2"), "nothing saved to netrc");
+
+    // Opening it asks for the password (hidden), once per session.
+    drive_row(&mut h, "second");
+    h.key("Enter");
+    let Some(Overlay::Input(ask)) = h.app.overlay() else { panic!("no password asked") };
+    assert!(ask.secret && ask.prompt.contains("bob@files2.invalid"), "{}", ask.prompt);
+}
+
+#[tokio::test]
+async fn a_new_connection_can_be_tested_before_it_is_saved() {
+    let folder = TempDir::new().unwrap();
+    fs::write(folder.path().join("a.txt"), "a\n").unwrap();
+    let uri = VfsPath::from_local(folder.path()).unwrap().to_string();
+    let mut h = Harness::new().await;
+    h.key("Shift+F1");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text(&uri);
+    h.key("Enter");
+    // In the name question the test is still there, and Enter in its log
+    // comes back to the name.
+    h.key("Ctrl+T");
+    h.settle().await;
+    let Some(Overlay::Message(log)) = h.app.overlay() else { panic!("no log") };
+    assert!(log.lines.join("\n").contains("Result: it works"), "{:?}", log.lines);
+    h.key("Enter");
+    let Some(Overlay::Input(name)) = h.app.overlay() else { panic!("back to the name") };
+    assert!(matches!(name.purpose, nmc_frontend::InputPurpose::NameConnection { .. }));
+    assert!(h.app.context().config.connections.is_empty(), "nothing saved by testing");
+}
+
+#[tokio::test]
+async fn ssh_and_s3_connections_offer_the_login_choice_too() {
+    let dir = TempDir::new().unwrap();
+    let aws = dir.path().join("credentials");
+    nmc_s3::settings::set_credentials_file(Some(aws.clone()));
+    nmc_vfs::netrc::set_file(Some(dir.path().join("netrc")));
+    let mut h = Harness::new().await;
+
+    // S3: save the keys (access key, then hidden secret).
+    h.key("Shift+F1");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("s3://store-bucket/");
+    h.key("Enter");
+    h.type_text("store");
+    h.key("Enter");
+    let Some(Overlay::Choose(choice)) = h.app.overlay() else { panic!("no keys question") };
+    assert_eq!(choice.title, "Keys for this connection");
+    assert!(choice.items[1].contains("~/.aws/credentials"), "{:?}", choice.items);
+    h.key("Up");
+    h.key("Enter");
+    let Some(Overlay::Input(access)) = h.app.overlay() else { panic!("no access key asked") };
+    assert!(access.prompt.contains("Access key ID"));
+    h.type_text("AKTEST");
+    h.key("Enter");
+    let Some(Overlay::Input(secret)) = h.app.overlay() else { panic!("no secret asked") };
+    assert!(secret.secret);
+    h.type_text("topsecret");
+    h.key("Enter");
+    h.settle().await;
+    let keys = fs::read_to_string(&aws).unwrap();
+    assert!(keys.contains("aws_access_key_id = AKTEST"), "{keys}");
+    let settings = format!("{:?}", h.app.context().config.connections);
+    assert!(!settings.contains("topsecret"), "{settings}");
+    assert!(nmc_s3::settings::has_session(None));
+
+    // SFTP: ask every time; the user is asked, nothing is written.
+    h.key("Shift+F1");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("sftp://box.invalid/");
+    h.key("Enter");
+    h.type_text("box");
+    h.key("Enter");
+    h.key("Home");
+    h.key("Enter");
+    let Some(Overlay::Input(user)) = h.app.overlay() else { panic!("no user asked") };
+    assert!(user.prompt.contains("User name"));
+    h.type_text("carol");
+    h.key("Enter");
+    let saved = h.app.context().config.connections.last().unwrap().clone();
+    assert_eq!(saved.uri, "sftp://carol@box.invalid/");
+    assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
 }

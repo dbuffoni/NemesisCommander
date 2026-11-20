@@ -84,9 +84,19 @@ const KEEPALIVE_OPTIONS: &[&str] =
 /// Batch mode: keys or an SSH agent are required, because a password prompt
 /// would land in the middle of the protocol. `-T`: no terminal, so the
 /// streams carry bytes unchanged.
+///
+/// When a password is known for the target (typed for this session or in
+/// `~/.netrc`), batch mode is off so that `ssh` may ask for it, through the
+/// helper of [`password_env`], and asks once.
 pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, String> {
     let mut args = vec!["-T".to_owned()];
+    let with_password = password_of(target).is_some();
     for option in KEEPALIVE_OPTIONS {
+        if with_password && option.starts_with("BatchMode") {
+            args.push("-o".to_owned());
+            args.push("NumberOfPasswordPrompts=1".to_owned());
+            continue;
+        }
         args.push("-o".to_owned());
         args.push((*option).to_owned());
     }
@@ -111,6 +121,57 @@ pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, Stri
     Ok(args)
 }
 
+/// The password for `target`: one typed for this session or saved in
+/// `~/.netrc` for the same host and user.
+fn password_of(target: &Target) -> Option<String> {
+    let user = target.user.as_deref()?;
+    nmc_vfs::netrc::lookup(&target.host, Some(user)).map(|login| login.password)
+}
+
+/// The environment that lets `ssh` read the password of `authority` from
+/// the helper script (`SSH_ASKPASS`), without a terminal; empty when no
+/// password is known. Pass it to [`spawn_env`].
+pub fn password_env(authority: &str) -> Vec<(String, String)> {
+    Target::parse(authority).map(|t| target_env(&t)).unwrap_or_default()
+}
+
+/// [`password_env`] for a parsed target.
+pub fn target_env(target: &Target) -> Vec<(String, String)> {
+    let Some(password) = password_of(target) else { return Vec::new() };
+    let Some(helper) = askpass_helper() else { return Vec::new() };
+    vec![
+        ("SSH_ASKPASS".into(), helper.display().to_string()),
+        ("SSH_ASKPASS_REQUIRE".into(), "force".into()),
+        ("NMC_SSH_PASSWORD".into(), password),
+    ]
+}
+
+/// A script that prints `$NMC_SSH_PASSWORD`, which `ssh` runs to ask for
+/// the password. It holds no secret: the password travels in the
+/// environment of the `ssh` process only.
+fn askpass_helper() -> Option<std::path::PathBuf> {
+    static HELPER: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    HELPER
+        .get_or_init(|| {
+            let dir = std::env::temp_dir().join(format!("nmc-askpass-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).ok()?;
+            let (name, text) = if cfg!(windows) {
+                ("askpass.cmd", "@echo off\r\necho %NMC_SSH_PASSWORD%\r\n")
+            } else {
+                ("askpass.sh", "#!/bin/sh\nprintf '%s\\n' \"$NMC_SSH_PASSWORD\"\n")
+            };
+            let file = dir.join(name);
+            std::fs::write(&file, text).ok()?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o700)).ok()?;
+            }
+            Some(file)
+        })
+        .clone()
+}
+
 /// A command line from the environment variable `variable`, if set, with
 /// `{host}` replaced by `authority`. Lets tests and unusual setups (for
 /// example `docker exec`) replace `ssh`.
@@ -129,8 +190,18 @@ pub fn expand_template(template: &str, authority: &str) -> Option<(String, Vec<S
 /// Starts `program` with piped standard streams. The process is killed when
 /// the returned [`Child`] is dropped.
 pub fn spawn(program: &str, args: &[String]) -> std::io::Result<Child> {
+    spawn_env(program, args, &[])
+}
+
+/// [`spawn`] with extra environment variables.
+pub fn spawn_env(
+    program: &str,
+    args: &[String],
+    env: &[(String, String)],
+) -> std::io::Result<Child> {
     Command::new(program)
         .args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -155,6 +226,34 @@ mod tests {
         assert_eq!(Target::parse("host").unwrap().port, None);
         assert!(Target::parse("host:abc").is_err());
         assert!(Target::parse("me@").is_err());
+    }
+
+    #[test]
+    fn a_known_password_turns_batch_mode_into_one_askpass_try() {
+        let target = Target::parse("tester@askpass-host.invalid").unwrap();
+        let batch = ssh_args(&target, Remote::Subsystem("sftp")).unwrap();
+        assert!(batch.contains(&"BatchMode=yes".to_owned()));
+        assert!(target_env(&target).is_empty());
+
+        nmc_vfs::netrc::set_session("askpass-host.invalid", "tester", "pa ss");
+        let args = ssh_args(&target, Remote::Subsystem("sftp")).unwrap();
+        assert!(!args.contains(&"BatchMode=yes".to_owned()), "{args:?}");
+        assert!(args.contains(&"NumberOfPasswordPrompts=1".to_owned()));
+        let env = target_env(&target);
+        let get = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap();
+        assert_eq!(get("NMC_SSH_PASSWORD"), "pa ss");
+        assert_eq!(get("SSH_ASKPASS_REQUIRE"), "force");
+        #[cfg(unix)]
+        {
+            let out = std::process::Command::new(get("SSH_ASKPASS"))
+                .env("NMC_SSH_PASSWORD", "pa ss")
+                .output()
+                .unwrap();
+            assert_eq!(String::from_utf8_lossy(&out.stdout), "pa ss\n");
+        }
+        // A user the login is not for gets nothing.
+        let other = Target::parse("someone@askpass-host.invalid").unwrap();
+        assert!(target_env(&other).is_empty());
     }
 
     #[test]
