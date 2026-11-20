@@ -102,8 +102,8 @@ actions! {
     MakeDir       = "files.mkdir",          Files, true,  "New folder",               ["F7"];
     Delete        = "files.delete",         Files, true,  "Delete (to trash)",        ["F8", "Delete"];
     DeleteForever = "files.delete-forever", Files, false, "Delete permanently",       ["Shift+F8", "Shift+Delete"];
-    Pack          = "files.pack",           Files, true,  "Pack into archive…",       ["Alt+F5"];
-    Unpack        = "files.unpack",         Files, false, "Unpack archive…",          ["Alt+F9"];
+    Pack          = "files.pack",           Files, true,  "Pack into archive…",       ["Shift+F5"];
+    Unpack        = "files.unpack",         Files, false, "Unpack archive…",          ["Shift+F9"];
     Properties    = "files.properties",     Files, false, "Properties and permissions", ["Alt+Enter"];
     Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", ["Ctrl+Z"];
     Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", [];
@@ -126,7 +126,7 @@ actions! {
     GoTo          = "nav.goto",             Navigate, true,  "Go to location…",       ["Ctrl+L"];
     Back          = "nav.back",             Navigate, false, "Back",                  ["Alt+Left"];
     Forward       = "nav.forward",          Navigate, false, "Forward",               ["Alt+Right"];
-    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Alt+F1", "Ctrl+N", "d"];
+    Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Shift+F1", "Ctrl+N", "d"];
     Bookmarks     = "nav.bookmarks",        Navigate, true,  "Bookmarks…",            ["Ctrl+D"];
     AddBookmark   = "nav.add-bookmark",     Navigate, false, "Bookmark this folder",  ["Ctrl+Shift+D"];
     AddBookmarkTarget = "nav.add-bookmark-target", Navigate, false, "Bookmark this folder with the other panel's", ["Ctrl+Alt+D"];
@@ -149,7 +149,7 @@ actions! {
     SortModified  = "view.sort-date",       View, false, "Sort by date",              ["Ctrl+F5"];
     QuickView     = "view.quick-view",      View, false, "Quick view in other panel", ["Ctrl+Q"];
     // Tools
-    Search        = "tools.search",         Tools, true,  "Search…",                  ["Alt+F7"];
+    Search        = "tools.search",         Tools, true,  "Search…",                  ["Shift+F7"];
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];

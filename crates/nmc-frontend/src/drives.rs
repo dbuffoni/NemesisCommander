@@ -1,4 +1,4 @@
-//! The drive list (Alt+F1, Ctrl+N): this computer's drives and the saved
+//! The drive list (Shift+F1, Ctrl+N): this computer's drives and the saved
 //! connections in one list, each with a category. Choosing a row opens it in
 //! the active panel the same way, whatever its category.
 

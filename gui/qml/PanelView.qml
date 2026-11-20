@@ -74,7 +74,7 @@ Rectangle {
         }
 
         // The drive or connection of this panel; a click chooses another
-        // one (the same list as Alt+F1).
+        // one (the same list as Shift+F1).
         RowLayout {
             Layout.fillWidth: true
             spacing: 6
