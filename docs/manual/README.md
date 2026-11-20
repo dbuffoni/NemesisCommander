@@ -170,7 +170,7 @@ The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
 what F1–F10 do, and it follows the keys you hold: with **Shift** down it shows
 what Shift+F1…F10 do (`Drives` at F1, `Search` at F7, `Pack` at F5, `Unpack` at F9),
-with **Ctrl**, **Alt** or a combination likewise, and nothing for the keys that are not bound. In the
+with **Ctrl** or a combination with Shift likewise (Alt does not change the bar), and nothing for the keys that are not bound. In the
 window this follows the keyboard live (clicking a label with a modifier held
 runs that combination). In the terminal it works only where the terminal
 reports Ctrl, Alt and Shift on their own (terminals with the "kitty keyboard

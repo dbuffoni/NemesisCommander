@@ -220,6 +220,8 @@ pub enum OverlayView {
         /// The logo to show above the text (About): a `file://` URL of
         /// a PNG for a window.
         logo_url: Option<String>,
+        /// The same for a light theme.
+        logo_url_light: Option<String>,
     },
     /// F3: the viewer.
     Viewer(ViewerView),
@@ -847,7 +849,8 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             lines: dialog.lines.clone(),
             has_next: dialog.then.is_some(),
             hint: dialog.hint(),
-            logo_url: dialog.logo.then(crate::about::logo_url).flatten(),
+            logo_url: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.0)).flatten(),
+            logo_url_light: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.1)).flatten(),
         },
         Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
         Overlay::Jobs(view) => OverlayView::Jobs {
@@ -1088,10 +1091,12 @@ pub fn entry_details(panel: &Panel) -> String {
 /// What F`number` does with the modifiers held now, for the function key
 /// bar: empty when nothing is bound to that combination.
 pub fn key_bar_label(app: &App, number: u8) -> &'static str {
-    let (ctrl, alt, shift) = app.modifiers();
+    // Alt is left out: desktops use it themselves (GNOME shows its own
+    // window menu and moves windows with it), and no command is on Alt+F.
+    let (ctrl, _alt, shift) = app.modifiers();
     app.context()
         .keymap
-        .action_for(&KeyChord::normalized(Key::F(number), ctrl, alt, shift))
+        .action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
         .map(short_label)
         .unwrap_or("")
 }

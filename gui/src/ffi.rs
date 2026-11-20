@@ -75,3 +75,14 @@ pub mod qobject {
 
     impl cxx_qt::Threading for Commander {}
 }
+
+unsafe extern "C" {
+    fn nmc_set_window_icon(data: *const u8, length: u64);
+}
+
+/// Sets the icon of every window of the application from a PNG.
+pub fn set_window_icon(png: &[u8]) {
+    // SAFETY: the pointer and length describe `png`, which outlives the call;
+    // Qt copies what it needs.
+    unsafe { nmc_set_window_icon(png.as_ptr(), png.len() as u64) }
+}

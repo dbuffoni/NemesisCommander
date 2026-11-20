@@ -315,7 +315,9 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: visible ? 128 : 0
                 Layout.preferredHeight: visible ? 128 : 0
-                source: dialogs.view.logo_url ? dialogs.view.logo_url : ""
+                source: dialogs.view.logo_url
+                        ? (dialogs.theme.dark ? dialogs.view.logo_url : dialogs.view.logo_url_light)
+                        : ""
                 fillMode: Image.PreserveAspectFit
                 smooth: true
                 mipmap: true

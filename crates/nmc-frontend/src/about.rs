@@ -10,8 +10,16 @@ use image::RgbaImage;
 
 use crate::dialogs::MessageDialog;
 
-/// The logo as a PNG, 256 × 256.
-pub const LOGO_PNG: &[u8] = include_bytes!("../../../assets/branding/nemesiscommander-256.png");
+/// The logo without a background, for a dark theme (white arch), 256 × 256.
+pub const LOGO_PNG: &[u8] =
+    include_bytes!("../../../assets/branding/nemesiscommander-mark-dark.png");
+
+/// The same for a light theme (dark arch).
+pub const LOGO_LIGHT_PNG: &[u8] =
+    include_bytes!("../../../assets/branding/nemesiscommander-mark-light.png");
+
+/// The application icon (the logo on a dark tile), 256 × 256: the window's.
+pub const ICON_PNG: &[u8] = include_bytes!("../../../assets/branding/nemesiscommander-256.png");
 
 /// The version of the program.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -33,20 +41,24 @@ pub fn logo() -> &'static RgbaImage {
     })
 }
 
-/// A `file://` URL of the logo for a window, written once.
-pub fn logo_url() -> Option<String> {
-    static URL: OnceLock<Option<String>> = OnceLock::new();
-    URL.get_or_init(|| {
+/// `file://` URLs of the logo for a window, written once: for a dark
+/// theme and for a light one.
+pub fn logo_urls() -> Option<(String, String)> {
+    static URLS: OnceLock<Option<(String, String)>> = OnceLock::new();
+    URLS.get_or_init(|| {
         let folder = std::env::temp_dir().join(format!("nemesiscommander-{}", std::process::id()));
         std::fs::create_dir_all(&folder).ok()?;
-        let path = folder.join("logo.png");
-        std::fs::write(&path, LOGO_PNG).ok()?;
-        let text = path.display().to_string().replace('\\', "/");
-        Some(if text.starts_with('/') {
-            format!("file://{text}")
-        } else {
-            format!("file:///{text}")
-        })
+        let write = |name: &str, bytes: &[u8]| -> Option<String> {
+            let path = folder.join(name);
+            std::fs::write(&path, bytes).ok()?;
+            let text = path.display().to_string().replace('\\', "/");
+            Some(if text.starts_with('/') {
+                format!("file://{text}")
+            } else {
+                format!("file:///{text}")
+            })
+        };
+        Some((write("logo-dark.png", LOGO_PNG)?, write("logo-light.png", LOGO_LIGHT_PNG)?))
     })
     .clone()
 }
