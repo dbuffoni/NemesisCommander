@@ -65,6 +65,9 @@ pub struct CommanderRust {
     /// QML notices a repeat.
     pub(crate) clipboard: QString,
     pub(crate) clipboard_seq: i32,
+    /// Grows when the window should paste the clipboard (the self test has
+    /// no real key press to do it).
+    pub(crate) paste_seq: i32,
     pub(crate) screenshot: QString,
     /// The window's size when it opens.
     pub(crate) window_width: i32,
@@ -89,6 +92,7 @@ impl Default for CommanderRust {
             running: true,
             clipboard: QString::default(),
             clipboard_seq: 0,
+            paste_seq: 0,
             screenshot: QString::default(),
             window_width: STARTUP.get().and_then(|s| s.size).map_or(1200, |(w, _)| w),
             window_height: STARTUP.get().and_then(|s| s.size).map_or(760, |(_, h)| h),
@@ -168,6 +172,12 @@ impl qobject::Commander {
             self.as_mut().rust_mut().with_app(|app| app.handle_key(press));
             self.refresh();
         }
+    }
+
+    pub(crate) fn paste(mut self: Pin<&mut Self>, text: &QString) {
+        let text = text.to_string();
+        self.as_mut().rust_mut().with_app(|app| app.paste(&text));
+        self.refresh();
     }
 
     pub(crate) fn modifiers(mut self: Pin<&mut Self>, modifiers: i32) {
@@ -294,6 +304,12 @@ impl qobject::Commander {
         }
         let Some(test) = rust.test.as_mut() else { return };
         if let Some(chord) = test.keys.pop_front() {
+            if chord == "Ctrl+V" {
+                // The window reads the clipboard, as for the real key.
+                let seq = rust.paste_seq + 1;
+                self.as_mut().set_paste_seq(seq);
+                return self.refresh();
+            }
             match chord.parse::<nmc_config::KeyChord>() {
                 Ok(_) => {
                     let press = KeyPress::chord(&chord);

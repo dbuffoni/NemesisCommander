@@ -3,6 +3,7 @@
 //! Overlays only hold data. What happens when one is confirmed is decided in
 //! `app.rs`, by matching on the dialog's *purpose*.
 
+use nmc_archive::ArchiveFormat;
 use nmc_config::{Action, Category, ExportBundle};
 use nmc_ops::Conflict;
 use nmc_ops::Resolution;
@@ -58,6 +59,22 @@ pub enum InputPurpose {
     NewConnection,
     /// ...then the name it is saved under.
     NameConnection(String),
+    /// Change the location of a saved connection (F4 in the drive list)...
+    EditConnection {
+        /// The name now.
+        name: String,
+        /// Its location now.
+        uri: String,
+    },
+    /// ...then its name.
+    EditConnectionName {
+        /// The name now.
+        name: String,
+        /// Its location now.
+        uri: String,
+        /// The new location.
+        new_uri: String,
+    },
     /// A new name for a saved connection (F2 in the drive list).
     RenameConnection {
         /// The name now.
@@ -73,6 +90,40 @@ pub enum InputPurpose {
     QuickFilter,
     /// Pack these items into the typed archive.
     PackInto(Vec<VfsPath>),
+    /// Advanced pack: the password to protect the archive with (empty:
+    /// none)...
+    PackPassword {
+        /// What to pack.
+        paths: Vec<VfsPath>,
+        /// The format chosen.
+        format: ArchiveFormat,
+        /// The compression level chosen.
+        level: u32,
+    },
+    /// ...typed again, to be sure...
+    PackPasswordAgain {
+        /// What to pack.
+        paths: Vec<VfsPath>,
+        /// The format chosen.
+        format: ArchiveFormat,
+        /// The compression level chosen.
+        level: u32,
+        /// The first one typed.
+        first: String,
+    },
+    /// ...and last, where to write the archive.
+    PackAdvanced {
+        /// What to pack.
+        paths: Vec<VfsPath>,
+        /// The format chosen.
+        format: ArchiveFormat,
+        /// The compression level chosen.
+        level: u32,
+        /// The password, if any.
+        password: Option<String>,
+    },
+    /// The password of an encrypted archive (the container file).
+    ArchivePassword(VfsPath),
     /// First search question: the name mask.
     SearchName,
     /// Second search question: the text to find.
@@ -121,6 +172,11 @@ pub enum InputPurpose {
 }
 
 impl InputPurpose {
+    /// Whether the answer is the address of a connection.
+    pub fn is_address(&self) -> bool {
+        matches!(self, InputPurpose::NewConnection | InputPurpose::EditConnection { .. })
+    }
+
     /// The settings screen a dialog opened from, to go back to.
     pub fn settings_screen(&self) -> Option<&SettingsScreen> {
         match self {
@@ -146,6 +202,8 @@ pub struct InputDialog {
     /// Lines shown below the field, updated while typing (the new names
     /// of a multi-rename).
     pub preview: Vec<String>,
+    /// A password: shown as dots.
+    pub secret: bool,
 }
 
 impl InputDialog {
@@ -157,7 +215,18 @@ impl InputDialog {
             field: TextField::new(initial),
             purpose,
             preview: Vec::new(),
+            secret: false,
         }
+    }
+
+    /// The field as it is drawn: dots for a password.
+    pub fn shown(&self) -> TextField {
+        if !self.secret {
+            return self.field.clone();
+        }
+        let mut shown = TextField::new(&"•".repeat(self.field.text().chars().count()));
+        shown.set_cursor(self.field.cursor());
+        shown
     }
 }
 
@@ -212,6 +281,20 @@ pub enum ChoosePurpose {
     Plugin(Vec<crate::app::PluginChoice>),
     /// Copy these items' paths in the chosen form.
     CopyPath(Vec<VfsPath>),
+    /// Advanced pack: the format.
+    PackFormat {
+        /// What to pack.
+        paths: Vec<VfsPath>,
+        /// The rows' formats.
+        formats: Vec<ArchiveFormat>,
+    },
+    /// Advanced pack: the compression level (1, 3, 6 or 9).
+    PackLevel {
+        /// What to pack.
+        paths: Vec<VfsPath>,
+        /// The format chosen.
+        format: ArchiveFormat,
+    },
     /// Export the listing in the chosen format.
     ExportFormat {
         /// Only the selected items, not the whole listing.

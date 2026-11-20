@@ -105,6 +105,9 @@ fn every_dialog_draws_cleanly() {
         ("Ctrl+Alt+D Alt+O Ctrl+Alt+D Ctrl+D Enter", "choose"),
         ("Shift+F1", "choose"),
         ("Ctrl+N", "choose"),
+        // Advanced pack: format, level, then the password as dots.
+        ("Down Ctrl+Shift+F5", "choose"),
+        ("Down Ctrl+Shift+F5 Enter Enter", "input"),
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
         ("Ctrl+,", "settings"),
@@ -242,7 +245,7 @@ fn drives_and_connections_are_one_list() {
 }
 
 #[test]
-fn settings_with_a_key_file_still_load_and_f4_asks_nothing() {
+fn settings_with_a_key_file_still_load_and_f4_edits_the_address() {
     let home = home();
     std::fs::create_dir_all(home.path().join("config")).unwrap();
     std::fs::write(
@@ -255,6 +258,22 @@ fn settings_with_a_key_file_still_load_and_f4_asks_nothing() {
     let run = run(home.path(), "Shift+F1 End Up F4", None);
     assert_no_qml_warnings(&run);
     let overlay = &run.screen["overlay"];
-    assert_eq!(overlay["kind"], "choose", "{overlay}");
-    assert_eq!(overlay["title"], "Drives");
+    // F4 edits the address (there is no key file to set any more).
+    assert_eq!(overlay["kind"], "input", "{overlay}");
+    assert_eq!(overlay["title"], "Edit connection");
+    assert_eq!(overlay["text"], "sftp://me@nas.invalid/srv");
+    assert!(overlay["preview"][0].as_str().unwrap().starts_with("✓ SFTP over SSH"), "{overlay}");
+}
+
+#[test]
+fn ctrl_v_pastes_the_clipboard_into_a_question() {
+    let home = home();
+    // Alt+P puts the path of the file under the cursor in the clipboard;
+    // Ctrl+V types it into the next question.
+    let run = run(home.path(), "Down Alt+P Enter F7 Ctrl+V", None);
+    assert_no_qml_warnings(&run);
+    let overlay = &run.screen["overlay"];
+    assert_eq!(overlay["kind"], "input", "{overlay}");
+    let text = overlay["text"].as_str().unwrap_or_default();
+    assert!(text.ends_with("notes.txt"), "pasted: {text:?}");
 }

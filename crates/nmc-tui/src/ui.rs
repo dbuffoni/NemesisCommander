@@ -582,22 +582,44 @@ pub fn field_window(field: &TextField, width: usize) -> (String, usize) {
     (visible, field.cursor() - start)
 }
 
+/// `text` cut into lines of at most `width` characters, at spaces.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(8);
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        match lines.last_mut() {
+            Some(line) if line.chars().count() + 1 + word.chars().count() <= width => {
+                line.push(' ');
+                line.push_str(word);
+            }
+            _ => lines.push(word.to_owned()),
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
 fn draw_input(frame: &mut Frame, dialog: &InputDialog) {
     let width = 72.min(frame.area().width.saturating_sub(2));
-    // The preview (multi-rename) adds a blank line and its own lines.
+    // The prompt may need several lines; the preview (multi-rename, the
+    // address of a connection) adds a blank line and its own lines.
+    let prompt = wrap(&dialog.prompt, width.saturating_sub(2) as usize);
     let preview_rows = if dialog.preview.is_empty() { 0 } else { dialog.preview.len() + 1 };
-    let height = (6 + preview_rows as u16).min(frame.area().height.saturating_sub(2));
+    let height = (5 + prompt.len() + preview_rows) as u16;
+    let height = height.min(frame.area().height.saturating_sub(2));
     let area = centered(frame.area(), width, height);
     frame.render_widget(Clear, area);
     let block = Block::bordered().title(Line::styled(format!(" {} ", dialog.title), bold()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let field_width = inner.width.saturating_sub(2) as usize;
-    let (visible, column) = field_window(&dialog.field, field_width);
-    let mut lines = vec![
-        Line::raw(fit(&dialog.prompt, inner.width as usize)),
-        Line::styled(format!(" {visible:<field_width$} "), Style::new().bg(Color::DarkGray)),
-    ];
+    let (visible, column) = field_window(&dialog.shown(), field_width);
+    let mut lines: Vec<Line> =
+        prompt.iter().map(|l| Line::raw(fit(l, inner.width as usize))).collect();
+    lines
+        .push(Line::styled(format!(" {visible:<field_width$} "), Style::new().bg(Color::DarkGray)));
     if !dialog.preview.is_empty() {
         lines.push(Line::raw(""));
         lines.extend(dialog.preview.iter().map(|l| Line::raw(fit(l, inner.width as usize))));
@@ -605,7 +627,10 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog) {
     lines.push(Line::raw(""));
     lines.push(Line::styled("Enter: OK    Esc: cancel    Ctrl+U: clear", dim()));
     frame.render_widget(Paragraph::new(lines), inner);
-    frame.set_cursor_position(Position { x: inner.x + 1 + column as u16, y: inner.y + 1 });
+    frame.set_cursor_position(Position {
+        x: inner.x + 1 + column as u16,
+        y: inner.y + prompt.len() as u16,
+    });
 }
 
 /// Draws a list dialog; returns its page height.

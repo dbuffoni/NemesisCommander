@@ -15,7 +15,7 @@ use nmc_transfer::{JobKind, JobSpec};
 use nmc_vfs::{Capabilities, HashAlgorithm, ProviderRegistry, VfsPath};
 
 use super::{App, AppEvent, External, display_location, done, resolve_location};
-use crate::dialogs::{ChooseDialog, ChoosePurpose, InputPurpose, JumpRow, Overlay};
+use crate::dialogs::{ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, JumpRow, Overlay};
 use crate::export::{Format, PathVariant};
 use crate::input::KeyPress;
 use crate::similar::{self, Picture};
@@ -525,6 +525,35 @@ impl App {
                         Some(false)
                     }
                 }
+            }
+            ChoosePurpose::Drives(drives) if key == Some(Key::F(4)) => {
+                match drives.get(dialog.cursor).filter(|d| d.saved) {
+                    Some(drive) => {
+                        let (name, uri) = (drive.name.clone(), drive.location.clone());
+                        let mut edit = InputDialog::new(
+                            "Edit connection",
+                            &crate::connections::prompt(),
+                            &uri.clone(),
+                            InputPurpose::EditConnection { name, uri: uri.clone() },
+                        );
+                        edit.preview = crate::connections::hints(&uri);
+                        self.overlay = Some(Overlay::Input(edit));
+                    }
+                    None => self.set_error("Only saved connections can be edited"),
+                }
+                Some(false)
+            }
+            ChoosePurpose::Drives(drives)
+                if press.chord.ctrl && press.chord.key == Key::Char('t') =>
+            {
+                match drives
+                    .get(dialog.cursor)
+                    .filter(|d| d.category == crate::drives::Category::Remote)
+                {
+                    Some(drive) => self.test_connection(drive.location.clone(), None),
+                    None => self.set_error("Only a remote connection can be tested"),
+                }
+                Some(false)
             }
             ChoosePurpose::Bookmarks(_) => self.bookmarks_key(dialog, press),
             ChoosePurpose::DiskUsage { .. } => self.disk_usage_key(dialog, press),

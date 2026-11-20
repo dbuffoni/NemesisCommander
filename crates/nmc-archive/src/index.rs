@@ -27,6 +27,8 @@ pub(crate) struct IndexEntry {
 #[derive(Debug, Default)]
 pub(crate) struct ArchiveIndex {
     entries: BTreeMap<String, IndexEntry>,
+    /// Some member is encrypted.
+    pub locked: bool,
 }
 
 /// Turns a stored member name (`./a//b/`, `a\b`) into `/a/b`, rejecting

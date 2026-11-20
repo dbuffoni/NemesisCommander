@@ -79,6 +79,7 @@ ApplicationWindow {
     Commander {
         id: commander
         onRunningChanged: if (!running) Qt.quit()
+        onPaste_seqChanged: keys.pasteClipboard()
         onClipboard_seqChanged: {
             clipboardHelper.text = commander.clipboard
             clipboardHelper.selectAll()
@@ -136,9 +137,20 @@ ApplicationWindow {
                     commander.modifiers(mask)
                 }
             }
+            // Ctrl+V and Shift+Insert paste the system clipboard, which is
+            // read through the same hidden text field that copies.
+            function pasteClipboard() {
+                clipboardHelper.text = ""
+                clipboardHelper.paste()
+                commander.paste(clipboardHelper.text)
+                clipboardHelper.text = ""
+            }
             Keys.onPressed: (event) => {
                 var own = bit(event.key)
-                if (own !== 0) {
+                if ((event.key === Qt.Key_V && event.modifiers === Qt.ControlModifier)
+                        || (event.key === Qt.Key_Insert && event.modifiers === Qt.ShiftModifier)) {
+                    pasteClipboard()
+                } else if (own !== 0) {
                     hold(event.modifiers | own)
                 } else {
                     hold(event.modifiers)

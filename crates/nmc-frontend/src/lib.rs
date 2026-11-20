@@ -21,6 +21,7 @@
 pub mod about;
 mod app;
 pub mod commands;
+pub mod connections;
 mod dialogs;
 pub mod diff;
 pub mod disks;

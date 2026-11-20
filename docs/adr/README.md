@@ -42,6 +42,7 @@ taken while implementing it.
 | 0032 | [Remote features tested against real servers, panel connection state](0032-tested-against-real-servers.md) | Accepted |
 | 0033 | [Release 0.1.0, fourth batch: small fixes and the key bar](0033-card-batch-d.md) | Accepted |
 | 0034 | [Release 0.1.0, fifth batch: chooser, flat view, archive search, highlighting, branding](0034-card-batch-e.md) | Accepted |
+| 0035 | [Release 0.1.0, sixth batch: paste, connection editing and testing, advanced pack](0035-card-batch-f.md) | Accepted |
 
 Template:
 

@@ -20,6 +20,7 @@ pub mod qobject {
         #[qproperty(bool, running)]
         #[qproperty(QString, clipboard)]
         #[qproperty(i32, clipboard_seq)]
+        #[qproperty(i32, paste_seq)]
         #[qproperty(QString, screenshot)]
         #[qproperty(i32, window_width)]
         #[qproperty(i32, window_height)]
@@ -33,6 +34,10 @@ pub mod qobject {
         /// A key press: `event.key`, `event.text` and `event.modifiers`.
         #[qinvokable]
         fn key(self: Pin<&mut Commander>, key: i32, text: &QString, modifiers: i32);
+
+        /// Text pasted from the system clipboard (Ctrl+V).
+        #[qinvokable]
+        fn paste(self: Pin<&mut Commander>, text: &QString);
 
         /// Ctrl, Alt and Shift as held (`Qt::KeyboardModifier` bits): the
         /// function key bar shows what those combinations do.

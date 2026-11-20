@@ -86,13 +86,13 @@ sha2 = "0.11.1"
 hex = "0.4.3"
 
 # archives and compression
-zip = { version = "9.6.0", default-features = false, features = ["deflate", "bzip2", "zstd", "lzma", "xz", "time"] }
+zip = { version = "9.6.0", default-features = false, features = ["deflate", "bzip2", "zstd", "lzma", "xz", "time", "aes-crypto"] }
 tar = "0.4.46"
 flate2 = "1.1.11"
 liblzma = { version = "0.4.9", features = ["static"] }
 bzip2 = "0.6.1"
 zstd = "0.14.4"
-sevenz-rust2 = { version = "0.25.0", default-features = false, features = ["compress", "util"] }
+sevenz-rust2 = { version = "0.25.0", default-features = false, features = ["compress", "util", "aes256"] }
 unrar = "0.5.8"
 
 # images (viewer)

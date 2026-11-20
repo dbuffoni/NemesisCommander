@@ -12,7 +12,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::index::ArchiveIndex;
 use crate::pipe::stream_from_blocking;
-use crate::{ArchiveFormat, Compression, readers};
+use crate::{ArchiveFormat, Compression, password, readers};
 
 /// Serves the contents of one archive file.
 pub struct ArchiveProvider {
@@ -23,27 +23,37 @@ pub struct ArchiveProvider {
     /// Keeps a downloaded copy alive as long as the provider exists.
     _download: Option<tempfile::TempPath>,
     index: Arc<ArchiveIndex>,
+    /// Names the archive for its password.
+    key: String,
 }
 
 impl ArchiveProvider {
     /// Opens the archive at `local_file`.
     pub async fn open_local(format: ArchiveFormat, local_file: PathBuf) -> Result<Self> {
-        Self::open(format, local_file, None).await
+        let key = local_file.display().to_string();
+        Self::open(format, local_file, None, key).await
     }
 
     async fn open(
         format: ArchiveFormat,
         local_file: PathBuf,
         download: Option<tempfile::TempPath>,
+        key: String,
     ) -> Result<Self> {
         let file = local_file.clone();
-        let index = tokio::task::spawn_blocking(move || readers::build_index(&file, format))
-            .await
-            .map_err(|e| VfsError::Other(e.to_string()))?
-            .map_err(|e| {
-                VfsError::Other(format!("cannot read archive {}: {e}", local_file.display()))
-            })?;
+        let index_key = key.clone();
+        let index =
+            tokio::task::spawn_blocking(move || readers::build_index(&file, format, &index_key))
+                .await
+                .map_err(|e| VfsError::Other(e.to_string()))?
+                .map_err(|e| {
+                    VfsError::Other(format!("cannot read archive {}: {e}", local_file.display()))
+                })?;
+        if index.locked {
+            password::lock(&key);
+        }
         Ok(ArchiveProvider {
+            key,
             scheme: format.scheme(),
             format,
             local_file,
@@ -97,9 +107,9 @@ impl Provider for ArchiveProvider {
         if item.entry.is_dir() {
             return Err(VfsError::IsADirectory(path.clone()));
         }
-        let (file, format) = (self.local_file.clone(), self.format);
+        let (file, format, key) = (self.local_file.clone(), self.format, self.key.clone());
         let mut stream =
-            stream_from_blocking(move |out| readers::extract(&file, format, &item, out));
+            stream_from_blocking(move |out| readers::extract(&file, format, &item, out, &key));
         if offset > 0 {
             // Archives are not seekable streams: skip by reading.
             let skipped = tokio::io::copy(&mut (&mut stream).take(offset), &mut tokio::io::sink())
@@ -152,7 +162,9 @@ impl ProviderFactory for ArchiveFactory {
             other => return Err(VfsError::UnknownScheme(other.to_owned())),
         };
         if let Some(local) = container.to_local_path() {
-            return Ok(Arc::new(ArchiveProvider::open(format, local, None).await?));
+            return Ok(Arc::new(
+                ArchiveProvider::open(format, local, None, password::key_of(container)).await?,
+            ));
         }
         // Remote or nested archive: archive libraries need random access, so
         // fetch a local copy first.
@@ -166,7 +178,8 @@ impl ProviderFactory for ArchiveFactory {
         out.shutdown().await.map_err(|e| VfsError::from_io(container, e))?;
         let temp = temp.into_temp_path();
         let local = temp.to_path_buf();
-        Ok(Arc::new(ArchiveProvider::open(format, local, Some(temp)).await?))
+        let key = password::key_of(container);
+        Ok(Arc::new(ArchiveProvider::open(format, local, Some(temp), key).await?))
     }
 }
 

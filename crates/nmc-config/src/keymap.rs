@@ -103,6 +103,7 @@ actions! {
     Delete        = "files.delete",         Files, true,  "Delete (to trash)",        ["F8", "Delete"];
     DeleteForever = "files.delete-forever", Files, false, "Delete permanently",       ["Shift+F8", "Shift+Delete"];
     Pack          = "files.pack",           Files, true,  "Pack into archive…",       ["Shift+F5"];
+    PackAdvanced  = "files.pack-advanced",  Files, false, "Advanced pack…",           ["Ctrl+Shift+F5"];
     Unpack        = "files.unpack",         Files, false, "Unpack archive…",          ["Shift+F9"];
     Properties    = "files.properties",     Files, false, "Properties and permissions", ["Alt+Enter"];
     Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", ["Ctrl+Z"];
@@ -207,7 +208,12 @@ impl Action {
             Action::Pack => {
                 "Packs the selected items into an archive (zip, 7z, tar.zst...); the type comes from the extension you type. Works on the basket too."
             }
-            Action::Unpack => "Unpacks the archive under the cursor into the other panel's folder.",
+            Action::PackAdvanced => {
+                "Packs the selected items choosing the format, the compression level and a password (zip and 7z, AES-256; 7z also hides the file names). Works on the basket too."
+            }
+            Action::Unpack => {
+                "Unpacks the archive under the cursor into the other panel's folder. An encrypted archive asks for its password."
+            }
             Action::Properties => {
                 "Shows size, dates, owner and permissions of the item under the cursor, and lets you change the permissions."
             }

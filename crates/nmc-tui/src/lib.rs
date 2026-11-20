@@ -19,8 +19,8 @@ mod ui;
 use std::io;
 
 use crossterm::event::{
-    DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyEventKind,
-    KeyModifiers,
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, Event,
+    EventStream, KeyCode, KeyEventKind, KeyModifiers,
 };
 use futures::StreamExt;
 use nmc_app::AppContext;
@@ -81,7 +81,12 @@ impl Screen {
         }));
         enable_raw_mode()?;
         let mut writer = Self::writer(to_stderr);
-        crossterm::execute!(writer, EnterAlternateScreen, EnableMouseCapture)?;
+        crossterm::execute!(
+            writer,
+            EnterAlternateScreen,
+            EnableMouseCapture,
+            EnableBracketedPaste
+        )?;
         let backend = ratatui::backend::CrosstermBackend::new(writer);
         let terminal = ratatui::Terminal::new(backend)?;
         Ok(Screen { terminal, to_stderr })
@@ -92,6 +97,7 @@ impl Screen {
         let mut writer = Self::writer(to_stderr);
         let _ = crossterm::execute!(
             writer,
+            DisableBracketedPaste,
             DisableMouseCapture,
             LeaveAlternateScreen,
             crossterm::cursor::Show
@@ -163,6 +169,7 @@ async fn run_app(
                     let (width, height) = crossterm::terminal::size().unwrap_or((80, 24));
                     pointer.handle(&mut app, event, ratatui::layout::Rect::new(0, 0, width, height));
                 }
+                Some(Ok(Event::Paste(text))) => app.paste(&text),
                 Some(Ok(_)) => {} // resize and others: just redraw
                 Some(Err(e)) => break Err(e),
                 None => break Ok(()),
