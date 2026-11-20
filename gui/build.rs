@@ -10,5 +10,5 @@ fn main() {
         "qml/DialogView.qml",
         "qml/Box.qml",
     ]);
-    CxxQtBuilder::new_qml_module(module).files(["src/ffi.rs"]).build();
+    CxxQtBuilder::new_qml_module(module).files(["src/ffi.rs"]).cpp_file("src/icon.cpp").build();
 }

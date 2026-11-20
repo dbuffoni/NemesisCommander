@@ -53,8 +53,10 @@ were not obvious are below.
   MIT license, the repository and the third-party notice (Qt, unRAR). The logo
   is in the binary (`include_bytes!`, 256 px, about 16 KB); the terminal draws
   it with half blocks, the window from a file in the temporary folder.
-  The Qt window icon is not set from QML in Qt 6.4; desktop launchers use the
-  icon of the `.desktop` file.
+  The window icon is set from C++ (`gui/src/icon.cpp`, one call, because
+  cxx-qt-lib has no `QIcon`) together with the desktop file name. The About
+  window shows the N without a tile, in a dark-arch and a white-arch variant
+  chosen by the theme.
 
 ## Consequences
 

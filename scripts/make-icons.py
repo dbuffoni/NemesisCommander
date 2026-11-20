@@ -65,15 +65,16 @@ def svg():
 """
 
 
-def png(scale=4):
+def png(scale=4, tile=True, arch_color=WHITE):
     big = SIZE * scale
     image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     mask = Image.new("L", (big, big), 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, big - 1, big - 1), 112 * scale, fill=255)
-    image.paste(Image.new("RGBA", (big, big), BACKGROUND), mask=mask)
+    if tile:
+        image.paste(Image.new("RGBA", (big, big), BACKGROUND), mask=mask)
     draw = ImageDraw.Draw(image)
     _, arch = rounded(ARCH)
-    draw.polygon([(x * scale, y * scale) for x, y in arch], fill=WHITE)
+    draw.polygon([(x * scale, y * scale) for x, y in arch], fill=arch_color)
     (x1, y1), (x2, y2), width = BAND
     band = Image.new("L", (big, big), 0)
     d = ImageDraw.Draw(band)
@@ -94,8 +95,19 @@ def png(scale=4):
             t = ((px / scale - x1) * dx + (py / scale - y1) * dy) / length
             t = max(0.0, min(1.0, t))
             pixels[px, py] = tuple(int(c0[k] + (c1[k] - c0[k]) * t) for k in range(3)) + (255,)
-    image.paste(gradient, mask=ImageChops.multiply(band, mask))
+    image.paste(gradient, mask=ImageChops.multiply(band, mask if tile else Image.new("L", (big, big), 255)))
     return image.resize((SIZE, SIZE), Image.LANCZOS)
+
+
+def mark(arch_color):
+    """The N alone on a transparent background, cropped square: for the
+    About window, which sits on a light or a dark theme."""
+    image = png(tile=False, arch_color=arch_color)
+    box = image.getbbox()
+    side = max(box[2] - box[0], box[3] - box[1]) + 24
+    cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+    square = image.crop((cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side))
+    return square.resize((256, 256), Image.LANCZOS)
 
 
 if __name__ == "__main__":
@@ -105,3 +117,6 @@ if __name__ == "__main__":
     icon = png()
     for size in (16, 24, 32, 48, 64, 128, 256, 512):
         icon.resize((size, size), Image.LANCZOS).save(os.path.join(OUT, f"nemesiscommander-{size}.png"))
+    # For a dark and for a light theme (the arch changes, the band does not).
+    mark(WHITE).save(os.path.join(OUT, "nemesiscommander-mark-dark.png"))
+    mark("#1d1b2e").save(os.path.join(OUT, "nemesiscommander-mark-light.png"))
