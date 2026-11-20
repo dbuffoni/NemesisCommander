@@ -754,12 +754,26 @@ async fn bookmarks_are_saved_and_opened() {
     assert!(h.names(SideId::Left).contains(&"docs".to_owned()));
 }
 
+/// Desktops such as GNOME keep Shift+F1/F5/F7 for themselves, so the same
+/// commands answer to Shift+F too.
+#[tokio::test]
+async fn shift_function_keys_do_what_the_alt_ones_do() {
+    for (key, title) in [("Shift+F5", "Pack"), ("Shift+F7", "Search"), ("Shift+F1", "Drives")] {
+        let mut h = Harness::new().await;
+        h.focus("docs");
+        h.key(key);
+        h.settle().await;
+        assert!(h.app.overlay().is_some(), "{key} opens something");
+        assert!(h.screen().contains(title), "{key} shows {title}: {}", h.screen());
+    }
+}
+
 #[tokio::test]
 async fn bookmark_with_one_target_opens_both_panels() {
     let mut h = Harness::new().await;
     // The target is inside an archive: any VFS source works, remote ones too.
     h.focus("docs");
-    h.key("Alt+F5");
+    h.key("Shift+F5");
     h.key("Enter");
     h.settle().await;
     h.key("Tab");
@@ -848,7 +862,7 @@ async fn tabs_open_and_close() {
 #[tokio::test]
 async fn search_by_content_and_jump_to_the_hit() {
     let mut h = Harness::new().await;
-    h.key("Alt+F7");
+    h.key("Shift+F7");
     h.type_text("*.txt");
     h.key("Enter");
     h.type_text("NEEDLE");
@@ -903,7 +917,7 @@ async fn compare_two_files() {
 async fn pack_and_browse_the_archive() {
     let mut h = Harness::new().await;
     h.focus("docs");
-    h.key("Alt+F5");
+    h.key("Shift+F5");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("pack dialog") };
     assert!(dialog.field.text().ends_with("docs.zip"));
     h.key("Enter");
@@ -927,12 +941,12 @@ async fn pack_and_browse_the_archive() {
 async fn unpack_queues_a_copy_of_the_members() {
     let mut h = Harness::new().await;
     h.focus("docs");
-    h.key("Alt+F5");
+    h.key("Shift+F5");
     h.type_text(&h.path("left/docs.zip").display().to_string());
     h.key("Enter");
     h.settle().await;
     h.focus("docs.zip");
-    h.key("Alt+F9");
+    h.key("Shift+F9");
     h.settle().await;
     assert_eq!(fs::read_to_string(h.path("right/docs/readme.md")).unwrap(), "# readme\n");
 }
@@ -1278,7 +1292,7 @@ async fn the_filter_says_how_to_remove_it() {
 async fn the_key_bar_follows_the_modifiers() {
     let mut h = Harness::new().await;
     assert!(h.screen().contains("F5Copy"));
-    h.app.set_modifiers(false, true, false);
+    h.app.set_modifiers(false, false, true);
     let screen = h.screen();
     assert!(screen.contains("F5Pack") && screen.contains("F9Unpac"), "{screen}");
     assert!(!screen.contains("F5Copy"), "{screen}");
@@ -1376,7 +1390,7 @@ async fn drives_and_connections_share_one_list() {
         }
     })
     .await;
-    for key in ["Alt+F1", "Ctrl+N"] {
+    for key in ["Shift+F1", "Ctrl+N"] {
         h.key(key);
         let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("{key}: no drive list") };
         let items = dialog.items.clone();
@@ -1393,7 +1407,7 @@ async fn drives_and_connections_share_one_list() {
         assert!(screen.contains("Drives") && screen.contains("Remote   nas"), "{screen}");
         h.key("Esc");
     }
-    h.key("Alt+F1");
+    h.key("Shift+F1");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
     let row = dialog.items.iter().position(|r| r.contains(" backup ")).unwrap();
     for _ in 0..row {
@@ -1433,7 +1447,7 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     assert!(saved.contains("name = \"backup\""), "{saved}");
 
     // F2 gives a saved connection another name; local drives have none to change.
-    h.key("Alt+F1");
+    h.key("Shift+F1");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
     let row = dialog.items.iter().position(|r| r.contains(" backup ")).unwrap();
     for _ in 0..row {
@@ -1446,11 +1460,11 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     h.key("Enter");
     assert!(h.status().contains("Renamed to Backup disk"), "{}", h.status());
     assert_eq!(h.app.context().config.connections[0].name, "Backup disk");
-    h.key("Alt+F1");
+    h.key("Shift+F1");
     h.key("Home");
     h.key("F2");
     assert!(h.status().contains("Only saved connections"), "{}", h.status());
-    h.key("Alt+F1");
+    h.key("Shift+F1");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
     assert!(dialog.items.iter().any(|r| r.contains("Backup disk")));
     let rename_back = dialog.items.iter().position(|r| r.contains("Backup disk")).unwrap();
@@ -1462,7 +1476,7 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     h.key("Enter");
 
     // Delete takes it out of the list and the settings again.
-    h.key("Alt+F1");
+    h.key("Shift+F1");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
     let row = dialog.items.iter().position(|r| r.contains(" backup ")).unwrap();
     for _ in 0..row {
@@ -1492,7 +1506,7 @@ async fn connections_have_no_key_setting_ssh_finds_its_keys() {
         });
     })
     .await;
-    h.key("Alt+F1");
+    h.key("Shift+F1");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no drive list") };
     assert!(!dialog.footer.contains("key"), "{}", dialog.footer);
     let row = dialog.items.iter().position(|r| r.contains(" nas ")).unwrap();
@@ -1744,7 +1758,7 @@ async fn the_mouse_clicks_scrolls_and_drags_between_panels() {
 
 /// Runs the search dialogs: mask, text, conditions.
 async fn search(h: &mut Harness, mask: &str, content: &str, filters: &str) {
-    h.key("Alt+F7");
+    h.key("Shift+F7");
     h.type_text(mask);
     h.key("Enter");
     h.type_text(content);
@@ -2383,7 +2397,7 @@ async fn the_basket_packs_what_it_holds() {
     h.focus("readme.md");
     h.key("Alt+B");
     h.key("Ctrl+B");
-    h.key("Alt+F5");
+    h.key("Shift+F5");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no pack dialog") };
     assert!(dialog.field.text().ends_with("basket.zip"), "{}", dialog.field.text());
     h.key("Enter");
