@@ -953,7 +953,7 @@ impl App {
 
     /// Which of Ctrl, Alt and Shift are held. Front ends call it when one is
     /// pressed or released; the function key bar then shows the commands of
-    /// those combinations (`Alt+F5` shows what it does where `F5` copies).
+    /// those combinations (`Shift+F5` shows what it does where `F5` copies).
     pub fn set_modifiers(&mut self, ctrl: bool, alt: bool, shift: bool) {
         self.held = (ctrl, alt, shift);
     }
@@ -1424,7 +1424,7 @@ impl App {
             Action::Disks => self.show_disks(),
             Action::SavedSearches => self.open_saved_searches(),
             Action::SaveSearch if self.last_search.is_none() => {
-                self.set_error("Search first (Alt+F7), then save that search")
+                self.set_error("Search first (Shift+F7), then save that search")
             }
             Action::SaveSearch => {
                 self.ask("Save search", "Name for this search:", "", InputPurpose::NameSearch)

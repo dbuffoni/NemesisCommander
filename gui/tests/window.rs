@@ -103,7 +103,7 @@ fn every_dialog_draws_cleanly() {
         ("Ctrl+Shift+D Ctrl+D", "choose"),
         // A bookmark with two targets asks which one the other panel shows.
         ("Ctrl+Alt+D Alt+O Ctrl+Alt+D Ctrl+D Enter", "choose"),
-        ("Alt+F1", "choose"),
+        ("Shift+F1", "choose"),
         ("Ctrl+N", "choose"),
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
@@ -230,7 +230,7 @@ fn drives_and_connections_are_one_list() {
         "[[connections]]\nname = \"nas\"\nuri = \"sftp://me@nas.invalid/srv\"\n",
     )
     .unwrap();
-    let run = run(home.path(), "Alt+F1", None);
+    let run = run(home.path(), "Shift+F1", None);
     assert_no_qml_warnings(&run);
     let overlay = &run.screen["overlay"];
     assert_eq!(overlay["title"], "Drives", "{overlay}");
@@ -252,7 +252,7 @@ fn settings_with_a_key_file_still_load_and_f4_asks_nothing() {
     )
     .unwrap();
     // The last row is "New connection…"; nas is just above it.
-    let run = run(home.path(), "Alt+F1 End Up F4", None);
+    let run = run(home.path(), "Shift+F1 End Up F4", None);
     assert_no_qml_warnings(&run);
     let overlay = &run.screen["overlay"];
     assert_eq!(overlay["kind"], "choose", "{overlay}");

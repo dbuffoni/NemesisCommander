@@ -168,19 +168,17 @@ does not tell is shown as `-`.
 
 The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
-what F1–F10 do, and it follows the keys you hold: with **Alt** down it shows
-what Alt+F1…F10 do (`Pack` at F5, `Unpack` at F9), with **Ctrl**, **Shift** or
-a combination likewise, and nothing for the keys that are not bound. In the
+what F1–F10 do, and it follows the keys you hold: with **Shift** down it shows
+what Shift+F1…F10 do (`Drives` at F1, `Search` at F7, `Pack` at F5, `Unpack` at F9),
+with **Ctrl**, **Alt** or a combination likewise, and nothing for the keys that are not bound. In the
 window this follows the keyboard live (clicking a label with a modifier held
 runs that combination). In the terminal it works only where the terminal
 reports Ctrl, Alt and Shift on their own (terminals with the "kitty keyboard
 protocol" turned on by the program; NemesisCommander does not turn it on).
 
-Some desktops keep **Alt+F** keys for themselves: GNOME uses Alt+F1 (activities),
-Alt+F5 (un-maximize), Alt+F7 and Alt+F8 (move and resize the window), so the
-window never receives them. Pack, Unpack, Search and the drive list therefore
-also answer to **Shift+F5**, **Shift+F9**, **Shift+F7** and **Shift+F1**.
-
+The Alt+F keys are not used: desktops such as GNOME keep Alt+F1, Alt+F5, Alt+F7 and
+Alt+F8 for themselves, so the window would never receive them. The extra
+commands are on **Shift+F** instead.
 
 ### The mouse
 
@@ -228,7 +226,7 @@ default; the destination can be edited before you confirm.
 | F7 | New folder |
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
-| Alt+F5 / Alt+F9 (or Shift+F5 / Shift+F9) | Pack into an archive / unpack one |
+| Shift+F5 / Shift+F9 | Pack into an archive / unpack one |
 | Alt+Enter | Properties, and change the dates and permissions |
 | F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
@@ -322,7 +320,7 @@ leave the name empty to copy it to the clipboard.
 The basket collects items from several folders and drives to act on together.
 **Alt+B** adds the selection; **Ctrl+B** opens the basket. In it, **Enter**
 shows an item in the panel, **F5** copies, **F6** moves, **F8** deletes,
-**Alt+F5** packs (into `basket.zip` unless you type another name) and **Ctrl+M** renames everything in the basket, **Delete**
+**Shift+F5** packs (into `basket.zip` unless you type another name) and **Ctrl+M** renames everything in the basket, **Delete**
 removes one item from the list (the file stays) and **Shift+Delete** empties it.
 Moved and deleted items leave the basket by themselves. The basket is kept
 until you quit.
@@ -420,7 +418,7 @@ panel.
 
 ## Searching and comparing
 
-**Alt+F7** searches below the current folder by name mask (`*.rs;*.toml`,
+**Shift+F7** searches below the current folder by name mask (`*.rs;*.toml`,
 with `!` to exclude) and, optionally, by text the files contain. Results
 appear in a list as they are found; Enter jumps to the chosen file in the
 panel. On the command line, `nmc find` also searches by regular expression,
@@ -507,9 +505,9 @@ two on FAT) match.
 
 Archives open like folders: press Enter on one, browse it, view and copy
 files out of it. Supported: ZIP, 7-Zip, tar (plain, gz, bz2, xz, zst),
-single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Alt+F5
+single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
-Alt+F9 unpacks.
+Shift+F9 unpacks.
 
 ![Inside an archive](images/archive.png)
 
@@ -529,7 +527,7 @@ Every command works the same on remote locations, written as URIs:
 
 ### One list for drives and connections
 
-**D**, **Alt+F1** or **Ctrl+N** open the drive list (in the window, clicking the
+**D**, **Shift+F1** or **Ctrl+N** open the drive list (in the window, clicking the
 drive name above a panel does it for that panel; the name shows where the
 panel is: `Local`, a drive letter, a connection's name): the drives of this computer
 and your saved connections together, grouped by a category column:
@@ -598,7 +596,7 @@ checksums and copies between folders of that server run on the server.
   terminal use **Install nmc serve on a server…** in the commands list (F9);
   you can give it a key with Ctrl+K.
 
-The drive list (Alt+F1) shows how each remote place is reached, for example
+The drive list (Shift+F1) shows how each remote place is reached, for example
 `[agent over SSH]` or `[nmc serve, TLS]`.
 
 Copies between two `scs://` servers (from the queue as well as `nmc cp`) go
@@ -848,8 +846,8 @@ on the settings screen (Ctrl+,).
 | F7 | New folder |
 | F8, Delete | Delete (to trash) |
 | Shift+F8, Shift+Delete | Delete permanently |
-| Alt+F5, Shift+F5 | Pack into archive |
-| Alt+F9, Shift+F9 | Unpack archive |
+| Shift+F5 | Pack into archive |
+| Shift+F9 | Unpack archive |
 | Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |
 | Alt+P | Copy path to clipboard |
@@ -872,7 +870,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| D, Alt+F1, Shift+F1, Ctrl+N | Drives and connections (on a connection: F2 rename) |
+| D, Shift+F1, Ctrl+N | Drives and connections (on a connection: F2 rename) |
 | Ctrl+D | Bookmarks and recent folders (type to filter) |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |
@@ -895,7 +893,7 @@ on the settings screen (Ctrl+,).
 
 | Tools | |
 |---|---|
-| Alt+F7, Shift+F7 | Search |
+| Shift+F7 | Search |
 | Alt+C | Compare files or folders |
 | Alt+U | Disk usage of this folder |
 | Alt+K | Disks and partitions |
