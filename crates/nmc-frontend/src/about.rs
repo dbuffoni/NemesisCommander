@@ -80,7 +80,13 @@ pub fn lines() -> Vec<String> {
 
 /// The About dialog: its text starts below the logo in a terminal.
 pub fn dialog() -> MessageDialog {
-    MessageDialog { title: "About".into(), lines: lines(), then: None, logo: true }
+    MessageDialog {
+        title: "About".into(),
+        lines: lines(),
+        then: None,
+        then_choose: None,
+        logo: true,
+    }
 }
 
 #[cfg(test)]

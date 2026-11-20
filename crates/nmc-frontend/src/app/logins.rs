@@ -87,7 +87,7 @@ impl App {
         } else {
             2
         };
-        dialog.footer = "NemesisCommander never writes a password in its own settings".into();
+        dialog.footer = "Enter: choose   Esc: cancel   Ctrl+T: test the connection".into();
         self.overlay = Some(Overlay::Choose(dialog));
     }
 
@@ -388,26 +388,55 @@ impl App {
     /// Ctrl+T in a connection question: tests what was typed so far and
     /// comes back to the question.
     pub(super) fn test_typed(&mut self, dialog: InputDialog) {
+        let typed = dialog.field.text().to_owned();
         let (location, secret) = match &dialog.purpose {
             InputPurpose::NewConnection | InputPurpose::EditConnection { .. } => {
-                match check(dialog.field.text()) {
+                match check(&typed) {
                     Ok(c) => (c.path.to_string(), c.secret.unwrap_or_default()),
                     Err(e) => return self.ask_again(dialog, e),
                 }
             }
             InputPurpose::NameConnection { uri, secret }
-            | InputPurpose::EditConnectionName { new_uri: uri, secret, .. } => {
-                (uri.clone(), secret.0.clone())
+            | InputPurpose::EditConnectionName { new_uri: uri, secret, .. }
+            | InputPurpose::ConnectionUser { uri, secret, .. } => (uri.clone(), secret.0.clone()),
+            // The password being typed is tried too.
+            InputPurpose::ConnectionPassword { uri, .. } => (uri.clone(), typed),
+            InputPurpose::S3AccessKey { next: S3Next::Save { uri, .. } } => {
+                (uri.clone(), String::new())
+            }
+            InputPurpose::S3Secret { next: S3Next::Save { uri, .. }, access } => {
+                if !typed.is_empty()
+                    && let Ok(path) = VfsPath::parse(uri)
+                {
+                    nmc_s3::settings::set_session(profile_of(&path).as_deref(), access, &typed);
+                    self.context.registry.forget(&path);
+                }
+                (uri.clone(), String::new())
             }
             _ => return,
         };
-        if !secret.is_empty()
-            && let Ok(path) = VfsPath::parse(&location)
+        self.use_password_for_test(&location, &secret);
+        self.test_connection(location, Some(dialog));
+    }
+
+    /// Ctrl+T in the login list: tests the connection as it stands.
+    pub(super) fn test_login(&mut self, dialog: ChooseDialog) {
+        let ChoosePurpose::ConnectionLogin { uri, secret, .. } = &dialog.purpose else { return };
+        let (uri, secret) = (uri.clone(), secret.0.clone());
+        self.use_password_for_test(&uri, &secret);
+        self.test_connection_back(uri, None, Some(Box::new(dialog)));
+    }
+
+    /// A password typed for a test is used for this session only.
+    fn use_password_for_test(&mut self, location: &str, secret: &str) {
+        if secret.is_empty() {
+            return;
+        }
+        if let Ok(path) = VfsPath::parse(location)
             && let Some(user) = user_of(&path)
         {
-            netrc::set_session(&host_of(&path), &user, &secret);
+            netrc::set_session(&host_of(&path), &user, secret);
             self.context.registry.forget(&path);
         }
-        self.test_connection(location, Some(dialog));
     }
 }

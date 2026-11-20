@@ -239,8 +239,8 @@ fn drives_and_connections_are_one_list() {
     assert_eq!(overlay["title"], "Drives", "{overlay}");
     let items: Vec<&str> =
         overlay["items"].as_array().unwrap().iter().map(|i| i.as_str().unwrap()).collect();
-    assert!(items[0].starts_with("Local    Home"), "{items:?}");
-    assert!(items.iter().any(|i| i.starts_with("Remote   nas ")), "{items:?}");
+    assert!(items[0].starts_with("Disk     Home"), "{items:?}");
+    assert!(items.iter().any(|i| i.starts_with("SFTP     nas ")), "{items:?}");
     assert_eq!(*items.last().unwrap(), "New connection…");
 }
 

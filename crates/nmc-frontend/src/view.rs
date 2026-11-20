@@ -850,7 +850,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         Overlay::Message(dialog) => OverlayView::Message {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
-            has_next: dialog.then.is_some(),
+            has_next: dialog.then.is_some() || dialog.then_choose.is_some(),
             hint: dialog.hint(),
             logo_url: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.0)).flatten(),
             logo_url_light: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.1)).flatten(),

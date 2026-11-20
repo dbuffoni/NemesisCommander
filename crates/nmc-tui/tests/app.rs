@@ -1397,17 +1397,17 @@ async fn drives_and_connections_share_one_list() {
         h.key(key);
         let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("{key}: no drive list") };
         let items = dialog.items.clone();
-        assert!(items[0].starts_with("Local    Home"), "{items:?}");
+        assert!(items[0].starts_with("Disk     Home"), "{items:?}");
         let category = |name: &str| {
             let row = items.iter().find(|r| r.split_whitespace().nth(1) == Some(name)).unwrap();
             row.split_whitespace().next().unwrap().to_owned()
         };
-        assert_eq!(category("backup"), "Local");
-        assert_eq!(category("nas"), "Remote");
+        assert_eq!(category("backup"), "Disk");
+        assert_eq!(category("nas"), "SFTP");
         assert_eq!(category("site"), "Archive");
         assert_eq!(items.last().unwrap(), "New connection…");
         let screen = h.screen();
-        assert!(screen.contains("Drives") && screen.contains("Remote   nas"), "{screen}");
+        assert!(screen.contains("Drives") && screen.contains("SFTP     nas"), "{screen}");
         h.key("Esc");
     }
     h.key("Shift+F1");
@@ -1493,7 +1493,7 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     h.key("Up");
     h.key("Delete");
     let Some(Overlay::Choose(after)) = h.app.overlay() else { panic!("list closed") };
-    assert!(after.items[0].starts_with("Local    Home"));
+    assert!(after.items[0].starts_with("Disk     Home"));
     assert!(h.app.context().config.connections.is_empty());
 }
 
