@@ -176,6 +176,11 @@ runs that combination). In the terminal it works only where the terminal
 reports Ctrl, Alt and Shift on their own (terminals with the "kitty keyboard
 protocol" turned on by the program; NemesisCommander does not turn it on).
 
+Some desktops keep **Alt+F** keys for themselves: GNOME uses Alt+F1 (activities),
+Alt+F5 (un-maximize), Alt+F7 and Alt+F8 (move and resize the window), so the
+window never receives them. Pack, Unpack, Search and the drive list therefore
+also answer to **Shift+F5**, **Shift+F9**, **Shift+F7** and **Shift+F1**.
+
 
 ### The mouse
 
@@ -223,7 +228,7 @@ default; the destination can be edited before you confirm.
 | F7 | New folder |
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
-| Alt+F5 / Alt+F9 | Pack into an archive / unpack one |
+| Alt+F5 / Alt+F9 (or Shift+F5 / Shift+F9) | Pack into an archive / unpack one |
 | Alt+Enter | Properties, and change the dates and permissions |
 | F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
@@ -843,8 +848,8 @@ on the settings screen (Ctrl+,).
 | F7 | New folder |
 | F8, Delete | Delete (to trash) |
 | Shift+F8, Shift+Delete | Delete permanently |
-| Alt+F5 | Pack into archive |
-| Alt+F9 | Unpack archive |
+| Alt+F5, Shift+F5 | Pack into archive |
+| Alt+F9, Shift+F9 | Unpack archive |
 | Alt+Enter | Properties, dates and permissions |
 | Ctrl+K | Checksum |
 | Alt+P | Copy path to clipboard |
@@ -867,7 +872,7 @@ on the settings screen (Ctrl+,).
 | Tab | Other panel |
 | Ctrl+L | Go to location |
 | Alt+Left, Alt+Right | Back, forward |
-| D, Alt+F1, Ctrl+N | Drives and connections (on a connection: F2 rename) |
+| D, Alt+F1, Shift+F1, Ctrl+N | Drives and connections (on a connection: F2 rename) |
 | Ctrl+D | Bookmarks and recent folders (type to filter) |
 | Ctrl+Shift+D | Bookmark this folder |
 | Ctrl+Alt+D | Bookmark this folder with the other panel's |
@@ -890,7 +895,7 @@ on the settings screen (Ctrl+,).
 
 | Tools | |
 |---|---|
-| Alt+F7 | Search |
+| Alt+F7, Shift+F7 | Search |
 | Alt+C | Compare files or folders |
 | Alt+U | Disk usage of this folder |
 | Alt+K | Disks and partitions |

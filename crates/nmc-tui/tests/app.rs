@@ -754,6 +754,20 @@ async fn bookmarks_are_saved_and_opened() {
     assert!(h.names(SideId::Left).contains(&"docs".to_owned()));
 }
 
+/// Desktops such as GNOME keep Alt+F1/F5/F7 for themselves, so the same
+/// commands answer to Shift+F too.
+#[tokio::test]
+async fn shift_function_keys_do_what_the_alt_ones_do() {
+    for (key, title) in [("Shift+F5", "Pack"), ("Shift+F7", "Search"), ("Shift+F1", "Drives")] {
+        let mut h = Harness::new().await;
+        h.focus("docs");
+        h.key(key);
+        h.settle().await;
+        assert!(h.app.overlay().is_some(), "{key} opens something");
+        assert!(h.screen().contains(title), "{key} shows {title}: {}", h.screen());
+    }
+}
+
 #[tokio::test]
 async fn bookmark_with_one_target_opens_both_panels() {
     let mut h = Harness::new().await;
