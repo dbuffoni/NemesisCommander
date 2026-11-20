@@ -2632,7 +2632,10 @@ async fn a_connection_is_edited_with_guidance_and_tested_with_a_log() {
 async fn advanced_pack_protects_an_archive_and_opening_it_asks_the_password() {
     let mut h = Harness::new().await;
     h.focus("docs");
-    h.key("Ctrl+Shift+F5");
+    h.key("Shift+F5");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("pack question") };
+    assert!(dialog.prompt.contains("Ctrl+O"), "{}", dialog.prompt);
+    h.key("Ctrl+O");
     // 1. The format.
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no format list") };
     assert!(dialog.title.starts_with("Advanced pack"), "{}", dialog.title);
@@ -2727,13 +2730,13 @@ async fn advanced_pack_protects_an_archive_and_opening_it_asks_the_password() {
 async fn advanced_pack_without_a_password_skips_the_questions_that_do_not_apply() {
     let mut h = Harness::new().await;
     h.focus("docs");
-    h.key("Ctrl+Shift+F5");
+    h.key("Shift+F5");
+    // A typed .tar.zst name puts the cursor on that format.
+    h.type_text("out.tar.zst");
+    h.key("Ctrl+O");
     // tar.zst: a level, but no password question.
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no format list") };
-    let row = dialog.items.iter().position(|r| r.starts_with("tar.zst")).unwrap();
-    for _ in 0..row {
-        h.key("Down");
-    }
+    assert!(dialog.items[dialog.cursor].starts_with("tar.zst"), "{}", dialog.cursor);
     h.key("Enter");
     h.key("Down");
     h.key("Down");
@@ -2746,7 +2749,8 @@ async fn advanced_pack_without_a_password_skips_the_questions_that_do_not_apply(
     assert!(h.path("right/docs.tar.zst").exists());
 
     // 7z with an empty password: no second question, no level.
-    h.key("Ctrl+Shift+F5");
+    h.key("Shift+F5");
+    h.key("Ctrl+O");
     h.key("Down");
     h.key("Enter");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("password asked") };

@@ -106,8 +106,8 @@ fn every_dialog_draws_cleanly() {
         ("Shift+F1", "choose"),
         ("Ctrl+N", "choose"),
         // Advanced pack: format, level, then the password as dots.
-        ("Down Ctrl+Shift+F5", "choose"),
-        ("Down Ctrl+Shift+F5 Enter Enter", "input"),
+        ("Down Shift+F5 Ctrl+O", "choose"),
+        ("Down Shift+F5 Ctrl+O Enter Enter", "input"),
         ("Down F3", "viewer"),
         ("Ctrl+J", "jobs"),
         ("Ctrl+,", "settings"),
