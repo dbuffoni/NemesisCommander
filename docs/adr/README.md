@@ -44,6 +44,7 @@ taken while implementing it.
 | 0034 | [Release 0.1.0, fifth batch: chooser, flat view, archive search, highlighting, branding](0034-card-batch-e.md) | Accepted |
 | 0035 | [Release 0.1.0, sixth batch: paste, connection editing and testing, advanced pack](0035-card-batch-f.md) | Accepted |
 | 0036 | [Logins of connections: warn, ask every time or keep in ~/.netrc](0036-connection-logins.md) | Accepted |
+| 0037 | [A template plugin, and `nmc.writeBytes` for binary files](0037-first-plugin-template.md) | Accepted |
 
 Template:
 

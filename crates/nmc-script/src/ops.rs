@@ -80,6 +80,7 @@ deno_core::extension!(
         op_sc_exists,
         op_sc_read_text,
         op_sc_write_text,
+        op_sc_write_bytes,
         op_sc_mkdir,
         op_sc_rename,
         op_sc_remove,
@@ -280,6 +281,20 @@ async fn op_sc_write_text(
     let mut sink = provider.write(&path, options).await.map_err(vfs_error)?;
     let io = |e| vfs_error(VfsError::from_io(&path, e));
     sink.write_all(text.as_bytes()).await.map_err(io)?;
+    sink.shutdown().await.map_err(io)
+}
+
+#[op2]
+async fn op_sc_write_bytes(
+    state: Rc<RefCell<OpState>>,
+    #[string] path: String,
+    #[buffer(copy)] bytes: Vec<u8>,
+) -> Result<(), JsErrorBox> {
+    let (provider, path) = open(&state, &path, Access::Write).await?;
+    let options = WriteOptions { size_hint: Some(bytes.len() as u64), ..WriteOptions::truncate() };
+    let mut sink = provider.write(&path, options).await.map_err(vfs_error)?;
+    let io = |e| vfs_error(VfsError::from_io(&path, e));
+    sink.write_all(&bytes).await.map_err(io)?;
     sink.shutdown().await.map_err(io)
 }
 
