@@ -190,13 +190,17 @@ impl App {
                 });
             }
             InputPurpose::ArchivePassword(container) => {
+                let unpacking = self.password_wanted.take().filter(|a| *a == container);
                 if text.is_empty() {
                     self.password_declined.insert(container.to_string());
                     return;
                 }
                 nmc_archive::set_password(&container, text);
                 self.context.registry.forget(&container);
-                self.reload_panels(None);
+                match unpacking {
+                    Some(archive) => self.unpack_archive(archive),
+                    None => self.reload_panels(None),
+                }
             }
             _ => {}
         }
@@ -206,7 +210,7 @@ impl App {
     /// in, once it is known that one is needed (opening it, or reading
     /// from it, failed for that reason).
     pub(super) fn ask_archive_password(&mut self) {
-        let mut shown: Vec<VfsPath> = Vec::new();
+        let mut shown: Vec<VfsPath> = self.password_wanted.iter().cloned().collect();
         for side in [nmc_panel::SideId::Left, nmc_panel::SideId::Right] {
             let mut next = self.workspace.side(side).panel().location().container();
             while let Some(container) = next {
