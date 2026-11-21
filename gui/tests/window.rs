@@ -239,8 +239,8 @@ fn drives_and_connections_are_one_list() {
     assert_eq!(overlay["title"], "Drives", "{overlay}");
     let items: Vec<&str> =
         overlay["items"].as_array().unwrap().iter().map(|i| i.as_str().unwrap()).collect();
-    assert!(items[0].starts_with("Local    Home"), "{items:?}");
-    assert!(items.iter().any(|i| i.starts_with("Remote   nas ")), "{items:?}");
+    assert!(items[0].starts_with("Disk     Home"), "{items:?}");
+    assert!(items.iter().any(|i| i.starts_with("SFTP     nas ")), "{items:?}");
     assert_eq!(*items.last().unwrap(), "New connection…");
 }
 
@@ -276,4 +276,15 @@ fn ctrl_v_pastes_the_clipboard_into_a_question() {
     assert_eq!(overlay["kind"], "input", "{overlay}");
     let text = overlay["text"].as_str().unwrap_or_default();
     assert!(text.ends_with("notes.txt"), "pasted: {text:?}");
+}
+
+#[test]
+fn the_pack_question_lists_its_keys_in_the_key_row() {
+    let home = home();
+    let run = run(home.path(), "Down Shift+F5", None);
+    assert_no_qml_warnings(&run);
+    let overlay = &run.screen["overlay"];
+    assert_eq!(overlay["kind"], "input", "{overlay}");
+    assert!(!overlay["prompt"].as_str().unwrap().contains("Ctrl+O"), "{overlay}");
+    assert!(overlay["hint"].as_str().unwrap().contains("Ctrl+O: more options"), "{overlay}");
 }

@@ -555,6 +555,12 @@ impl App {
                 }
                 Some(false)
             }
+            ChoosePurpose::ConnectionLogin { .. }
+                if press.chord.ctrl && press.chord.key == Key::Char('t') =>
+            {
+                self.test_login(dialog.clone());
+                Some(false)
+            }
             ChoosePurpose::Bookmarks(_) => self.bookmarks_key(dialog, press),
             ChoosePurpose::DiskUsage { .. } => self.disk_usage_key(dialog, press),
             ChoosePurpose::Font { .. } => self.fonts_key(dialog, press),

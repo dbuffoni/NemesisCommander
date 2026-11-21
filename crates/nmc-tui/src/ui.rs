@@ -625,7 +625,7 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog) {
         lines.extend(dialog.preview.iter().map(|l| Line::raw(fit(l, inner.width as usize))));
     }
     lines.push(Line::raw(""));
-    lines.push(Line::styled("Enter: OK    Esc: cancel    Ctrl+U: clear", dim()));
+    lines.push(Line::styled(dialog.hint(), dim()));
     frame.render_widget(Paragraph::new(lines), inner);
     frame.set_cursor_position(Position {
         x: inner.x + 1 + column as u16,

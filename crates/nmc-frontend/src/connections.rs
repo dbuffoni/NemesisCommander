@@ -294,26 +294,50 @@ pub fn check(text: &str) -> Result<Checked, String> {
     })
 }
 
-/// The lines under the address field while it is typed: the samples while
-/// there is nothing yet, then what was understood (or what is wrong), then
-/// the key that tests it.
-pub fn hints(text: &str) -> Vec<String> {
-    let mut lines = if text.trim().is_empty() || text.trim().ends_with("://") {
-        examples()
-    } else {
-        match check(text) {
-            Ok(ok) => {
-                let mut lines = vec![format!("✓ {}", ok.summary)];
-                if let Some(warning) = ok.warning {
-                    lines.push(format!("⚠ {warning}"));
-                }
-                lines
-            }
-            Err(e) => vec![format!("✗ {e}")],
-        }
-    };
-    lines.push("Ctrl+T: test the connection".into());
+/// The examples that fit what was typed so far (everything while nothing
+/// is typed), each on its own line.
+fn matching_examples(text: &str) -> Vec<String> {
+    let typed = text.trim().to_ascii_lowercase();
+    let fits: Vec<&Kind> = KINDS.iter().filter(|k| k.sample.starts_with(&typed)).collect();
+    let mut lines = vec!["Examples (user and port are optional):".to_owned()];
+    lines.extend(fits.iter().map(|k| format!("  {:<32} {}", k.sample, k.name)));
     lines
+}
+
+/// Whether `text` looks like a path of this computer, not a protocol.
+fn looks_like_path(text: &str) -> bool {
+    let text = text.trim();
+    text.starts_with(['/', '~', '.', '\\'])
+        || text.as_bytes().get(1) == Some(&b':') && text.as_bytes()[0].is_ascii_alphabetic()
+}
+
+/// The lines under the address field while it is typed: the examples that
+/// fit the first characters (all of them while nothing is typed), then what
+/// was understood or what is wrong. Nothing is called wrong before three
+/// characters that fit no protocol and look like no path.
+pub fn hints(text: &str) -> Vec<String> {
+    let typed = text.trim();
+    let fits = KINDS.iter().any(|k| k.sample.starts_with(&typed.to_ascii_lowercase()));
+    if typed.is_empty() || (fits && !looks_like_path(typed)) {
+        return matching_examples(typed);
+    }
+    if !looks_like_path(typed) && !typed.contains(':') && typed.chars().count() < 3 {
+        return examples();
+    }
+    if !looks_like_path(typed) && !typed.contains(':') {
+        let known: Vec<String> = KINDS.iter().map(|k| format!("{}://", k.scheme)).collect();
+        return vec![format!("✗ Invalid address: start with {}", known.join(", "))];
+    }
+    match check(text) {
+        Ok(ok) => {
+            let mut lines = vec![format!("✓ {}", ok.summary)];
+            if let Some(warning) = ok.warning {
+                lines.push(format!("⚠ {warning}"));
+            }
+            lines
+        }
+        Err(e) => vec![format!("✗ {e}")],
+    }
 }
 
 /// Opens the connection and reads its folder, telling each step. The last
@@ -458,16 +482,37 @@ mod tests {
         assert!(lines.len() > KINDS.len(), "{lines:?}");
         assert!(lines.iter().any(|l| l.contains("sftp://user@host:22/path") && l.contains("SFTP")));
         assert!(lines.iter().all(|l| !l.to_lowercase().contains("password")), "{lines:?}");
-        assert_eq!(hints("sftp://"), lines);
-        assert_eq!(lines.last().unwrap(), "Ctrl+T: test the connection");
+        assert_eq!(hints("sftp://").len(), 2, "only the sftp example fits");
         assert!(!prompt().to_lowercase().contains("password"));
     }
 
     #[test]
     fn hints_follow_the_typing() {
         assert_eq!(hints("sftp://me@nas")[0], "✓ SFTP over SSH · host nas · user me");
-        assert_eq!(hints("sftp://me@nas").len(), 2, "no password talk");
+        assert_eq!(hints("sftp://me@nas").len(), 1, "one line, no password talk");
         assert!(hints("ftp://x")[0].starts_with("✗ "));
+    }
+
+    #[test]
+    fn the_examples_that_fit_the_first_characters_stay() {
+        let sample =
+            |lines: &[String]| lines[1..].iter().map(|l| l.trim().to_owned()).collect::<Vec<_>>();
+        for typed in ["s", "sm", "smb", "smb:", "smb://", "SMB://us"] {
+            let lines = hints(typed);
+            assert!(lines.iter().any(|l| l.contains("smb://user@host")), "{typed}: {lines:?}");
+            assert!(lines.iter().all(|l| !l.starts_with('✗')), "{typed}: {lines:?}");
+        }
+        assert_eq!(sample(&hints("sm")).len(), 1);
+        assert!(sample(&hints("s")).len() >= 3, "sftp, smb, s3, scs fit s");
+        assert_eq!(hints("dav").len(), 3, "dav:// and davs://");
+        // Two characters that fit nothing are not called wrong yet.
+        assert_eq!(hints("xy"), examples());
+        // Three that fit nothing and are no path are.
+        assert!(hints("xyz")[0].starts_with("✗ Invalid address"), "{:?}", hints("xyz"));
+        // Paths are checked as paths, with no complaint about absoluteness
+        // before anything is typed.
+        assert!(hints("/tmp")[0].starts_with('✓'), "{:?}", hints("/tmp"));
+        assert!(hints("~")[0].starts_with(['✓', '✗']));
     }
 
     #[test]
