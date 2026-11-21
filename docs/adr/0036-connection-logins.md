@@ -1,6 +1,6 @@
 # 0036. Logins of connections: warn, ask every time or keep in ~/.netrc
 
-- Status: Accepted
+- Status: Accepted; the `~/.netrc` saving is superseded by [0040](0040-keyring-logins.md)
 - Date: 2026-11-20
 
 ## Context

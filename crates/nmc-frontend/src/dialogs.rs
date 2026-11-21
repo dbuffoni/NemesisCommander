@@ -127,7 +127,7 @@ pub enum InputPurpose {
         /// A password found in the typed address.
         secret: Secret,
     },
-    /// The password to save in `~/.netrc`.
+    /// The password to save in the system keyring.
     ConnectionPassword {
         /// The name of the connection.
         name: String,

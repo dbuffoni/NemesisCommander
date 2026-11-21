@@ -20,6 +20,7 @@
 mod capabilities;
 mod entry;
 mod error;
+pub mod keyring;
 pub mod netrc;
 mod path;
 mod provider;
