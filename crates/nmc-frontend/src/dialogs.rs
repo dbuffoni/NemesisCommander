@@ -127,7 +127,7 @@ pub enum InputPurpose {
         /// A password found in the typed address.
         secret: Secret,
     },
-    /// The password to save in `~/.netrc`.
+    /// The password to save in the system keyring.
     ConnectionPassword {
         /// The name of the connection.
         name: String,
@@ -459,6 +459,8 @@ pub enum ChoosePurpose {
 pub enum JumpRow {
     /// The bookmark at this index of the configuration.
     Bookmark(usize),
+    /// The command to bookmark the folder of the active panel.
+    AddHere,
     /// A recently opened folder (as a VFS URI).
     Recent(String),
     /// The title of the recent folders; cannot be chosen.

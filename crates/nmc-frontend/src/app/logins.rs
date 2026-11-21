@@ -1,8 +1,8 @@
 //! The login of a connection that needs a password: where it is kept
-//! (asked every time, or saved in `~/.netrc`), and testing a connection
+//! (asked every time, or saved in the system keyring), and testing a connection
 //! while it is being created.
 
-use nmc_vfs::{VfsPath, netrc};
+use nmc_vfs::{VfsPath, keyring, netrc};
 
 use super::App;
 use crate::connections::{
@@ -66,11 +66,16 @@ impl App {
             let keep = if ssh {
                 "Keep it as it is (SSH keys, ssh-agent or ~/.ssh/config)"
             } else {
-                "Keep it as it is (use ~/.netrc if it has the login)"
+                "Keep it as it is (use the login ~/.netrc already has)"
+            };
+            let save = if keyring::available() {
+                "Save the login in the system keyring (GNOME Keyring, KWallet)"
+            } else {
+                "Save the login in the system keyring (needs secret-tool: not found)"
             };
             vec![
                 "Ask for the password every time (kept in memory only)".to_owned(),
-                "Save the login in ~/.netrc (a file only you can read)".to_owned(),
+                save.to_owned(),
                 keep.to_owned(),
             ]
         };
@@ -137,7 +142,7 @@ impl App {
         if secret.0.is_empty() {
             let mut dialog = InputDialog::new(
                 "Login",
-                &format!("Password of {user} (saved in ~/.netrc, readable only by you):"),
+                &format!("Password of {user} (saved in the system keyring):"),
                 "",
                 InputPurpose::ConnectionPassword { name, uri, replace },
             );
@@ -269,17 +274,19 @@ impl App {
         }
     }
 
-    /// Writes the login to `~/.netrc` and stores the connection.
+    /// Saves the login in the system keyring and stores the connection.
     fn save_login(&mut self, name: String, uri: String, replace: Replace, password: &str) {
         let Ok(path) = VfsPath::parse(&uri) else { return };
         let (host, user) = (host_of(&path), user_of(&path).unwrap_or_default());
-        match netrc::save(&host, &user, password) {
-            Ok(file) => {
+        match keyring::store(&host, &user, password) {
+            Ok(()) => {
                 netrc::set_session(&host, &user, password);
                 self.store_connection(name, uri, replace, false);
-                self.set_status(format!("Login of {user}@{host} saved in {}", file.display()));
+                self.set_status(format!("Login of {user}@{host} saved in the system keyring"));
             }
-            Err(e) => self.set_error(format!("Cannot save the login: {e}")),
+            Err(e) => self.set_error(format!(
+                "Cannot save the login in the keyring: {e}. Choose \"ask every time\" instead"
+            )),
         }
     }
 

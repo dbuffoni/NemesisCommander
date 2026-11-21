@@ -2017,6 +2017,21 @@ async fn bookmarks_filter_as_you_type_and_list_recent_folders() {
 }
 
 #[tokio::test]
+async fn the_bookmark_list_has_a_command_to_add_the_current_folder() {
+    let mut h = Harness::new().await;
+    assert!(h.app.context().config.bookmarks.is_empty());
+    h.key("Ctrl+D");
+    let rows = results(&h);
+    assert!(rows[0].contains("Bookmark this folder"), "{rows:?}");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(h.app.context().config.bookmarks.len(), 1);
+    // Once bookmarked, the folder is no longer offered.
+    h.key("Ctrl+D");
+    assert!(results(&h).iter().all(|r| !r.contains("Bookmark this folder")), "{:?}", results(&h));
+}
+
+#[tokio::test]
 async fn searches_are_saved_run_from_the_command_list_and_forgotten() {
     let mut h = Harness::new().await;
     h.app.perform(Action::SaveSearch);
@@ -2812,10 +2827,28 @@ async fn advanced_pack_without_a_password_skips_the_questions_that_do_not_apply(
     h.key("Esc");
 }
 
-/// The login questions of a connection with a password; `netrc` is where
-/// the "save" answer writes.
-async fn webdav_harness(netrc: &std::path::Path) -> Harness {
-    nmc_vfs::netrc::set_file(Some(netrc.to_owned()));
+/// The login questions of a connection with a password; `dir` holds a fake
+/// `secret-tool` that keeps what the "save" answer stores in files.
+#[cfg(unix)]
+async fn webdav_harness(dir: &std::path::Path) -> Harness {
+    use std::os::unix::fs::PermissionsExt;
+    let script = dir.join("secret-tool");
+    let body = format!(
+        r#"#!/bin/sh
+cmd=$1; shift
+[ "$cmd" = store ] && shift 2
+while [ $# -gt 0 ]; do case $1 in host) h=$2;; user) u=$2;; esac; shift 2; done
+f={dir}/$h.$u
+case $cmd in
+  store) cat > "$f" ;;
+  lookup) [ -f "$f" ] && cat "$f" || exit 1 ;;
+esac
+"#,
+        dir = dir.display()
+    );
+    fs::write(&script, body).unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    nmc_vfs::keyring::set_command(Some(script));
     Harness::new().await
 }
 
@@ -2838,11 +2871,11 @@ async fn the_new_connection_prompt_lists_one_example_per_line() {
     assert!(dialog.hint().contains("Ctrl+T: test"));
 }
 
+#[cfg(unix)]
 #[tokio::test]
-async fn a_login_is_saved_in_netrc_or_asked_every_time() {
+async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let dir = TempDir::new().unwrap();
-    let netrc = dir.path().join("netrc");
-    let mut h = webdav_harness(&netrc).await;
+    let mut h = webdav_harness(dir.path()).await;
 
     // Typing a password in the address warns, then offers where to keep it.
     h.key("Ctrl+N");
@@ -2866,8 +2899,8 @@ async fn a_login_is_saved_in_netrc_or_asked_every_time() {
     let saved = &h.app.context().config.connections[0];
     assert_eq!(saved.uri, "dav://anna@files.invalid/docs", "no password in the settings");
     assert!(!saved.options.contains_key("password"));
-    let text = fs::read_to_string(&netrc).unwrap();
-    assert!(text.contains("machine files.invalid login anna password s3cret"), "{text}");
+    let stored = nmc_vfs::keyring::lookup("files.invalid", Some("anna")).unwrap();
+    assert_eq!(stored.password, "s3cret", "the keyring holds the password");
     let settings = format!("{:?}", h.app.context().config.connections);
     assert!(!settings.contains("s3cret"), "the password never reaches the settings");
 
@@ -2893,7 +2926,7 @@ async fn a_login_is_saved_in_netrc_or_asked_every_time() {
     let saved = &h.app.context().config.connections[1];
     assert_eq!(saved.uri, "dav://bob@files2.invalid/docs");
     assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
-    assert!(!fs::read_to_string(&netrc).unwrap().contains("files2"), "nothing saved to netrc");
+    assert!(nmc_vfs::keyring::lookup("files2.invalid", Some("bob")).is_none(), "nothing saved");
 
     // Opening it asks for the password (hidden), once per session.
     drive_row(&mut h, "second");

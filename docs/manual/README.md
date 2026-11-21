@@ -611,12 +611,15 @@ SMB, SFTP, agent and S3 (not for `nmc serve`, which uses a certificate):
   the password (S3: access key ID and secret access key, both asked) is asked,
   hidden, the first time you open or test it, and kept in memory until you
   quit.
-- **Save it**: WebDAV, SMB, SFTP and agent logins go to `~/.netrc` (a file only
-  you can read, mode 600; `_netrc` on Windows); S3 keys go to the profile in
-  `~/.aws/credentials`, the file the AWS tools use.
+- **Save it**: WebDAV, SMB, SFTP and agent passwords go to the system keyring
+  (GNOME Keyring, KWallet or any Secret Service), which asks you to unlock it
+  when needed; this uses the `secret-tool` command (package `libsecret`, or
+  `libsecret-tools` on Debian and Ubuntu). Without it, or without a running
+  keyring, the list says so and *ask every time* still works. S3 keys go to the
+  profile in `~/.aws/credentials`, the file the AWS tools use.
 - **Keep it as it is**: nothing is asked. SFTP and agent use your SSH keys,
   ssh-agent and `~/.ssh/config`; S3 uses `~/.aws` and the environment; WebDAV
-  and SMB use the login `~/.netrc` already has.
+  and SMB use the login in the keyring or `~/.netrc`, if either has it.
 
 If the address has no user, it is asked. NemesisCommander never writes a
 password in its own settings.
@@ -721,7 +724,7 @@ An SMB connection that the server dropped is signed in again on the next call.
 ## Bookmarks, tabs and history
 
 - **Ctrl+Shift+D** bookmarks the current folder, **Ctrl+D** lists the
-  bookmarks and, below them, the recent folders (Enter opens one; Delete
+  bookmarks (with a row "+ Bookmark this folder" to add the current one) and, below them, the recent folders (Enter opens one; Delete
   removes a bookmark). Move with the arrows, or just type: only the
   bookmarks whose name or folder contains the text (case does not matter)
   stay, and the five most recent folders that match are listed below them.

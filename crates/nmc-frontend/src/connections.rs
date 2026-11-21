@@ -51,19 +51,19 @@ const KINDS: &[Kind] = &[
         scheme: "davs",
         name: "WebDAV over HTTPS",
         sample: "davs://user@host:443/path",
-        password: "~/.netrc: machine host login user password …",
+        password: "saved in the system keyring, or ~/.netrc",
     },
     Kind {
         scheme: "dav",
         name: "WebDAV",
         sample: "dav://user@host:80/path",
-        password: "~/.netrc: machine host login user password …",
+        password: "saved in the system keyring, or ~/.netrc",
     },
     Kind {
         scheme: "smb",
         name: "SMB",
         sample: "smb://user@host:445/share/path",
-        password: "~/.netrc: machine host login user password …",
+        password: "saved in the system keyring, or ~/.netrc",
     },
     Kind {
         scheme: "s3",
@@ -429,7 +429,7 @@ fn failed(mut log: Vec<String>, started: Instant, step: &str, error: &str) -> Ve
     }
     let lower = error.to_lowercase();
     let hint = if lower.contains("permission denied") || lower.contains("authentication") {
-        Some("Check the user name and the key, agent or ~/.netrc entry for this host")
+        Some("Check the user name and the key, agent, keyring or ~/.netrc entry for this host")
     } else if lower.contains("refused") {
         Some("The host answers but nothing listens on that port: check the port and the service")
     } else if lower.contains("resolve")

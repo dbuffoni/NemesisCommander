@@ -5,8 +5,8 @@
 //! The path is the server path, so a Nextcloud folder is for example
 //! `davs://alice@cloud.example.com/remote.php/dav/files/alice/`.
 //!
-//! Logins come from the user's `~/.netrc` (see [`netrc`]); NemesisCommander
-//! does not store passwords. Basic authentication is used, sent only once
+//! Logins come from the system keyring or the user's `~/.netrc` (see
+//! [`netrc`]); NemesisCommander does not store passwords itself. Basic authentication is used, sent only once
 //! the server asks for it.
 //!
 //! WebDAV has no partial writes and no way to set modification times or

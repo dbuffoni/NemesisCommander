@@ -104,6 +104,9 @@ ApplicationWindow {
         }
     }
 
+    // The size of a normal window is kept for the next start.
+    onClosing: if (visibility === ApplicationWindow.Windowed) commander.remember_window(width, height)
+
     Component.onCompleted: commander.start(Qt.fontFamilies().join("\n"))
 
     // Rows that fit: tell the application, which scrolls and pages with it.

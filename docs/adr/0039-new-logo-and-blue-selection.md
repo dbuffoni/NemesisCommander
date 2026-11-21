@@ -31,3 +31,10 @@ app and the same blue, transparent, for selected rows.
 
 The blue is only approximate to the supplied picture (hand-traced); the SVG is
 the master. Revisit if Daniele supplies vector artwork.
+
+## Update (same day)
+
+Daniele found the S-shaped blue band too busy and asked for a simple bar. The
+logo is now a straight blue bar (#1F6BFF, 38 units wide) centred on the black
+diagonal, inside a black frame that follows the outline of the N, passing
+under the two pills. Same files, same script.

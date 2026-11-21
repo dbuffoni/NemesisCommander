@@ -140,7 +140,7 @@ Item {
             title: "Commands"
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
-            width: Math.min(dialogs.theme.width - 40, 860)
+            width: Math.min(dialogs.theme.width * 0.9, 860)
             Flow {
                 Layout.fillWidth: true
                 spacing: 6
@@ -367,7 +367,7 @@ Item {
             title: "Settings    " + dialogs.view.percent + "%"
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
-            width: Math.min(dialogs.theme.width - 40, 860)
+            width: Math.min(dialogs.theme.width * 0.9, 860)
             Repeater {
                 model: dialogs.view.rows
                 delegate: Rectangle {

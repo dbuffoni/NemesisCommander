@@ -85,8 +85,8 @@ const KEEPALIVE_OPTIONS: &[&str] =
 /// would land in the middle of the protocol. `-T`: no terminal, so the
 /// streams carry bytes unchanged.
 ///
-/// When a password is known for the target (typed for this session or in
-/// `~/.netrc`), batch mode is off so that `ssh` may ask for it, through the
+/// When a password is known for the target (typed for this session, in the
+/// keyring or in `~/.netrc`), batch mode is off so that `ssh` may ask for it, through the
 /// helper of [`password_env`], and asks once.
 pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, String> {
     let mut args = vec!["-T".to_owned()];
@@ -122,7 +122,7 @@ pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, Stri
 }
 
 /// The password for `target`: one typed for this session or saved in
-/// `~/.netrc` for the same host and user.
+/// the keyring or `~/.netrc` for the same host and user.
 fn password_of(target: &Target) -> Option<String> {
     let user = target.user.as_deref()?;
     nmc_vfs::netrc::lookup(&target.host, Some(user)).map(|login| login.password)
