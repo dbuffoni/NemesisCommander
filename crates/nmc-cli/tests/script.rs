@@ -307,3 +307,86 @@ fn the_guide_is_printed() {
     let dir = TempDir::new().unwrap();
     nmc(&dir).args(["run", "--guide"]).assert().success().stdout(contains("nmc test"));
 }
+
+/// A Git repository (made with the system's git) holding a plugin.
+fn plugin_repository(dir: &std::path::Path, version: &str, description: &str) {
+    let git = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    std::fs::create_dir_all(dir).unwrap();
+    if !dir.join(".git").exists() {
+        git(&["init", "--quiet", "--initial-branch=main"]);
+    }
+    std::fs::write(
+        dir.join("plugin.json"),
+        format!(
+            r#"{{"name":"fromgit","version":"{version}","description":"{description}",
+                "commands":[{{"id":"go","title":"Go"}}]}}"#
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.join("main.ts"), "nmc.print('hi');").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", version]);
+}
+
+#[test]
+fn a_plugin_installs_from_git_and_updates() {
+    if std::process::Command::new("git").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    plugin_repository(&repo, "1.0.0", "first");
+    let url = format!("file://{}", repo.display());
+
+    let nmc = || {
+        let mut command = Command::cargo_bin("nmc").unwrap();
+        command
+            .env("NMC_CONFIG_DIR", dir.path().join("config"))
+            .env("NMC_DATA_DIR", dir.path().join("data"));
+        command
+    };
+    nmc().args(["plugin", "install", &url]).assert().success().stdout(contains("fromgit 1.0.0"));
+    // The repository itself is not copied, only the plugin.
+    assert!(!dir.path().join("data/plugins/fromgit/.git").exists());
+    assert!(dir.path().join("data/plugins/fromgit/main.ts").exists());
+    nmc()
+        .args(["plugin", "list"])
+        .assert()
+        .success()
+        .stdout(contains("fromgit 1.0.0").and(contains(format!("from {url}"))));
+    let lock = std::fs::read_to_string(dir.path().join("data/plugin-lock.json")).unwrap();
+    assert!(lock.contains("\"fromgit\"") && lock.contains("\"commit\""), "{lock}");
+
+    nmc().args(["plugin", "update"]).assert().success().stdout(contains("up to date"));
+
+    plugin_repository(&repo, "1.1.0", "second");
+    nmc()
+        .args(["plugin", "update", "fromgit"])
+        .assert()
+        .success()
+        .stdout(contains("1.0.0 -> 1.1.0"));
+    nmc().args(["plugin", "list"]).assert().stdout(contains("fromgit 1.1.0"));
+    nmc().args(["plugin", "update"]).assert().success().stdout(contains("up to date"));
+
+    // A plugin copied from a folder has no source to update from.
+    nmc().args(["plugin", "install", repo.to_str().unwrap()]).assert().success();
+    nmc()
+        .args(["plugin", "update", "fromgit"])
+        .assert()
+        .failure()
+        .stderr(contains("not installed from Git"));
+    // A missing repository is reported, not hung on.
+    nmc()
+        .args(["plugin", "install", &format!("file://{}/nope", dir.path().display())])
+        .assert()
+        .failure()
+        .stderr(contains("git clone"));
+}

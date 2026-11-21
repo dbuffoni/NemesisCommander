@@ -318,7 +318,9 @@ impl InputDialog {
     pub fn hint(&self) -> String {
         let mut hint = String::from("Enter: OK    Esc: cancel    Ctrl+U: clear");
         match &self.purpose {
-            InputPurpose::PackInto(_) => hint.push_str("    Ctrl+O: more options"),
+            InputPurpose::PackInto(_) => {
+                hint.push_str("    Ctrl+O: more options (format, level, password)")
+            }
             purpose if purpose.testable() => hint.push_str("    Ctrl+T: test the connection"),
             _ => {}
         }
