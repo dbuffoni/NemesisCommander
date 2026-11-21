@@ -266,7 +266,7 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             style = style.fg(Color::DarkGray);
         }
         if panel.is_selected(&entry.name) {
-            style = style.fg(Color::Yellow).add_modifier(Modifier::BOLD);
+            style = style.fg(Color::Rgb(0x6f, 0xa3, 0xff)).add_modifier(Modifier::BOLD);
         }
         if i == cursor {
             style = if is_active {
