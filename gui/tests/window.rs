@@ -183,10 +183,16 @@ fn every_viewer_draws_cleanly() {
         std::fs::write(home.path().join("left").join(name), data).unwrap();
     }
     let shot = home.path().join("viewer.png");
-    // left/: .., budget.xlsx, guide.md, kickoff.pptx, notes.txt, offer.docx, report.pdf, torus.stl
-    for (downs, mode) in
-        [(1, "document"), (2, "document"), (5, "document"), (6, "pdf"), (7, "model")]
-    {
+    // left/: .., budget.xlsx, guide.md, kickoff.pptx, notes.txt, offer.docx, report.pdf, story.epub, tone.wav, torus.stl
+    for (downs, mode) in [
+        (1, "document"),
+        (2, "document"),
+        (5, "document"),
+        (6, "pdf"),
+        (7, "document"),
+        (8, "document"),
+        (9, "model"),
+    ] {
         let keys = format!("{}F3", "Down ".repeat(downs));
         let run = run(home.path(), &keys, Some(&shot));
         assert_no_qml_warnings(&run);
