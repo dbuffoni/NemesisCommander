@@ -1,122 +1,95 @@
 #!/usr/bin/env python3
-"""Draws the NemesisCommander icon: assets/branding/nemesiscommander.svg and
-the PNG sizes, from one description of the shapes.
+"""Draws the NemesisCommander icon: assets/branding/nemesiscommander.svg, the
+PNG sizes and the two marks for the About window, from one description of
+the shapes.
 
-    scripts/make-icons.py            (needs Pillow)
+    scripts/make-icons.py            (needs node with Playwright's Chromium)
 
-The icon is an N made of a white arch and a purple band across it. The full logo
-(nemesiscommander-logo.png) is the artwork it was drawn from.
+The N is a white arch and a purple band across it, as in the artwork
+(nemesiscommander-logo.png) the shapes were traced from; the coordinates
+below are in that picture's pixels (1536 x 1024).
 """
-import math
+import json
 import os
-from PIL import Image, ImageDraw, ImageChops
+import subprocess
+import tempfile
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "branding")
-SIZE = 512
 BACKGROUND = "#0b0b12"
 WHITE = "#ececf6"
-GRADIENT = ("#4b12f0", "#b21eff")
+DARK_ARCH = "#1d1b2e"
 
-# The arch: corner points and the radius each corner is rounded with. The
-# right side of it is hidden under the band, which leaves the dark notch.
-ARCH = [((67, 92), 44), ((236, 198), 6), ((157, 243), 2), ((157, 366), 4), ((67, 415), 26)]
-# The band: a thick line with round ends, from where it starts to where
-# it ends and how wide it is.
-BAND = ((207, 238), (403, 378), 84)
-
-
-def rounded(points):
-    """Path commands and sampled outline of a polygon with rounded corners."""
-    n = len(points)
-    commands, outline = [], []
-    for i, (p, r) in enumerate(points):
-        a, b = points[i - 1][0], points[(i + 1) % n][0]
-
-        def toward(q):
-            d = math.dist(p, q)
-            k = min(r, d / 2) / d
-            return (p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k)
-
-        s, e = toward(a), toward(b)
-        commands.append(("M" if i == 0 else "L") + f"{s[0]:.1f} {s[1]:.1f}")
-        commands.append(f"Q{p[0]} {p[1]} {e[0]:.1f} {e[1]:.1f}")
-        for t in range(0, 9):
-            u = t / 8
-            outline.append(((1 - u) ** 2 * s[0] + 2 * u * (1 - u) * p[0] + u * u * e[0],
-                            (1 - u) ** 2 * s[1] + 2 * u * (1 - u) * p[1] + u * u * e[1]))
-    return " ".join(commands) + "Z", outline
-
-
-def svg():
-    arch, _ = rounded(ARCH)
-    (x1, y1), (x2, y2), width = BAND
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{SIZE}" height="{SIZE}" viewBox="0 0 {SIZE} {SIZE}">
-  <title>NemesisCommander</title>
-  <defs>
-    <linearGradient id="band" gradientUnits="userSpaceOnUse" x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}">
-      <stop offset="0" stop-color="{GRADIENT[0]}"/>
-      <stop offset="1" stop-color="{GRADIENT[1]}"/>
+ARCH = "M425 240 C425 190 465 165 515 182 L755 345 L592 440 L590 662 L478 744 C445 760 425 745 425 715 Z"
+BAND = ("M592 437 C615 380 665 345 718 345 L752 347 L1098 628 C1108 636 1112 645 1110 660 "
+        "C1105 715 1050 760 995 753 C975 750 962 745 945 733 L625 447 C612 440 600 438 592 437 Z")
+DEFS = """<defs>
+    <linearGradient id="band" gradientUnits="userSpaceOnUse" x1="640" y1="400" x2="1080" y2="720">
+      <stop offset="0" stop-color="#4b12f0"/>
+      <stop offset="1" stop-color="#b21eff"/>
     </linearGradient>
-  </defs>
-  <rect width="{SIZE}" height="{SIZE}" rx="112" fill="{BACKGROUND}"/>
-  <path d="{arch}" fill="{WHITE}"/>
-  <line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="url(#band)" stroke-width="{width}" stroke-linecap="round"/>
+  </defs>"""
+# Where the N is in the artwork: centre and size.
+CENTRE = (768, 462)
+SPAN = (687, 595)
+
+
+def shapes(arch_color):
+    return f'<path d="{ARCH}" fill="{arch_color}"/>\n  <path d="{BAND}" fill="url(#band)"/>'
+
+
+def tile_svg():
+    s = 0.56
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>NemesisCommander</title>
+  {DEFS}
+  <rect width="512" height="512" rx="112" fill="{BACKGROUND}"/>
+  <g transform="translate(256 256) scale({s}) translate(-{CENTRE[0]} -{CENTRE[1]})">
+  {shapes(WHITE)}
+  </g>
 </svg>
 """
 
 
-def png(scale=4, tile=True, arch_color=WHITE):
-    big = SIZE * scale
-    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    mask = Image.new("L", (big, big), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, big - 1, big - 1), 112 * scale, fill=255)
-    if tile:
-        image.paste(Image.new("RGBA", (big, big), BACKGROUND), mask=mask)
-    draw = ImageDraw.Draw(image)
-    _, arch = rounded(ARCH)
-    draw.polygon([(x * scale, y * scale) for x, y in arch], fill=arch_color)
-    (x1, y1), (x2, y2), width = BAND
-    band = Image.new("L", (big, big), 0)
-    d = ImageDraw.Draw(band)
-    d.line([(x1 * scale, y1 * scale), (x2 * scale, y2 * scale)], fill=255, width=width * scale)
-    for x, y in ((x1, y1), (x2, y2)):
-        r = width * scale / 2
-        d.ellipse((x * scale - r, y * scale - r, x * scale + r, y * scale + r), fill=255)
-    # The gradient runs along the band.
-    gradient = Image.new("RGBA", (big, big))
-    pixels = gradient.load()
-    dx, dy = x2 - x1, y2 - y1
-    length = dx * dx + dy * dy
-    c0 = tuple(int(GRADIENT[0][i:i + 2], 16) for i in (1, 3, 5))
-    c1 = tuple(int(GRADIENT[1][i:i + 2], 16) for i in (1, 3, 5))
-    row = [None] * big
-    for py in range(0, big):
-        for px in range(0, big):
-            t = ((px / scale - x1) * dx + (py / scale - y1) * dy) / length
-            t = max(0.0, min(1.0, t))
-            pixels[px, py] = tuple(int(c0[k] + (c1[k] - c0[k]) * t) for k in range(3)) + (255,)
-    image.paste(gradient, mask=ImageChops.multiply(band, mask if tile else Image.new("L", (big, big), 255)))
-    return image.resize((SIZE, SIZE), Image.LANCZOS)
+def mark_svg(arch_color):
+    side = max(SPAN) + 70
+    x, y = CENTRE[0] - side / 2, CENTRE[1] - side / 2
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="{x} {y} {side} {side}">
+  {DEFS}
+  {shapes(arch_color)}
+</svg>
+"""
 
 
-def mark(arch_color):
-    """The N alone on a transparent background, cropped square: for the
-    About window, which sits on a light or a dark theme."""
-    image = png(tile=False, arch_color=arch_color)
-    box = image.getbbox()
-    side = max(box[2] - box[0], box[3] - box[1]) + 24
-    cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
-    square = image.crop((cx - side // 2, cy - side // 2, cx - side // 2 + side, cy - side // 2 + side))
-    return square.resize((256, 256), Image.LANCZOS)
+RENDER = """
+const {chromium} = require('playwright');
+(async () => {
+  const jobs = JSON.parse(process.argv[2]);
+  const browser = await chromium.launch();
+  for (const [svg, png, size, transparent] of jobs) {
+    const page = await browser.newPage({viewport: {width: size, height: size}});
+    await page.setContent('<style>html,body{margin:0;background:transparent}svg{display:block;width:100vw;height:100vh}</style>'
+      + require('fs').readFileSync(svg, 'utf8'));
+    await page.screenshot({path: png, omitBackground: transparent});
+  }
+  await browser.close();
+})();
+"""
 
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    with open(os.path.join(OUT, "nemesiscommander.svg"), "w") as f:
-        f.write(svg())
-    icon = png()
-    for size in (16, 24, 32, 48, 64, 128, 256, 512):
-        icon.resize((size, size), Image.LANCZOS).save(os.path.join(OUT, f"nemesiscommander-{size}.png"))
-    # For a dark and for a light theme (the arch changes, the band does not).
-    mark(WHITE).save(os.path.join(OUT, "nemesiscommander-mark-dark.png"))
-    mark("#1d1b2e").save(os.path.join(OUT, "nemesiscommander-mark-light.png"))
+    out = lambda name: os.path.join(OUT, name)
+    work = tempfile.mkdtemp()
+    open(out("nemesiscommander.svg"), "w").write(tile_svg())
+    marks = {"dark": WHITE, "light": DARK_ARCH}
+    jobs = [(out("nemesiscommander.svg"), out(f"nemesiscommander-{n}.png"), n, False)
+            for n in (16, 24, 32, 48, 64, 128, 256, 512)]
+    for name, color in marks.items():
+        path = os.path.join(work, f"mark-{name}.svg")
+        open(path, "w").write(mark_svg(color))
+        jobs.append((path, out(f"nemesiscommander-mark-{name}.png"), 256, True))
+    script = os.path.join(work, "render.js")
+    open(script, "w").write(RENDER)
+    subprocess.run(["node", script, json.dumps(jobs)], check=True,
+                   env={**os.environ, "NODE_PATH": subprocess.run(
+                       ["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()})

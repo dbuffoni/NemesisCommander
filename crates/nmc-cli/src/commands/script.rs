@@ -74,6 +74,7 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
 
     let plugins_dir = context.paths.plugins_dir();
     let mut grants = Grants::load(&context.paths.plugin_grants_file())?;
+    let mut lock = nmc_script::source::Lock::load(&context.paths.plugin_lock_file())?;
     let installed = |name: &str| -> Result<plugin::Plugin, String> {
         plugin::Plugin::load(&plugins_dir.join(name))
             .map_err(|_| format!("no plugin {name:?} is installed (see `nmc plugin list`)"))
@@ -93,6 +94,15 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                     manifest.version,
                     manifest.description
                 );
+                if let Some(source) = lock.get(&manifest.name) {
+                    let reference =
+                        source.reference.as_deref().map(|r| format!("#{r}")).unwrap_or_default();
+                    crate::out!(
+                        "    from {}{reference} at {}",
+                        source.url,
+                        &source.commit[..source.commit.len().min(10)]
+                    );
+                }
                 for command in &manifest.commands {
                     crate::out!("    {}  {}", command.id, command.title);
                 }
@@ -101,8 +111,27 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                 }
             }
         }
-        PluginAction::Install { folder } => {
-            let plugin = plugin::install(std::path::Path::new(&folder), &plugins_dir)?;
+        PluginAction::Install { source, subdir } => {
+            let plugin = match nmc_script::source::parse_repository(&source) {
+                Some(repository) => {
+                    eprintln!("nmc: fetching {}…", repository.url);
+                    nmc_script::source::install(
+                        &repository,
+                        subdir.as_deref(),
+                        &plugins_dir,
+                        &mut lock,
+                    )?
+                }
+                None => {
+                    if subdir.is_some() {
+                        return Err("--subdir applies to a Git repository only".into());
+                    }
+                    let plugin = plugin::install(std::path::Path::new(&source), &plugins_dir)?;
+                    // A copy from a folder no longer follows its repository.
+                    lock.forget(plugin.name())?;
+                    plugin
+                }
+            };
             crate::out!("installed {} {}", plugin.name(), plugin.manifest.version);
             if !grants.is_granted(&plugin) {
                 eprintln!(
@@ -112,10 +141,48 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                 );
             }
         }
+        PluginAction::Update { names } => {
+            let names: Vec<String> =
+                if names.is_empty() { lock.names().map(str::to_owned).collect() } else { names };
+            if names.is_empty() {
+                crate::out!("no plugin was installed from Git");
+            }
+            let mut failed = false;
+            for name in names {
+                match nmc_script::source::update(&name, &plugins_dir, &mut lock) {
+                    Ok(nmc_script::source::Updated::Current { version }) => {
+                        crate::out!("{name} {version} is up to date");
+                    }
+                    Ok(nmc_script::source::Updated::Newer { plugin, from }) => {
+                        crate::out!(
+                            "updated {name} {} -> {} ({} -> {})",
+                            from.0,
+                            plugin.manifest.version,
+                            &from.1[..from.1.len().min(10)],
+                            lock.get(&name).map_or("", |s| &s.commit[..s.commit.len().min(10)]),
+                        );
+                        if !grants.is_granted(&plugin) {
+                            eprintln!(
+                                "nmc: {name} now asks to {}; allow it with `nmc plugin allow {name}` or at first use",
+                                plugin.manifest.permissions.describe().join(", ")
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("nmc: {name}: {e}");
+                        failed = true;
+                    }
+                }
+            }
+            if failed {
+                return Ok(ExitCode::from(1));
+            }
+        }
         PluginAction::Remove { name } => {
             let plugin = installed(&name)?;
             std::fs::remove_dir_all(&plugin.dir)?;
             grants.revoke(&name)?;
+            lock.forget(&name)?;
             crate::out!("removed {name}");
         }
         PluginAction::Allow { name } => grants.grant(&installed(&name)?)?,

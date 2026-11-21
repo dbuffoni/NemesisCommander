@@ -642,10 +642,22 @@ pub struct PluginArgs {
 pub enum PluginAction {
     /// The installed plugins, their commands and permissions.
     List,
-    /// Install (or update) the plugin in a folder.
+    /// Install (or replace) a plugin from a folder or a Git repository.
+    #[command(after_help = "The source is a folder with a plugin.json, or a Git repository \
+(cloned with the system's git): a URL, git@host:owner/repo or github:owner/repo. Add \
+#branch-or-tag to pick a version. Repository installs are remembered in plugin-lock.json \
+(see `nmc plugin update`).")]
     Install {
-        /// A folder with a plugin.json.
-        folder: String,
+        /// A folder with a plugin.json, or a Git repository.
+        source: String,
+        /// The folder of the repository that holds the plugin (default: its top).
+        #[arg(long, value_name = "FOLDER")]
+        subdir: Option<String>,
+    },
+    /// Fetch newer versions of plugins installed from Git.
+    Update {
+        /// The plugins to update (default: all installed from Git).
+        names: Vec<String>,
     },
     /// Uninstall a plugin and forget its permissions.
     Remove {

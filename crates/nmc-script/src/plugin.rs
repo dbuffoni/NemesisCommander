@@ -69,6 +69,9 @@ pub enum PluginError {
         /// The script's error.
         error: ScriptError,
     },
+    /// A plugin could not be fetched from, or updated from, its Git source.
+    #[error("{0}")]
+    Source(String),
     /// The grants file cannot be read or written.
     #[error("{path}: {message}")]
     Grants {
@@ -399,6 +402,10 @@ fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
         let entry = entry?;
         let kind = entry.file_type()?;
         let target = to.join(entry.file_name());
+        // The repository a plugin came from is not part of the plugin.
+        if entry.file_name() == ".git" {
+            continue;
+        }
         if kind.is_dir() {
             copy_tree(&entry.path(), &target)?;
         } else if kind.is_file() {

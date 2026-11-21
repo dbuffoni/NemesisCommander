@@ -53,6 +53,12 @@ impl AppPaths {
         self.data_dir.join("plugins")
     }
 
+    /// Where each plugin installed from Git came from (kept next to the
+    /// plugins: settings sharing does not carry it to a machine without them).
+    pub fn plugin_lock_file(&self) -> PathBuf {
+        self.data_dir.join("plugin-lock.json")
+    }
+
     /// The user's own scripts (`.ts`, `.js`), listed in the command list.
     pub fn scripts_dir(&self) -> PathBuf {
         self.data_dir.join("scripts")

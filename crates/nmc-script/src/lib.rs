@@ -24,6 +24,7 @@ mod engine;
 mod ops;
 pub mod permissions;
 pub mod plugin;
+pub mod source;
 
 use std::time::Duration;
 

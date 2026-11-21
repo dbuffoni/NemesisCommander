@@ -518,7 +518,8 @@ single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
 Shift+F9 unpacks.
 
-The Pack question has **more options**: press **Ctrl+O** in it (the typed name,
+To protect an archive with a password, use the Pack question's **more
+options** (the key row says so: Ctrl+O, "format, level, password"): press **Ctrl+O** in it (the typed name,
 such as `site.7z`, picks the format to start on). It asks, one step at a time, for the format, the compression level (fastest, fast, normal,
 smallest; formats that have none skip it), a **password** and where to write
 the archive. The password question appears for ZIP and 7z only: both use
@@ -766,6 +767,17 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   permissions they need (for example `$SELECTION` or `$OTHER`). Install one
   with `nmc plugin install DIR`; the first run asks you to allow its
   permissions.
+- A plugin can also come from **Git**: `nmc plugin install
+  https://github.com/owner/repo` (or `github:owner/repo`, or
+  `git@host:owner/repo`) clones it with the system's `git` and installs the
+  plugin at the top of the repository (`--subdir FOLDER` when it is in a
+  folder of it; `#branch-or-tag` at the end of the address picks a
+  version). Where it came from and the commit installed are kept in
+  `plugin-lock.json` in the data folder, and `nmc plugin list` shows them.
+  `nmc plugin update` fetches the latest version of every plugin installed
+  from Git (or of the ones you name) and replaces those that changed; a
+  plugin that now asks for more permissions asks again before it runs.
+  Installing from a folder, or removing the plugin, drops its entry.
 - Plugin commands are in the command list (F9) as `Category/Command`: in
   the category their manifest names (`"category": "Files"`), or in
   **Plugins**. Each can have a shortcut (Ctrl+K in the list).

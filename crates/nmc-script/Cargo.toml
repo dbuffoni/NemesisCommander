@@ -19,6 +19,7 @@ deno_error = { version = "0.7.1", optional = true }
 deno_ast = { version = "0.53.3", features = ["transpiling"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "net"] }
 
@@ -30,7 +31,6 @@ engine = ["dep:deno_core", "dep:deno_error", "dep:deno_ast"]
 
 [dev-dependencies]
 nmc-providers.workspace = true
-tempfile.workspace = true
 tokio = { workspace = true, features = ["full"] }
 
 [lints]

@@ -18,8 +18,16 @@ pub const LOGO_PNG: &[u8] =
 pub const LOGO_LIGHT_PNG: &[u8] =
     include_bytes!("../../../assets/branding/nemesiscommander-mark-light.png");
 
-/// The application icon (the logo on a dark tile), 256 × 256: the window's.
-pub const ICON_PNG: &[u8] = include_bytes!("../../../assets/branding/nemesiscommander-256.png");
+/// The application icon (the logo on a dark tile) in the sizes a window
+/// picks from: 16, 32, 48, 64, 128 and 256 pixels.
+pub const ICON_PNGS: [&[u8]; 6] = [
+    include_bytes!("../../../assets/branding/nemesiscommander-16.png"),
+    include_bytes!("../../../assets/branding/nemesiscommander-32.png"),
+    include_bytes!("../../../assets/branding/nemesiscommander-48.png"),
+    include_bytes!("../../../assets/branding/nemesiscommander-64.png"),
+    include_bytes!("../../../assets/branding/nemesiscommander-128.png"),
+    include_bytes!("../../../assets/branding/nemesiscommander-256.png"),
+];
 
 /// The version of the program.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

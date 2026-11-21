@@ -37,7 +37,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-latest, windows-latest]
+        # macOS and Windows are off for now (they take too long). To turn
+        # them back on, set the repository variable CI_ALL_OS to "true"
+        # (Settings > Secrets and variables > Actions > Variables).
+        os: ${{ fromJSON(vars.CI_ALL_OS == 'true' && '["ubuntu-24.04","macos-latest","windows-latest"]' || '["ubuntu-24.04"]') }}
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -88,6 +91,9 @@ jobs:
 
   gui-other:
     name: Desktop interface (${{ matrix.os }})
+    # Off for now (it takes too long); set the repository variable
+    # CI_ALL_OS to "true" to run it again.
+    if: vars.CI_ALL_OS == 'true'
     strategy:
       fail-fast: false
       matrix:

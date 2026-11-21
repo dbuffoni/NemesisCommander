@@ -33,7 +33,9 @@ pub fn run(startup: Startup) -> bool {
     if let Some(app) = app.as_mut() {
         app.set_application_name(&QString::from("NemesisCommander"));
     }
-    ffi::set_window_icon(nmc_frontend::about::ICON_PNG);
+    for png in nmc_frontend::about::ICON_PNGS {
+        ffi::add_window_icon(png);
+    }
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/NemesisCommander/qml/Main.qml"));
