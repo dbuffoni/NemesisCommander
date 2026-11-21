@@ -42,6 +42,10 @@
     readText: (path) => ops.op_sc_read_text(stringArgument("path", path)),
     writeText: (path, content) =>
       ops.op_sc_write_text(stringArgument("path", path), stringArgument("text", content)),
+    writeBytes: (path, bytes) => {
+      if (!(bytes instanceof Uint8Array)) throw new TypeError("bytes must be a Uint8Array");
+      return ops.op_sc_write_bytes(stringArgument("path", path), bytes);
+    },
     mkdir: (path) => ops.op_sc_mkdir(stringArgument("path", path)),
     rename: (from, to) => ops.op_sc_rename(stringArgument("from", from), stringArgument("to", to)),
     remove: (path) => ops.op_sc_remove(stringArgument("path", path)),

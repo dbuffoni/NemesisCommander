@@ -57,13 +57,28 @@ impl Drive {
         Drive { category: Category::of(&location), name: name.into(), location, saved: false }
     }
 
+    /// The first column: what kind of place it is (`Disk`, `SMB`, `S3`,
+    /// `SFTP`, `WebDAV`, `Archive`...).
+    pub fn type_label(&self) -> String {
+        match self.category {
+            Category::Local => "Disk".to_owned(),
+            Category::Archive => "Archive".to_owned(),
+            Category::Remote => match self.location.split_once("://").map(|(s, _)| s) {
+                Some("sftp") => "SFTP".to_owned(),
+                Some("agent") => "Agent".to_owned(),
+                Some("scs") => "Serve".to_owned(),
+                Some("s3") => "S3".to_owned(),
+                Some("smb") => "SMB".to_owned(),
+                Some("dav" | "davs" | "webdav" | "webdavs") => "WebDAV".to_owned(),
+                Some(other) => other.to_uppercase(),
+                None => "Remote".to_owned(),
+            },
+        }
+    }
+
     /// The row as the list shows it.
     pub fn row(&self) -> String {
-        let row = format!("{:<8} {:<20} {}", self.category.label(), self.name, self.location);
-        match connection_kind(&self.location) {
-            Some(kind) => format!("{row}  [{kind}]"),
-            None => row,
-        }
+        format!("{:<8} {:<20} {}", self.type_label(), self.name, self.location)
     }
 }
 
@@ -254,7 +269,10 @@ mod tests {
         assert_eq!(connection_kind("/home/me"), None);
         assert_eq!(connection_kind("zip:///a.zip!/"), None);
         let drive = Drive::new("nas", "scs://nas:7443/srv");
-        assert!(drive.row().ends_with("[nmc serve, TLS]"), "{}", drive.row());
+        assert!(drive.row().starts_with("Serve    nas"), "{}", drive.row());
+        assert_eq!(Drive::new("d", "/home/me").type_label(), "Disk");
+        assert_eq!(Drive::new("b", "s3://bucket/").type_label(), "S3");
+        assert_eq!(Drive::new("w", "davs://h/").type_label(), "WebDAV");
     }
 
     #[test]

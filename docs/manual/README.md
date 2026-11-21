@@ -557,11 +557,13 @@ Every command works the same on remote locations, written as URIs:
 **D**, **Shift+F1** or **Ctrl+N** open the drive list (in the window, clicking the
 drive name above a panel does it for that panel; the name shows where the
 panel is: `Local`, a drive letter, a connection's name): the drives of this computer
-and your saved connections together, grouped by a category column:
+and your saved connections together. The first column is the type of each row,
+and rows are grouped as disks, servers and archives:
 
-- **Local**: your home folder, the root and the disks and network shares
+- **Disk**: your home folder, the root and the disks and network shares
   mounted on this computer (drive letters on Windows, `/Volumes` on macOS).
-- **Remote**: saved SFTP, SMB, WebDAV, S3, agent and `nmc serve` connections.
+- **SFTP**, **Agent**, **Serve** (`nmc serve`), **SMB**, **WebDAV**, **S3**:
+  saved connections, one type each.
 - **Archive**: a saved location inside an archive file.
 
 Enter opens the highlighted row in the active panel, the same way for every
@@ -576,18 +578,23 @@ The last row, **New connection…**, asks for a location (for example
 suggested), opens it and keeps it in the list. **Delete** removes a saved
 connection; the drives of this computer stay.
 
-The location question shows one example per line (every kind, with user and
-port) as soon as it opens. While you type, the line under the field says what
-it understood (`✓ SFTP over SSH · host nas · port 22 · user me`) or what is
-wrong (`✗ Port 99999 is not between 1 and 65535`, a missing host or share, a
-bad bucket name). Enter on a wrong address keeps the question open with the
-reason. If you type a password in the address (`dav://anna:secret@host`), a
-`⚠` line warns that it would be saved as plain text; the password is taken out
-of the address and you are offered the safe ways below.
+The location question starts empty and shows one example per line (every kind,
+with user and port). As you type, the examples that fit the first characters
+stay: `s` keeps SFTP, SMB, S3 and `nmc serve`, `sm` only SMB. Nothing is called
+wrong at the start: only three characters that fit no protocol (and are not a
+path such as `/srv` or `~/docs`) show `✗ Invalid address`. Then the line under
+the field says what it understood (`✓ SFTP over SSH · host nas · port 22 ·
+user me`) or what is wrong (`✗ Port 99999 is not between 1 and 65535`, a
+missing host or share, a bad bucket name). Enter on a wrong address keeps the
+question open with the reason. If you type a password in the address
+(`dav://anna:secret@host`), a `⚠` line warns that it would be saved as plain
+text; the password is taken out of the address and you are offered the safe
+ways below.
 
 **F4** edits a saved connection (the location, then the name, in place).
-**Ctrl+T** tests it: in the list, and also while you create or edit one, in
-the location question and in the name question, before anything is saved. A
+**Ctrl+T** tests it: in the list, and also while you create or edit one, at
+every step (location, name, the login list, user, password, S3 keys), before
+anything is saved; the key is always in the key row at the bottom. A
 log window shows each step with its time (address, connection, reading the
 folder, number of entries), and a failure says where it stopped with a hint
 (wrong credentials, closed port, unknown host). Enter in the log goes back to

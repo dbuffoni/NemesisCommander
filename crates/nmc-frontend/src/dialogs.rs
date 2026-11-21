@@ -262,7 +262,12 @@ impl InputPurpose {
         self.is_address()
             || matches!(
                 self,
-                InputPurpose::NameConnection { .. } | InputPurpose::EditConnectionName { .. }
+                InputPurpose::NameConnection { .. }
+                    | InputPurpose::EditConnectionName { .. }
+                    | InputPurpose::ConnectionUser { .. }
+                    | InputPurpose::ConnectionPassword { .. }
+                    | InputPurpose::S3AccessKey { next: S3Next::Save { .. } }
+                    | InputPurpose::S3Secret { next: S3Next::Save { .. }, .. }
             )
     }
 
@@ -306,6 +311,18 @@ impl InputDialog {
             preview: Vec::new(),
             secret: false,
         }
+    }
+
+    /// The keys shown under the field: the usual ones, then those this
+    /// question adds (kept out of the prompt text).
+    pub fn hint(&self) -> String {
+        let mut hint = String::from("Enter: OK    Esc: cancel    Ctrl+U: clear");
+        match &self.purpose {
+            InputPurpose::PackInto(_) => hint.push_str("    Ctrl+O: more options"),
+            purpose if purpose.testable() => hint.push_str("    Ctrl+T: test the connection"),
+            _ => {}
+        }
+        hint
     }
 
     /// The field as it is drawn: dots for a password.
@@ -352,7 +369,7 @@ pub struct ConfirmDialog {
 }
 
 /// What a [`ChooseDialog`] is for.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ChoosePurpose {
     /// Bookmarks, then recent folders, filtered by what is typed (Enter
     /// opens the row, Delete removes a bookmark).
@@ -447,7 +464,7 @@ pub enum JumpRow {
 }
 
 /// Pick one item from a list.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChooseDialog {
     /// Window title.
     pub title: String,
@@ -492,6 +509,8 @@ pub struct MessageDialog {
     pub lines: Vec<String>,
     /// Pressing Enter opens this follow-up dialog (e.g. "change permissions").
     pub then: Option<InputDialog>,
+    /// Or Enter goes back to this list.
+    pub then_choose: Option<Box<ChooseDialog>>,
     /// The logo is shown above the text (About).
     pub logo: bool,
 }
@@ -499,9 +518,10 @@ pub struct MessageDialog {
 impl MessageDialog {
     /// The hint below the text: `Enter: <next dialog>   Esc: close`.
     pub fn hint(&self) -> String {
-        match &self.then {
-            Some(next) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
-            None => "Esc: close".into(),
+        match (&self.then, &self.then_choose) {
+            (Some(next), _) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
+            (None, Some(next)) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
+            (None, None) => "Esc: close".into(),
         }
     }
 }

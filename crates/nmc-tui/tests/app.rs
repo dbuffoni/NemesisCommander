@@ -1397,17 +1397,17 @@ async fn drives_and_connections_share_one_list() {
         h.key(key);
         let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("{key}: no drive list") };
         let items = dialog.items.clone();
-        assert!(items[0].starts_with("Local    Home"), "{items:?}");
+        assert!(items[0].starts_with("Disk     Home"), "{items:?}");
         let category = |name: &str| {
             let row = items.iter().find(|r| r.split_whitespace().nth(1) == Some(name)).unwrap();
             row.split_whitespace().next().unwrap().to_owned()
         };
-        assert_eq!(category("backup"), "Local");
-        assert_eq!(category("nas"), "Remote");
+        assert_eq!(category("backup"), "Disk");
+        assert_eq!(category("nas"), "SFTP");
         assert_eq!(category("site"), "Archive");
         assert_eq!(items.last().unwrap(), "New connection…");
         let screen = h.screen();
-        assert!(screen.contains("Drives") && screen.contains("Remote   nas"), "{screen}");
+        assert!(screen.contains("Drives") && screen.contains("SFTP     nas"), "{screen}");
         h.key("Esc");
     }
     h.key("Shift+F1");
@@ -1493,7 +1493,7 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
     h.key("Up");
     h.key("Delete");
     let Some(Overlay::Choose(after)) = h.app.overlay() else { panic!("list closed") };
-    assert!(after.items[0].starts_with("Local    Home"));
+    assert!(after.items[0].starts_with("Disk     Home"));
     assert!(h.app.context().config.connections.is_empty());
 }
 
@@ -2560,7 +2560,7 @@ async fn a_connection_is_edited_with_guidance_and_tested_with_a_log() {
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no address asked") };
     assert_eq!(dialog.field.text(), "sftp://me@nas.invalid/srv");
     assert_eq!(dialog.preview[0], "✓ SFTP over SSH · host nas.invalid · user me");
-    assert!(dialog.preview.last().unwrap().contains("Ctrl+T"), "{:?}", dialog.preview);
+    assert!(dialog.hint().contains("Ctrl+T: test"), "the key is in the key row");
 
     // A password typed in the address is a warning, not an error.
     h.type_text("sftp://me:secret@nas/srv");
@@ -2641,7 +2641,9 @@ async fn advanced_pack_protects_an_archive_and_opening_it_asks_the_password() {
     h.focus("docs");
     h.key("Shift+F5");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("pack question") };
-    assert!(dialog.prompt.contains("Ctrl+O"), "{}", dialog.prompt);
+    assert!(!dialog.prompt.contains("Ctrl+O"), "the key is in the key row: {}", dialog.prompt);
+    assert!(dialog.hint().contains("Ctrl+O: more options"), "{}", dialog.hint());
+    assert!(h.screen().contains("Ctrl+O: more options"));
     h.key("Ctrl+O");
     // 1. The format.
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("no format list") };
@@ -2791,7 +2793,7 @@ async fn the_new_connection_prompt_lists_one_example_per_line() {
         "no password note among the examples: {:?}",
         dialog.preview
     );
-    assert!(dialog.preview.last().unwrap().contains("Ctrl+T"));
+    assert!(dialog.hint().contains("Ctrl+T: test"));
 }
 
 #[tokio::test]
@@ -2811,7 +2813,7 @@ async fn a_login_is_saved_in_netrc_or_asked_every_time() {
     assert!(dialog.preview.iter().any(|l| l.starts_with("⚠")), "{:?}", dialog.preview);
     h.key("Enter");
     let Some(Overlay::Input(name)) = h.app.overlay() else { panic!("no name asked") };
-    assert!(name.preview[0].contains("Ctrl+T"), "the test is offered here too");
+    assert!(name.hint().contains("Ctrl+T"), "the test is offered here too");
     h.type_text("files");
     h.key("Enter");
     let Some(Overlay::Choose(choice)) = h.app.overlay() else { panic!("no login question") };

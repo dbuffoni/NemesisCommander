@@ -39,7 +39,7 @@ for (const entry of await nmc.list(nmc.args[0])) {
 ```
 
 The API (see `nmc run --types`): `print`, `list`, `stat`, `exists`,
-`readText`, `writeText`, `mkdir`, `rename`, `remove`, `copy` (with a
+`readText`, `writeText`, `writeBytes`, `mkdir`, `rename`, `remove`, `copy` (with a
 conflict policy, through the copy engine), `join`, `basename`, `dirname`,
 `args`, `version` and, in plugins, `context`.
 
@@ -47,6 +47,9 @@ conflict policy, through the copy engine), `join`, `basename`, `dirname`,
 
 A plugin is a folder with a `plugin.json` and a script. See
 [`examples/plugins/sort-by-type`](../examples/plugins/sort-by-type).
+To start your own, copy [`examples/plugins/random-file`](../examples/plugins/random-file):
+a template that creates a file with random content (json, xml, txt or png)
+and explains every part in comments, with `TEMPLATE` marking what to replace.
 
 ```json
 {

@@ -73,6 +73,8 @@ declare namespace nmc {
   function readText(path: string): Promise<string>;
   /** Writes (replaces) a file with UTF-8 text. */
   function writeText(path: string, text: string): Promise<void>;
+  /** Writes (replaces) a file with raw bytes, for binary formats such as images. */
+  function writeBytes(path: string, bytes: Uint8Array): Promise<void>;
   /** Creates a folder (its parent must exist). */
   function mkdir(path: string): Promise<void>;
   /** Renames or moves within one location. */

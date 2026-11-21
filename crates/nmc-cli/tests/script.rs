@@ -149,6 +149,44 @@ fn the_examples_work() {
     assert!(dir.path().join("work/jpg/photo.JPG").exists());
     assert!(dir.path().join("work/bin/big.bin").exists());
     assert!(dir.path().join("work/deep/small.txt").exists());
+
+    // The template plugin creates one file of a known format, several times.
+    nmc(&dir)
+        .args(["plugin", "install"])
+        .arg(examples.join("plugins/random-file"))
+        .assert()
+        .success();
+    nmc(&dir).args(["plugin", "allow", "random-file"]).assert().success();
+    for _ in 0..12 {
+        nmc(&dir)
+            .args(["plugin", "run", "random-file", "create", "--panel", "work"])
+            .assert()
+            .success()
+            .stdout(contains("created random-"));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for entry in fs::read_dir(dir.path().join("work")).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let Some(extension) = name.strip_prefix("random-").and_then(|n| n.split('.').nth(1)) else {
+            continue;
+        };
+        let bytes = fs::read(&path).unwrap();
+        match extension {
+            "json" => {
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
+            }
+            "xml" => assert!(bytes.starts_with(b"<?xml")),
+            "txt" => assert!(!bytes.is_empty()),
+            "png" => {
+                assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+                assert!(bytes.ends_with(b"IEND\xaeB`\x82"));
+            }
+            other => panic!("unexpected {name} ({other})"),
+        }
+        seen.insert(extension.to_owned());
+    }
+    assert!(!seen.is_empty());
 }
 
 /// `nmc test` runs a script in a throwaway folder and reports what changed,

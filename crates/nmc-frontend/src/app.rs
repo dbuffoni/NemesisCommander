@@ -904,6 +904,7 @@ impl App {
                             title: title.clone(),
                             lines: text,
                             then: None,
+                            then_choose: None,
                             logo: false,
                         }));
                     }
@@ -1183,7 +1184,10 @@ impl App {
                 Some(Overlay::Choose(dialog))
             }
             Overlay::Message(dialog) => match key {
-                Some(Key::Enter) => dialog.then.map(Overlay::Input),
+                Some(Key::Enter) => dialog
+                    .then
+                    .map(Overlay::Input)
+                    .or(dialog.then_choose.map(|list| Overlay::Choose(*list))),
                 Some(Key::Esc) => None,
                 _ => Some(Overlay::Message(dialog)),
             },
@@ -1306,6 +1310,16 @@ impl App {
     /// Tests the connection at `location` in the background and shows what
     /// happened. Enter in the log goes back to `back`, if given.
     pub(super) fn test_connection(&mut self, location: String, back: Option<InputDialog>) {
+        self.test_connection_back(location, back, None);
+    }
+
+    /// [`Self::test_connection`], coming back to a list instead of a question.
+    pub(super) fn test_connection_back(
+        &mut self,
+        location: String,
+        back: Option<InputDialog>,
+        choose: Option<Box<ChooseDialog>>,
+    ) {
         let registry = self.context.registry.clone();
         self.set_status(format!("Testing {location}…"));
         self.spawn_task(async move {
@@ -1314,6 +1328,7 @@ impl App {
                 title: "Test connection".into(),
                 lines,
                 then: back,
+                then_choose: choose,
                 logo: false,
             })))
         });
@@ -1460,7 +1475,7 @@ impl App {
                         .map(|p| display_location(&p))
                         .unwrap_or_default();
                 let prompt = format!(
-                    "Pack {} into (format from the extension; Ctrl+O: more options):",
+                    "Pack {} into (format from the extension):",
                     Self::count_text(&targets)
                 );
                 self.ask("Pack", &prompt, &output, InputPurpose::PackInto(targets));
@@ -2031,6 +2046,7 @@ impl App {
                     title,
                     lines,
                     then: None,
+                    then_choose: None,
                     logo: false,
                 })));
             }
@@ -2109,7 +2125,7 @@ impl App {
                     Ok(path) => self.open_connection(&drive.location, path, false),
                     Err(e) => self.set_error(e),
                 },
-                None => self.ask_address("New connection", "sftp://", InputPurpose::NewConnection),
+                None => self.ask_address("New connection", "", InputPurpose::NewConnection),
             },
             ChoosePurpose::SearchResults(paths) => {
                 if let Some(cancel) = self.search_cancel.take() {
@@ -2500,6 +2516,7 @@ impl App {
             title: "Properties".into(),
             lines,
             then,
+            then_choose: None,
             logo: false,
         }));
     }
@@ -2530,6 +2547,7 @@ impl App {
                     title: "Checksums".into(),
                     lines,
                     then: None,
+                    then_choose: None,
                     logo: false,
                 }))),
                 Err(e) => done(Err(e), None),
