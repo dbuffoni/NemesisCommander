@@ -288,8 +288,7 @@ impl App {
     pub(super) fn open_bookmarks(&mut self) {
         let (items, rows) = self.bookmark_rows("");
         if rows.is_empty() {
-            let key = self.context.keymap.shortcut_text(Action::AddBookmark);
-            return self.set_status(format!("No bookmarks yet ({key} adds this folder)"));
+            return self.set_status("No bookmarks yet");
         }
         let mut dialog = ChooseDialog::new("Bookmarks", items, ChoosePurpose::Bookmarks(rows));
         dialog.query = Some(String::new());
@@ -310,6 +309,11 @@ impl App {
                 items.push(super::bookmark_row(bookmark));
                 rows.push(JumpRow::Bookmark(index));
             }
+        }
+        let here_path = display_location(self.workspace.active().location());
+        if needle.is_empty() && !self.context.config.bookmarks.iter().any(|b| b.path == here_path) {
+            items.push(format!("+ Bookmark this folder: {here_path}"));
+            rows.push(JumpRow::AddHere);
         }
         let here = self.workspace.active().location().to_string();
         let recent: Vec<String> = self
@@ -342,7 +346,7 @@ impl App {
         dialog.items = items;
         dialog.purpose = ChoosePurpose::Bookmarks(rows);
         dialog.footer = if query.is_empty() {
-            "Type to filter   Enter: open   Delete: remove bookmark".into()
+            "Type to filter   Enter: open or add   Delete: remove bookmark".into()
         } else {
             format!("Filter: {query}_   Enter: open   Backspace: erase")
         };

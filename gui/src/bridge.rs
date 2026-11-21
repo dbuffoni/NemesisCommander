@@ -85,6 +85,15 @@ pub struct CommanderRust {
     last: String,
 }
 
+/// The window's size at start: `--size`, else the one remembered from the
+/// last run, else 1200×760.
+fn initial_window_size() -> (i32, i32) {
+    if let Some(size) = STARTUP.get().and_then(|s| s.size) {
+        return size;
+    }
+    nmc_config::AppPaths::detect().load_window_size().unwrap_or((1200, 760))
+}
+
 impl Default for CommanderRust {
     fn default() -> Self {
         CommanderRust {
@@ -94,8 +103,8 @@ impl Default for CommanderRust {
             clipboard_seq: 0,
             paste_seq: 0,
             screenshot: QString::default(),
-            window_width: STARTUP.get().and_then(|s| s.size).map_or(1200, |(w, _)| w),
-            window_height: STARTUP.get().and_then(|s| s.size).map_or(760, |(_, h)| h),
+            window_width: initial_window_size().0,
+            window_height: initial_window_size().1,
             test: None,
             runtime: None,
             app: None,
@@ -161,6 +170,15 @@ impl qobject::Commander {
         rust.app = Some(app);
         rust.test = startup.self_test;
         self.as_mut().refresh();
+    }
+
+    /// Remembers the window's size for the next start (not for self tests
+    /// and not when `--size` forced one).
+    pub(crate) fn remember_window(self: Pin<&mut Self>, width: i32, height: i32) {
+        if self.rust().test.is_some() || STARTUP.get().is_some_and(|s| s.size.is_some()) {
+            return;
+        }
+        let _ = nmc_config::AppPaths::detect().save_window_size(width, height);
     }
 
     pub(crate) fn quit(mut self: Pin<&mut Self>) {

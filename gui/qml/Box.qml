@@ -13,10 +13,13 @@ Rectangle {
     default property alias content: column.data
     readonly property var theme: ApplicationWindow.window
 
-    // Sized by its content, within the window; whoever shows it centers it.
-    width: Math.min(theme.width - 40, Math.max(420, column.implicitWidth + 32,
-                                               footer.implicitWidth + 32))
-    height: Math.min(theme.height - 80,
+    // Sized by its content, up to 90% of the window; a key row that is still
+    // longer wraps onto more lines, so it is always shown whole (also with a
+    // large font). Whoever shows it centers it.
+    readonly property real maxWidth: theme.width * 0.9
+    width: Math.min(maxWidth, Math.max(420, column.implicitWidth + 32,
+                                       footer.implicitWidth + 32))
+    height: Math.min(theme.height * 0.9,
                      header.height + column.implicitHeight + footer.implicitHeight + 44)
     color: palette.window
     border.color: palette.highlight
@@ -53,6 +56,7 @@ Rectangle {
         width: parent.width - 32
         text: box.hint
         visible: text !== ""
+        wrapMode: Text.Wrap
         color: box.hintColor
     }
 }

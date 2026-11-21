@@ -69,6 +69,10 @@ pub mod qobject {
         #[qinvokable]
         fn drop_files(self: Pin<&mut Commander>, side: i32, urls: &QString);
 
+        /// The window's size when it is closed, kept for the next start.
+        #[qinvokable]
+        fn remember_window(self: Pin<&mut Commander>, width: i32, height: i32);
+
         /// Ends the application.
         #[qinvokable]
         fn quit(self: Pin<&mut Commander>);

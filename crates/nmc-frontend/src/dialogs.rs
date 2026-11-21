@@ -459,6 +459,8 @@ pub enum ChoosePurpose {
 pub enum JumpRow {
     /// The bookmark at this index of the configuration.
     Bookmark(usize),
+    /// The command to bookmark the folder of the active panel.
+    AddHere,
     /// A recently opened folder (as a VFS URI).
     Recent(String),
     /// The title of the recent folders; cannot be chosen.

@@ -724,7 +724,7 @@ An SMB connection that the server dropped is signed in again on the next call.
 ## Bookmarks, tabs and history
 
 - **Ctrl+Shift+D** bookmarks the current folder, **Ctrl+D** lists the
-  bookmarks and, below them, the recent folders (Enter opens one; Delete
+  bookmarks (with a row "+ Bookmark this folder" to add the current one) and, below them, the recent folders (Enter opens one; Delete
   removes a bookmark). Move with the arrows, or just type: only the
   bookmarks whose name or folder contains the text (case does not matter)
   stay, and the five most recent folders that match are listed below them.

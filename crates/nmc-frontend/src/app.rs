@@ -2123,6 +2123,7 @@ impl App {
                         self.open_bookmark(bookmark);
                     }
                 }
+                Some(JumpRow::AddHere) => self.add_bookmark(false),
                 Some(JumpRow::Recent(uri)) => self.open_location(uri.clone()),
                 Some(JumpRow::Header) | None => {}
             },

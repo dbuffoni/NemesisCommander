@@ -2017,6 +2017,21 @@ async fn bookmarks_filter_as_you_type_and_list_recent_folders() {
 }
 
 #[tokio::test]
+async fn the_bookmark_list_has_a_command_to_add_the_current_folder() {
+    let mut h = Harness::new().await;
+    assert!(h.app.context().config.bookmarks.is_empty());
+    h.key("Ctrl+D");
+    let rows = results(&h);
+    assert!(rows[0].contains("Bookmark this folder"), "{rows:?}");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(h.app.context().config.bookmarks.len(), 1);
+    // Once bookmarked, the folder is no longer offered.
+    h.key("Ctrl+D");
+    assert!(results(&h).iter().all(|r| !r.contains("Bookmark this folder")), "{:?}", results(&h));
+}
+
+#[tokio::test]
 async fn searches_are_saved_run_from_the_command_list_and_forgotten() {
     let mut h = Harness::new().await;
     h.app.perform(Action::SaveSearch);
