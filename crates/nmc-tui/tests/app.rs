@@ -952,6 +952,48 @@ async fn unpack_queues_a_copy_of_the_members() {
 }
 
 #[tokio::test]
+async fn unpacking_an_encrypted_archive_asks_the_password_first() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Shift+F5");
+    h.key("Ctrl+O");
+    h.key("Enter"); // zip
+    h.key("Enter"); // normal level
+    for _ in 0..2 {
+        h.type_text("s3cret");
+        h.key("Enter");
+    }
+    let target = h.path("right/locked").display().to_string();
+    h.type_text(&target);
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.path("right/locked.zip").exists());
+
+    // Unpack from the folder that holds the archive: it asks, no queue error.
+    // (The destination must not have the folder already: that is a conflict.)
+    fs::remove_dir_all(h.path("left/docs")).unwrap();
+    h.key("Tab");
+    h.focus("locked.zip");
+    h.key("Shift+F9");
+    h.settle().await;
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no password asked") };
+    assert!(dialog.prompt.contains("locked.zip is encrypted"), "{}", dialog.prompt);
+    assert!(h.app.jobs().is_empty(), "nothing is queued before the password is right");
+    // A wrong password asks again, saying so.
+    h.type_text("wrong one");
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("not asked again") };
+    assert!(dialog.prompt.starts_with("Wrong password"), "{}", dialog.prompt);
+    // The right one unpacks.
+    h.type_text("s3cret");
+    h.key("Enter");
+    h.settle().await;
+    assert!(h.app.overlay().is_none());
+    assert_eq!(fs::read_to_string(h.path("left/docs/readme.md")).unwrap(), "# readme\n");
+}
+
+#[tokio::test]
 async fn jobs_window_lists_transfers() {
     let mut h = Harness::new().await;
     h.focus("a.txt");

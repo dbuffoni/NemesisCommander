@@ -336,8 +336,30 @@ pub fn hints(text: &str) -> Vec<String> {
             }
             lines
         }
+        // A part that is only not typed yet is not an error while typing:
+        // the example that fits is shown instead (Enter still refuses).
+        Err(e) if is_incomplete(&e) => {
+            let lower = typed.to_ascii_lowercase();
+            let mut lines = vec![format!("… {e}")];
+            lines.extend(
+                KINDS
+                    .iter()
+                    .filter(|k| lower.starts_with(&format!("{}://", k.scheme)))
+                    .map(|k| format!("  {:<32} {}", k.sample, k.name)),
+            );
+            lines
+        }
         Err(e) => vec![format!("✗ {e}")],
     }
+}
+
+/// Whether the message of [`check`] says only that something is still to
+/// be typed (the share of an SMB address, a host, a user name), which the
+/// next characters may fix.
+fn is_incomplete(error: &str) -> bool {
+    ["An SMB location needs the share", "The host is missing", "A user name is missing"]
+        .iter()
+        .any(|start| error.starts_with(start))
 }
 
 /// Opens the connection and reads its folder, telling each step. The last
@@ -484,6 +506,16 @@ mod tests {
         assert!(lines.iter().all(|l| !l.to_lowercase().contains("password")), "{lines:?}");
         assert_eq!(hints("sftp://").len(), 2, "only the sftp example fits");
         assert!(!prompt().to_lowercase().contains("password"));
+    }
+
+    #[test]
+    fn a_part_still_to_type_is_not_an_error_while_typing() {
+        let lines = hints("smb://dbuff");
+        assert!(lines.iter().all(|l| !l.starts_with('✗')), "{lines:?}");
+        assert!(lines.iter().any(|l| l.contains("smb://user@host:445/share/path")), "{lines:?}");
+        // Enter still refuses it.
+        assert!(check("smb://dbuff").unwrap_err().contains("needs the share"));
+        assert!(hints("smb://dbuff/share")[0].starts_with("✓"));
     }
 
     #[test]

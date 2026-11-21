@@ -65,6 +65,9 @@ pub enum AppEvent {
         /// Put the cursor of the focused panel on this name after reloading.
         focus: Option<String>,
     },
+    /// Unpacking found the archive encrypted and without a (right) password:
+    /// ask for it, then unpack again.
+    NeedPassword(VfsPath),
     /// The git status of a folder arrived (`None`: not a repository).
     Git {
         /// The folder.
@@ -150,6 +153,7 @@ impl AppEvent {
         matches!(
             self,
             AppEvent::TaskDone { .. }
+                | AppEvent::NeedPassword(_)
                 | AppEvent::Git { .. }
                 | AppEvent::Show(_)
                 | AppEvent::SearchDone(_)
@@ -247,6 +251,8 @@ pub struct App {
     /// Encrypted archives whose password the user refused to give (until
     /// they are left).
     password_declined: HashSet<String>,
+    /// An archive being unpacked that needs its password first.
+    password_wanted: Option<VfsPath>,
     /// How often and how recently folders were opened (the jump command).
     frecency: crate::frecency::Frecency,
     /// The installed font families, for the font settings (empty in a terminal).
@@ -487,6 +493,7 @@ impl App {
             basket: Vec::new(),
             clipboard: None,
             password_declined: HashSet::new(),
+            password_wanted: None,
             frecency,
             fonts: Vec::new(),
             folder_sizes: HashMap::new(),
@@ -829,6 +836,10 @@ impl App {
                 if reload {
                     self.reload_panels(focus.as_deref());
                 }
+            }
+            AppEvent::NeedPassword(archive) => {
+                self.password_wanted = Some(archive);
+                // The question comes from `ask_archive_password`.
             }
             AppEvent::Undoable(..) => {}
             AppEvent::Show(overlay) => {
@@ -2433,6 +2444,14 @@ impl App {
 
     fn unpack_current(&mut self) {
         let Some(archive) = self.workspace.active().current_path() else { return };
+        self.unpack_archive(archive);
+    }
+
+    /// Queues the copy of everything in `archive` to the other panel. An
+    /// encrypted archive is first opened and one file read: when that needs
+    /// a password, the user is asked for it (the copy would only fail with
+    /// "permission denied" in the queue) and the unpack starts again.
+    pub(super) fn unpack_archive(&mut self, archive: VfsPath) {
         let Some(root) = archive_root(&archive) else {
             return self.set_error("Not an archive");
         };
@@ -2443,11 +2462,9 @@ impl App {
         self.spawn_task(async move {
             let result = async {
                 let provider = registry.provider_for(&root).await?;
-                let members: Vec<VfsPath> = collect_listing(provider.as_ref(), &root)
-                    .await?
-                    .iter()
-                    .map(|e| root.join(&e.name))
-                    .collect();
+                let listing = collect_listing(provider.as_ref(), &root).await?;
+                probe_member(provider.as_ref(), &root).await?;
+                let members: Vec<VfsPath> = listing.iter().map(|e| root.join(&e.name)).collect();
                 let spec = JobSpec {
                     kind: JobKind::Copy,
                     sources: members,
@@ -2460,6 +2477,9 @@ impl App {
                 Ok(format!("Queued: {title}"))
             }
             .await;
+            if result.is_err() && nmc_archive::needs_password(&archive) {
+                return AppEvent::NeedPassword(archive);
+            }
             AppEvent::TaskDone {
                 error: result.is_err(),
                 message: result.unwrap_or_else(|e: nmc_vfs::VfsError| e.to_string()),
@@ -2711,6 +2731,36 @@ fn viewer_zoom_key(viewer: &mut Viewer, key: Option<Key>, text: Option<char>) ->
         _ => return false,
     }
     true
+}
+
+/// Reads a byte of the first file found in `folder` (looking into folders
+/// too, a few levels down): this is where a wrong or missing password of an
+/// archive shows, before a copy is queued.
+async fn probe_member(
+    provider: &dyn nmc_vfs::Provider,
+    folder: &VfsPath,
+) -> Result<(), nmc_vfs::VfsError> {
+    use tokio::io::AsyncReadExt;
+    let mut pending = vec![(folder.clone(), 0)];
+    while let Some((dir, depth)) = pending.pop() {
+        for entry in collect_listing(provider, &dir).await? {
+            let path = dir.join(&entry.name);
+            if entry.is_dir() {
+                if depth < 4 {
+                    pending.push((path, depth + 1));
+                }
+            } else if entry.kind == EntryKind::File && entry.size > 0 {
+                let mut stream = provider.read(&path, 0).await?;
+                let mut byte = [0u8; 1];
+                stream
+                    .read(&mut byte)
+                    .await
+                    .map_err(|e| nmc_vfs::VfsError::Other(e.to_string()))?;
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The result of a background task as a [`AppEvent::TaskDone`] that
