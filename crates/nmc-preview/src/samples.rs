@@ -18,6 +18,8 @@ pub fn all() -> Vec<(&'static str, Vec<u8>)> {
         ("kickoff.pptx", pptx()),
         ("report.pdf", pdf(&REPORT)),
         ("torus.stl", torus_stl(48, 24)),
+        ("story.epub", epub()),
+        ("tone.wav", wav()),
     ]
 }
 
@@ -29,6 +31,54 @@ pub fn zip(members: &[(&str, &str)]) -> Vec<u8> {
         out.write_all(contents.as_bytes()).expect("writing to memory");
     }
     out.finish().expect("writing to memory").into_inner()
+}
+
+/// A small e-book: two chapters.
+pub fn epub() -> Vec<u8> {
+    zip(&[
+        (
+            "META-INF/container.xml",
+            r#"<container><rootfiles><rootfile full-path="book/content.opf"/></rootfiles></container>"#,
+        ),
+        (
+            "book/content.opf",
+            r#"<package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>A short story</dc:title><dc:creator>NemesisCommander</dc:creator><dc:language>en</dc:language></metadata><manifest><item id="a" href="one.xhtml" media-type="application/xhtml+xml"/><item id="b" href="two.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="a"/><itemref idref="b"/></spine></package>"#,
+        ),
+        (
+            "book/one.xhtml",
+            "<html><body><h1>One</h1><p>It was a <b>quiet</b> morning &mdash; the kind that asks for a good book.</p><ul><li>coffee</li><li>a window</li></ul></body></html>",
+        ),
+        (
+            "book/two.xhtml",
+            "<html><body><h1>Two</h1><blockquote><p>Everything is on the page.</p></blockquote><p>The end.</p></body></html>",
+        ),
+    ])
+}
+
+/// One second of a 440 Hz tone: 8 kHz, 16 bit, mono.
+pub fn wav() -> Vec<u8> {
+    let samples: Vec<u8> = (0..8000)
+        .flat_map(|i| {
+            let value = (f64::sin(f64::from(i) * 2.0 * std::f64::consts::PI * 440.0 / 8000.0)
+                * 8000.0) as i16;
+            value.to_le_bytes()
+        })
+        .collect();
+    let mut wav = b"RIFF".to_vec();
+    wav.extend_from_slice(&(36 + samples.len() as u32).to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16u32.to_le_bytes());
+    for field in [1u16, 1] {
+        wav.extend_from_slice(&field.to_le_bytes());
+    }
+    wav.extend_from_slice(&8000u32.to_le_bytes());
+    wav.extend_from_slice(&16_000u32.to_le_bytes());
+    wav.extend_from_slice(&2u16.to_le_bytes());
+    wav.extend_from_slice(&16u16.to_le_bytes());
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&(samples.len() as u32).to_le_bytes());
+    wav.extend_from_slice(&samples);
+    wav
 }
 
 /// A Markdown guide using most of the syntax.

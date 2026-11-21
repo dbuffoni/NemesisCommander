@@ -80,11 +80,6 @@ pub enum AppEvent {
     /// A task changed files in a way Ctrl+Z can take back; the event is the
     /// task's own result.
     Undoable(UndoStep, Box<AppEvent>),
-    /// The sizes of folders were counted: (folder, bytes, items).
-    FolderSizes {
-        /// The folders and what is below each.
-        sizes: Vec<(VfsPath, (u64, u64))>,
-    },
     /// One search result.
     SearchHit(SearchHit),
     /// The search ended (with an error message, if it failed).
@@ -163,7 +158,6 @@ impl AppEvent {
                 | AppEvent::AiRenameDone { .. }
                 | AppEvent::SyncCopies { .. }
                 | AppEvent::Compared { .. }
-                | AppEvent::FolderSizes { .. }
         )
     }
 }
@@ -257,8 +251,6 @@ pub struct App {
     frecency: crate::frecency::Frecency,
     /// The installed font families, for the font settings (empty in a terminal).
     fonts: Vec<String>,
-    /// Folder sizes counted in the panels, until the folder is listed again.
-    folder_sizes: HashMap<VfsPath, (u64, u64)>,
     /// The folder last recorded for each side.
     visited: [Option<String>; 2],
     /// The last search, to save it.
@@ -496,7 +488,6 @@ impl App {
             password_wanted: None,
             frecency,
             fonts: Vec::new(),
-            folder_sizes: HashMap::new(),
             visited: [None, None],
             last_search: None,
             target_override: None,
@@ -605,11 +596,6 @@ impl App {
         fonts.sort_by_key(|f| f.to_lowercase());
         fonts.dedup();
         self.fonts = fonts;
-    }
-
-    /// Folder sizes counted in the panels, by folder.
-    pub fn folder_sizes(&self) -> &HashMap<VfsPath, (u64, u64)> {
-        &self.folder_sizes
     }
 
     /// The settings and key map in use.
@@ -743,7 +729,6 @@ impl App {
             }
             AppEvent::Listing(listing) => {
                 let listed = listing.path.clone();
-                self.folder_sizes.retain(|path, _| path.parent().as_ref() != Some(&listed));
                 if self.workspace.apply(listing) {
                     for side in [SideId::Left, SideId::Right] {
                         let panel = self.workspace.side(side).panel();
@@ -753,6 +738,13 @@ impl App {
                         }
                     }
                     self.record_visits(&listed);
+                    // The marks of an earlier look at this folder are gone
+                    // at once; git is asked again.
+                    for side in [SideId::Left, SideId::Right] {
+                        if self.workspace.side(side).panel().location() == &listed {
+                            self.git[side_index(side)] = None;
+                        }
+                    }
                     self.refresh_git(&listed);
                     self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
@@ -849,7 +841,6 @@ impl App {
                 }
                 self.overlay = Some(*overlay);
             }
-            AppEvent::FolderSizes { sizes } => self.folder_sizes_counted(sizes),
             AppEvent::SyncCopies { copies, deleted, error } => {
                 let files = self.queue_sync_copies(copies);
                 match error {
@@ -1121,10 +1112,23 @@ impl App {
                     self.test_typed(dialog);
                     return None;
                 }
+                if dialog.purpose == InputPurpose::InstallServe {
+                    if press.chord.ctrl && press.chord.key == Key::Char('t') {
+                        self.test_install(dialog);
+                        return None;
+                    }
+                    if press.chord.key == Key::F(1) {
+                        self.explain_install(dialog);
+                        return None;
+                    }
+                }
                 if dialog.field.handle(&press) {
                     match &dialog.purpose {
                         InputPurpose::NewConnection | InputPurpose::EditConnection { .. } => {
                             dialog.preview = crate::connections::hints(dialog.field.text())
+                        }
+                        InputPurpose::InstallServe => {
+                            dialog.preview = crate::install::hints(dialog.field.text())
                         }
                         InputPurpose::QuickFilter => {
                             self.workspace.active_mut().set_filter(dialog.field.text())
@@ -1517,7 +1521,6 @@ impl App {
             Action::CompareHash => self.compare_by_hash(),
             Action::Sync => self.ask_sync(),
             Action::SimilarImages => self.find_similar(),
-            Action::FolderSizes => self.count_folder_sizes(),
             Action::DiskUsage => {
                 let folder = self.workspace.active().location().clone();
                 self.disk_usage(folder);
@@ -1646,18 +1649,21 @@ impl App {
                 items.push("New connection…".into());
                 let mut dialog = ChooseDialog::new("Drives", items, ChoosePurpose::Drives(drives));
                 dialog.footer =
-                    "Enter: open   F2: rename   F4: edit   Ctrl+T: test   Delete: remove"
-                        .into();
+                    "Enter: open   F2: rename   F4: edit   Ctrl+T: test   Delete: remove".into();
                 self.overlay = Some(Overlay::Choose(dialog));
             }
             Action::RunScript => self.choose_plugin_command(),
             Action::AiScript => self.ask_ai_script(),
-            Action::InstallServe => self.ask(
-                "Install nmc serve",
-                "Server over SSH: [user@]host[:port] [--root DIR] [--read-only] [--port N] [--renew]:",
-                "",
-                InputPurpose::InstallServe,
-            ),
+            Action::InstallServe => {
+                let mut dialog = InputDialog::new(
+                    "Install nmc serve",
+                    crate::install::prompt(),
+                    "",
+                    InputPurpose::InstallServe,
+                );
+                dialog.preview = crate::install::hints("");
+                self.overlay = Some(Overlay::Input(dialog));
+            }
             Action::Help => self.overlay = Some(Overlay::Help),
             Action::Menu => self.open_commands(),
             Action::Settings => self.open_settings(),
@@ -2123,7 +2129,6 @@ impl App {
                         self.open_bookmark(bookmark);
                     }
                 }
-                Some(JumpRow::AddHere) => self.add_bookmark(false),
                 Some(JumpRow::Recent(uri)) => self.open_location(uri.clone()),
                 Some(JumpRow::Header) | None => {}
             },
@@ -2256,8 +2261,8 @@ impl App {
         let name = path.file_name().unwrap_or_default().to_owned();
         // Quick view reads the start of a file, or a whole image or
         // previewed document.
-        let limit = if crate::preview::kind_of(&name).is_some() {
-            crate::preview::PREVIEW_LIMIT
+        let limit = if let Some(limit) = crate::preview::read_limit(&name) {
+            limit
         } else if quick && !viewer::is_image_name(&name) {
             QUICK_VIEW_LIMIT
         } else {

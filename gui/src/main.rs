@@ -47,6 +47,10 @@ fn main() {
     let mut places = places.into_iter();
     startup.left = places.next();
     startup.right = places.next();
+    // A launcher written by `nmc desktop install` gets the current icon.
+    if startup.self_test.is_none() {
+        nmc_app::desktop::refresh();
+    }
     if !nmc_gui::run(startup) {
         std::process::exit(1);
     }

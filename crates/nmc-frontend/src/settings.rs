@@ -406,13 +406,11 @@ impl SettingsScreen {
     }
 
     /// Shows only the rows whose section or label holds every word of
-    /// `filter` (ignoring case), each under its header; the cursor goes to
+    /// `filter` (ignoring case and small spelling mistakes), each under its header; the cursor goes to
     /// the first one. An empty filter shows everything.
     pub fn set_filter(&mut self, filter: &str) {
         self.filter = filter.to_owned();
-        let words: Vec<String> =
-            filter.to_lowercase().split_whitespace().map(str::to_owned).collect();
-        let mut rows: Vec<Row> = Vec::new();
+        let mut found: Vec<(Option<Row>, Row, usize)> = Vec::new();
         let mut header: Option<Row> = None;
         for row in all_rows() {
             let text = match row {
@@ -422,12 +420,23 @@ impl SettingsScreen {
                 }
                 Row::Option(field) => format!("{} {}", field.section(), field.label()),
                 Row::Command(command) => format!("share settings {}", command.label()),
+            };
+            if let Some(score) = crate::fuzzy::score(filter, &text) {
+                found.push((header, row, score));
             }
-            .to_lowercase();
-            if words.iter().all(|w| text.contains(w)) {
-                rows.extend(header.take());
-                rows.push(row);
+        }
+        // Spelling mistakes are forgiven only when nothing fits as typed.
+        if found.iter().any(|(_, _, s)| crate::fuzzy::is_exact(filter, *s)) {
+            found.retain(|(_, _, s)| crate::fuzzy::is_exact(filter, *s));
+        }
+        let mut rows: Vec<Row> = Vec::new();
+        let mut last_header: Option<Row> = None;
+        for (header, row, _) in found {
+            if header != last_header {
+                rows.extend(header);
+                last_header = header;
             }
+            rows.push(row);
         }
         if rows.is_empty() {
             rows.push(Row::Header("No setting matches"));
@@ -633,6 +642,8 @@ mod tests {
         assert_eq!(screen.current(), Row::Option(Field::FontFamily));
         screen.set_filter("FIXED  font");
         assert_eq!(screen.current(), Row::Option(Field::FixedFontFamily));
+        screen.set_filter("fnot");
+        assert_eq!(screen.current(), Row::Option(Field::FontFamily), "a swapped pair of letters");
         screen.set_filter("zzzz");
         assert_eq!(screen.rows, [Row::Header("No setting matches")]);
         assert!(matches!(screen.current(), Row::Header(_)));

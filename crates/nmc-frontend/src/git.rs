@@ -92,6 +92,16 @@ pub fn parse(output: &[u8], prefix: &str) -> GitStatus {
     status
 }
 
+/// What a mark means, in words (the legend of the git marks).
+pub fn legend(mark: char) -> &'static str {
+    match mark {
+        'M' => "M: changed since the last commit (a folder: something inside changed)",
+        '?' => "?: not tracked by git yet",
+        '!' => "!: ignored by git (.gitignore)",
+        _ => "",
+    }
+}
+
 fn rank(mark: char) -> u8 {
     match mark {
         'M' => 3,

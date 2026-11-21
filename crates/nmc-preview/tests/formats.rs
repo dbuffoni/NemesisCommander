@@ -276,6 +276,18 @@ fn every_sample_previews() {
             Kind::Model => {
                 assert_eq!(Mesh::load(name, &data).unwrap().triangle_count(), 48 * 24 * 2)
             }
+            Kind::Ebook(format) => {
+                let text = text_of(&nmc_preview::ebook::read(format, &data).unwrap()).join("\n");
+                assert!(
+                    text.contains("A short story") && text.contains("Everything is on the page"),
+                    "{text}"
+                );
+            }
+            Kind::Audio => {
+                let blocks = nmc_preview::media::audio(name, &data, true).unwrap();
+                assert!(text_of(&blocks).join("\n").contains("8000 Hz"));
+            }
+            Kind::Video => unreachable!("no video sample"),
         }
     }
 }

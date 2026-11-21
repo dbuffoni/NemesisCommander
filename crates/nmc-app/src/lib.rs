@@ -5,6 +5,7 @@
 //! a [`ProviderRegistry`] with every provider this build supports, instead of
 //! assembling those pieces themselves.
 
+pub mod desktop;
 pub mod sync;
 
 mod archive_search;

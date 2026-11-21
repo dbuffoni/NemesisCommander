@@ -15,10 +15,21 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use image::RgbaImage;
 use nmc_preview::model::{Camera, Mesh};
 use nmc_preview::rich::{Block, Line};
-use nmc_preview::{Kind, markdown, office, pdf};
+use nmc_preview::{Kind, ebook, markdown, media, office, pdf};
 
 /// Files previewed as documents, PDFs or models are read up to this size.
 pub const PREVIEW_LIMIT: u64 = 256 * 1024 * 1024;
+
+/// Audio and video files are described from their first bytes only.
+pub const MEDIA_LIMIT: u64 = 32 * 1024 * 1024;
+
+/// How much of a file to read to preview it.
+pub fn read_limit(name: &str) -> Option<u64> {
+    match kind_of(name)? {
+        Kind::Audio | Kind::Video => Some(MEDIA_LIMIT),
+        _ => Some(PREVIEW_LIMIT),
+    }
+}
 
 /// Pictures of pages and models are rendered to fit this box in the
 /// viewer, and a smaller one in the quick view.
@@ -51,7 +62,8 @@ pub fn kind_of(name: &str) -> Option<Kind> {
 /// background: Office files and models can take a moment.
 pub fn prepare(name: &str, data: &Arc<Vec<u8>>, truncated: bool) -> Result<Prepared, String> {
     let Some(kind) = kind_of(name) else { return Ok(Prepared::Plain) };
-    if truncated {
+    // Audio and video are described from their start, however long they are.
+    if truncated && !matches!(kind, Kind::Audio | Kind::Video) {
         return Err(format!("the file is too large to preview (over {} MiB)", PREVIEW_LIMIT >> 20));
     }
     Ok(match kind {
@@ -65,6 +77,9 @@ pub fn prepare(name: &str, data: &Arc<Vec<u8>>, truncated: bool) -> Result<Prepa
             Prepared::Pdf { pages }
         }
         Kind::Model => Prepared::Model(Arc::new(Mesh::load(name, data)?)),
+        Kind::Ebook(format) => Prepared::Rich(ebook::read(format, data)?),
+        Kind::Audio => Prepared::Rich(media::audio(name, data, !truncated)?),
+        Kind::Video => Prepared::Rich(media::video(name, data, !truncated)?),
     })
 }
 

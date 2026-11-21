@@ -154,7 +154,6 @@ actions! {
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];
     Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     [];
-    FolderSizes   = "view.folder-sizes",    View, false, "Count folder sizes",        ["Alt+S"];
     DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", ["Alt+U"];
     Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    ["Alt+K"];
     SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    [];
@@ -306,9 +305,6 @@ impl Action {
             }
             Action::Duplicates => {
                 "Finds files with the same content in this folder and below; the extra copies can go to the basket."
-            }
-            Action::FolderSizes => {
-                "Counts the size of the folders of the panel (or the selected ones) and shows it in the size column, with a small bar from green to red for the biggest."
             }
             Action::DiskUsage => {
                 "Lists what takes the space in this folder, biggest first, and lets you go into the folders."
@@ -569,6 +565,10 @@ impl Default for Keymap {
     }
 }
 
+/// Commands that were removed: a settings file that still binds a key to
+/// one is not a mistake, so no warning is made.
+const RETIRED: &[&str] = &["view.folder-sizes"];
+
 impl Keymap {
     /// Builds the keymap from defaults and `overrides` (action id → chords).
     /// Overriding an action replaces all its default chords; a chord given to
@@ -587,6 +587,9 @@ impl Keymap {
         let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
         for (id, keys) in overrides {
             let action = Action::from_id(id);
+            if action.is_none() && RETIRED.contains(&id.as_str()) {
+                continue;
+            }
             if action.is_none() && !is_extra_command(id) {
                 warnings.push(format!("unknown action {id:?} in [keys]"));
                 continue;

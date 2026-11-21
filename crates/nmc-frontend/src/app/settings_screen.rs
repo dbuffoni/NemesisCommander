@@ -7,7 +7,9 @@ use nmc_app::sync::{self, SyncMode};
 use nmc_config::{ExportBundle, Key};
 
 use super::{App, AppEvent, External, home_file};
-use crate::dialogs::{ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, Overlay};
+use crate::dialogs::{
+    ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, MessageDialog, Overlay,
+};
 use crate::input::KeyPress;
 use crate::settings::{Command, Field, FieldKind, Row, SettingsScreen};
 
@@ -292,73 +294,57 @@ impl App {
     }
 }
 
-/// Reads what was typed in the "Install nmc serve" dialog: the server, then
-/// the options of `nmc serve install` (`--root DIR`, `--read-only`,
-/// `--port N`, `--renew`).
-fn parse_install_serve(
-    text: &str,
-    tls_dir: std::path::PathBuf,
-) -> Result<nmc_agent::provision::InstallOptions, String> {
-    let mut words = text.split_whitespace();
-    let host = words.next().ok_or("type the server, for example me@nas.lan")?;
-    let mut options = nmc_agent::provision::InstallOptions::new(host, tls_dir);
-    while let Some(word) = words.next() {
-        match word {
-            "--read-only" => options.read_only = true,
-            "--renew" => options.renew = true,
-            "--root" => options.roots.push(words.next().ok_or("--root needs a folder")?.to_owned()),
-            "--port" => {
-                options.port =
-                    words.next().and_then(|p| p.parse().ok()).ok_or("--port needs a number")?;
-            }
-            other => return Err(format!("unknown option {other}")),
-        }
-    }
-    Ok(options)
-}
-
 impl App {
     /// Installs `nmc serve` on the server typed in the dialog (the same as
-    /// `nmc serve install` on the command line).
+    /// `nmc serve install` on the command line), then shows the log.
     pub(super) fn install_serve(&mut self, text: &str) {
-        let options = match parse_install_serve(text, self.context.paths.tls_dir()) {
+        let options = match crate::install::parse(text, self.context.paths.tls_dir()) {
             Ok(options) => options,
             Err(e) => return self.set_error(e),
         };
         self.set_status(format!("Installing nmc serve on {}…", options.authority));
         self.spawn_task(async move {
-            let result = nmc_agent::provision::install_serve(&options, |_| {}).await;
-            let (message, error) = match result {
-                Ok(location) => (
-                    format!(
-                        "nmc serve is running: open {location} (F4 in the drive list saves it)"
-                    ),
-                    false,
-                ),
-                Err(e) => (format!("Installing nmc serve failed: {e}"), true),
-            };
-            AppEvent::TaskDone { message, error, reload: false, focus: None }
+            let (lines, result) = crate::install::run_install(options).await;
+            let _ = result;
+            AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
+                title: "Install nmc serve".into(),
+                lines,
+                then: None,
+                then_choose: None,
+                logo: false,
+            })))
         });
     }
-}
 
-#[cfg(test)]
-mod install_tests {
-    use super::*;
+    /// Ctrl+T in the install question: tests the server without installing,
+    /// then comes back to the question.
+    pub(super) fn test_install(&mut self, dialog: InputDialog) {
+        let options = match crate::install::parse(dialog.field.text(), self.context.paths.tls_dir())
+        {
+            Ok(options) => options,
+            Err(e) => return self.ask_again(dialog, e),
+        };
+        self.set_status(format!("Testing {} (nothing is installed)…", options.authority));
+        self.spawn_task(async move {
+            let lines = crate::install::run_check(options).await;
+            AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
+                title: "Test install".into(),
+                lines,
+                then: Some(dialog),
+                then_choose: None,
+                logo: false,
+            })))
+        });
+    }
 
-    #[test]
-    fn the_install_dialog_reads_the_options() {
-        let options = parse_install_serve(
-            "me@nas.lan --root /srv --root /home --read-only --port 9000",
-            "/tls".into(),
-        )
-        .unwrap();
-        assert_eq!(options.authority, "me@nas.lan");
-        assert_eq!(options.roots, ["/srv", "/home"]);
-        assert!(options.read_only);
-        assert_eq!(options.port, 9000);
-        assert!(parse_install_serve("", "/tls".into()).is_err());
-        assert!(parse_install_serve("h --bogus", "/tls".into()).is_err());
-        assert!(parse_install_serve("h --port x", "/tls".into()).is_err());
+    /// F1 in the install question: what the install does.
+    pub(super) fn explain_install(&mut self, dialog: InputDialog) {
+        self.overlay = Some(Overlay::Message(MessageDialog {
+            title: "Install nmc serve: what it does".into(),
+            lines: crate::install::explanation(),
+            then: Some(dialog),
+            then_choose: None,
+            logo: false,
+        }));
     }
 }

@@ -17,9 +17,8 @@ use nmc_frontend::drives::drive_label;
 use nmc_frontend::icons::icon_for;
 use nmc_frontend::preview::Zoom;
 use nmc_frontend::view::{
-    bar_color, bar_glyph, biggest_size, column_headers, commands_view, counted_size, describe,
-    entry_details, git_mark, git_of, job_line, jobs_progress, jobs_summary, key_bar_label,
-    panel_footer, scroll_offset, size_ratio, size_text_counted, tab_title,
+    column_headers, commands_view, describe, entry_details, git_mark, git_of, job_line, job_route,
+    jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset, size_text, tab_title,
 };
 use nmc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -186,22 +185,18 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
     let mark_width = if git.is_some() { 2 } else { 0 };
     // Two more for the icon of the kind of file.
     let icon_width = if app.context().config.panels.icons { 2 } else { 0 };
-    // One more for the size bar, once folder sizes were counted here.
-    let biggest = biggest_size(app.folder_sizes(), panel);
-    let bar_width = if biggest.is_some() { 2 } else { 0 };
     let mut name_width = width
-        .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width + bar_width)
+        .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     // The flat view gives a third of the name column to the folder.
     let folder_width = if panel.is_branch() { (name_width / 3).clamp(0, 28) } else { 0 };
     name_width = name_width.saturating_sub(folder_width + usize::from(folder_width > 0));
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{}{} {}{}{:>SIZE_WIDTH$}{}",
+        "{}{} {}{:>SIZE_WIDTH$}{}",
         " ".repeat(mark_width),
         fit(&name_title, name_width),
         if folder_width > 0 { format!("{} ", fit("Folder", folder_width)) } else { String::new() },
-        " ".repeat(bar_width),
         size_title,
         if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
     );
@@ -231,18 +226,11 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         if entry.is_dir() && entry.name != PARENT {
             name.push('/');
         }
-        let counted = counted_size(app.folder_sizes(), panel.location(), entry);
-        let size = size_text_counted(entry, app.context().config.panels.human_sizes, counted);
+        let size = size_text(entry, app.context().config.panels.human_sizes);
         let date = if show_date {
             format!(" {:<DATE_WIDTH$}", entry.modified.map(local_time).unwrap_or_default())
         } else {
             String::new()
-        };
-        let ratio = biggest.and_then(|biggest| size_ratio(entry, counted, biggest));
-        let bar = match (bar_width, ratio) {
-            (0, _) => None,
-            (_, Some(ratio)) => Some((format!(" {}", bar_glyph(ratio)), Some(ratio))),
-            (_, None) => Some(("  ".to_owned(), None)),
         };
         let mark = if mark_width > 0 {
             format!("{:<1} ", git_mark(git.as_deref(), &entry.name))
@@ -290,15 +278,6 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         spans.push(Span::styled(name_text, style));
         if !folder_text.is_empty() {
             spans.push(Span::styled(folder_text, if i == cursor { style } else { dim() }));
-        }
-        if let Some((glyph, ratio)) = bar {
-            let mut colour = style;
-            if let Some(ratio) = ratio
-                && i != cursor
-            {
-                colour = colour.fg(hex_colour(&bar_color(ratio)));
-            }
-            spans.push(Span::styled(glyph, colour));
         }
         spans.push(Span::styled(rest, style));
         let line = Line::from(spans);
@@ -387,7 +366,13 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     let (text, style) = match app.status() {
         Some(status) if status.error => (status.text.clone(), Style::new().fg(Color::Red)),
         Some(status) => (status.text.clone(), Style::new()),
-        None => (entry_details(app.workspace.active()), dim()),
+        None => (
+            entry_details(
+                app.workspace.active(),
+                git_of(app, app.workspace.active_side()).as_deref(),
+            ),
+            dim(),
+        ),
     };
     let line = Line::from(Span::styled(fit(&text, area.width as usize), style));
     frame.render_widget(Paragraph::new(line), area);
@@ -638,6 +623,7 @@ fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog) -> usize {
     let area = frame.area();
     let width = (dialog.items.iter().map(|i| i.chars().count()).max().unwrap_or(20) + 4)
         .max(dialog.title.chars().count() + 6)
+        .max(dialog.footer.chars().count() + 4)
         .max(40)
         .min(area.width.saturating_sub(2) as usize) as u16;
     let height = (dialog.items.len() as u16 + 3).clamp(5, area.height.saturating_sub(2));
@@ -867,24 +853,24 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
     let lines: Vec<Line> = if app.jobs.is_empty() {
         vec![Line::styled("No transfers", dim())]
     } else {
-        app.jobs
-            .iter()
-            .enumerate()
-            .map(|(i, job)| {
-                let text = job_line(job, app);
-                let text = fit(&text, inner.width as usize);
-                let style = match job.state {
-                    JobState::Failed => Style::new().fg(Color::Red),
-                    JobState::Completed | JobState::Cancelled => dim(),
-                    _ => Style::new(),
-                };
-                if i == cursor {
-                    Line::styled(text, style.add_modifier(Modifier::REVERSED))
-                } else {
-                    Line::styled(text, style)
-                }
-            })
-            .collect()
+        let mut lines = Vec::new();
+        for (i, job) in app.jobs.iter().enumerate() {
+            let text = fit(&job_line(job, app), inner.width as usize);
+            let route = fit(&format!("      {}", job_route(job, app)), inner.width as usize);
+            let style = match job.state {
+                JobState::Failed => Style::new().fg(Color::Red),
+                JobState::Completed | JobState::Cancelled => dim(),
+                _ => Style::new(),
+            };
+            if i == cursor {
+                lines.push(Line::styled(text, style.add_modifier(Modifier::REVERSED)));
+                lines.push(Line::styled(route, style.add_modifier(Modifier::REVERSED)));
+            } else {
+                lines.push(Line::styled(text, style));
+                lines.push(Line::styled(route, dim()));
+            }
+        }
+        lines
     };
     frame.render_widget(Paragraph::new(lines), inner);
 }
