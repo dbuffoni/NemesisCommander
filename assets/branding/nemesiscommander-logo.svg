@@ -1,11 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="30.0 20.0 280 280">
   <title>NemesisCommander</title>
-  <g stroke="#000" stroke-width="2" stroke-linejoin="round">
-    <rect x="48" y="45" width="80" height="230" rx="40" fill="#000"/>
-    <rect x="212" y="45" width="80" height="230" rx="40" fill="#000"/>
-    <line x1="88" y1="85" x2="252" y2="235" stroke-width="80" stroke-linecap="round"/>
-  </g>
-  <path d="M84.00 125.20 A50.0 50.0 0 0 1 156.40 116.55 L181.93 137.98 A25.0 25.0 0 0 0 218.77 132.74 A40 40 0 0 0 256.00 194.80 A50.0 50.0 0 0 1 183.60 203.45 L158.07 182.02 A25.0 25.0 0 0 0 121.23 187.26 A40 40 0 0 0 84.00 125.20Z" fill="#1F6BFF"/>
+  <defs><clipPath id="inner"><rect x="58" y="55" width="60" height="210" rx="30"/><rect x="222" y="55" width="60" height="210" rx="30"/><circle cx="88" cy="85" r="30"/><circle cx="252" cy="235" r="30"/><polygon points="108.2,62.9 272.2,212.9 231.8,257.1 67.8,107.1"/></clipPath></defs>
+  <g fill="#000" stroke="#000" stroke-width="2" stroke-linejoin="round"><rect x="48" y="45" width="80" height="230" rx="40"/><rect x="212" y="45" width="80" height="230" rx="40"/><circle cx="88" cy="85" r="40"/><circle cx="252" cy="235" r="40"/><polygon points="115.0,55.5 279.0,205.5 225.0,264.5 61.0,114.5"/></g>
+  <polygon clip-path="url(#inner)" points="-112.3,-124.0 478.0,415.9 452.3,444.0 -138.0,-95.9" fill="#1F6BFF"/>
   <g fill="#fff" stroke="#000" stroke-width="2">
     <rect x="48" y="125" width="80" height="150" rx="40"/>
     <rect x="212" y="45" width="80" height="150" rx="40"/>
