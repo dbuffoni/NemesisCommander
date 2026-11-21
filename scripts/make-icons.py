@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
-"""Draws the NemesisCommander icon: assets/branding/nemesiscommander.svg, the
-PNG sizes and the two marks for the About window, from one description of
-the shapes.
+"""Draws the NemesisCommander icon: assets/branding/nemesiscommander.svg (the
+tile), nemesiscommander-logo.svg and .png (the logo alone), the PNG sizes and
+the two marks for the About window, from one description of the shapes.
 
     scripts/make-icons.py            (needs node with Playwright's Chromium)
 
-The N is a white arch and a purple band across it, as in the artwork
-(nemesiscommander-logo.png) the shapes were traced from; the coordinates
-below are in that picture's pixels (1536 x 1024).
+The N is two white pills with a black outline, a black diagonal band and a
+blue band (#1F6BFF) between them. The blue edges leave the pills with
+tangent arcs (no kinks). Coordinates are in a 343 x 320 box; the N is
+centred on (170, 160).
 """
 import json
 import os
@@ -15,47 +15,42 @@ import subprocess
 import tempfile
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "branding")
-BACKGROUND = "#0b0b12"
-WHITE = "#ececf6"
-DARK_ARCH = "#1d1b2e"
+BLUE = "#1F6BFF"
+TILE = "#ffffff"
 
-ARCH = "M425 240 C425 190 465 165 515 182 L755 345 L592 440 L590 662 L478 744 C445 760 425 745 425 715 Z"
-BAND = ("M592 437 C615 380 665 345 718 345 L752 347 L1098 628 C1108 636 1112 645 1110 660 "
-        "C1105 715 1050 760 995 753 C975 750 962 745 945 733 L625 447 C612 440 600 438 592 437 Z")
-DEFS = """<defs>
-    <linearGradient id="band" gradientUnits="userSpaceOnUse" x1="640" y1="400" x2="1080" y2="720">
-      <stop offset="0" stop-color="#4b12f0"/>
-      <stop offset="1" stop-color="#b21eff"/>
-    </linearGradient>
-  </defs>"""
-# Where the N is in the artwork: centre and size.
-CENTRE = (768, 462)
-SPAN = (687, 595)
-
-
-def shapes(arch_color):
-    return f'<path d="{ARCH}" fill="{arch_color}"/>\n  <path d="{BAND}" fill="url(#band)"/>'
-
-
-def tile_svg():
-    s = 0.56
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <title>NemesisCommander</title>
-  {DEFS}
-  <rect width="512" height="512" rx="112" fill="{BACKGROUND}"/>
-  <g transform="translate(256 256) scale({s}) translate(-{CENTRE[0]} -{CENTRE[1]})">
-  {shapes(WHITE)}
+BODY = f"""<g stroke="#000" stroke-width="2" stroke-linejoin="round">
+    <rect x="48" y="45" width="80" height="230" rx="40" fill="#000"/>
+    <rect x="212" y="45" width="80" height="230" rx="40" fill="#000"/>
+    <line x1="88" y1="85" x2="252" y2="235" stroke-width="80" stroke-linecap="round"/>
   </g>
+  <path d="M84.00 125.20 A50.0 50.0 0 0 1 156.40 116.55 L181.93 137.98 A25.0 25.0 0 0 0 218.77 132.74 A40 40 0 0 0 256.00 194.80 A50.0 50.0 0 0 1 183.60 203.45 L158.07 182.02 A25.0 25.0 0 0 0 121.23 187.26 A40 40 0 0 0 84.00 125.20Z" fill="{BLUE}"/>
+  <g fill="#fff" stroke="#000" stroke-width="2">
+    <rect x="48" y="125" width="80" height="150" rx="40"/>
+    <rect x="212" y="45" width="80" height="150" rx="40"/>
+  </g>"""
+CENTRE = (170, 160)
+SIDE = 280  # the box around the N used by the logo and the marks
+
+
+def logo_svg(plate=None, size=256):
+    """The logo alone; `plate` is an optional rounded background colour."""
+    x, y = CENTRE[0] - SIDE / 2, CENTRE[1] - SIDE / 2
+    back = f'<rect x="{x}" y="{y}" width="{SIDE}" height="{SIDE}" rx="56" fill="{plate}"/>\n  ' if plate else ""
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="{x} {y} {SIDE} {SIDE}">
+  <title>NemesisCommander</title>
+  {back}{BODY}
 </svg>
 """
 
 
-def mark_svg(arch_color):
-    side = max(SPAN) + 70
-    x, y = CENTRE[0] - side / 2, CENTRE[1] - side / 2
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="{x} {y} {side} {side}">
-  {DEFS}
-  {shapes(arch_color)}
+def tile_svg():
+    s = 1.3
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>NemesisCommander</title>
+  <rect width="512" height="512" rx="112" fill="{TILE}"/>
+  <g transform="translate(256 256) scale({s}) translate(-{CENTRE[0]} -{CENTRE[1]})">
+  {BODY}
+  </g>
 </svg>
 """
 
@@ -81,12 +76,18 @@ if __name__ == "__main__":
     out = lambda name: os.path.join(OUT, name)
     work = tempfile.mkdtemp()
     open(out("nemesiscommander.svg"), "w").write(tile_svg())
-    marks = {"dark": WHITE, "light": DARK_ARCH}
-    jobs = [(out("nemesiscommander.svg"), out(f"nemesiscommander-{n}.png"), n, False)
+    open(out("nemesiscommander-logo.svg"), "w").write(logo_svg())
+    jobs = [(out("nemesiscommander.svg"), out(f"nemesiscommander-{n}.png"), n, True)
             for n in (16, 24, 32, 48, 64, 128, 256, 512)]
-    for name, color in marks.items():
+    # The logo for the README: on white, 1024 pixels.
+    path = os.path.join(work, "logo-white.svg")
+    open(path, "w").write(logo_svg(plate="#ffffff", size=1024))
+    jobs.append((path, out("nemesiscommander-logo.png"), 1024, False))
+    # The marks: on a light theme the logo alone, on a dark one on a white plate
+    # (the outline and the band are dark).
+    for name, plate in {"light": None, "dark": "#ffffff"}.items():
         path = os.path.join(work, f"mark-{name}.svg")
-        open(path, "w").write(mark_svg(color))
+        open(path, "w").write(logo_svg(plate=plate))
         jobs.append((path, out(f"nemesiscommander-mark-{name}.png"), 256, True))
     script = os.path.join(work, "render.js")
     open(script, "w").write(RENDER)

@@ -549,15 +549,15 @@ async fn about_shows_the_logo_and_the_version() {
     assert!(text.contains("NemesisCommander 0.1.0"), "version");
     assert!(text.contains("MIT"), "license");
     assert!(text.contains("github.com/dbuffoni/NemesisCommander"), "source");
-    // The logo is drawn with half blocks, some of them the purple band.
-    let purple = buffer
+    // The logo is drawn with half blocks, some of them the blue band.
+    let blue = buffer
         .content()
         .iter()
         .filter(
-            |c| matches!(c.fg, ratatui::style::Color::Rgb(r, g, b) if b > 200 && r > 60 && g < 80),
+            |c| matches!(c.fg, ratatui::style::Color::Rgb(r, g, b) if b > 200 && r < 90 && g > 70 && g < 150),
         )
         .count();
-    assert!(purple > 5, "{purple} purple cells");
+    assert!(blue > 5, "{blue} blue cells");
     h.key("Esc");
     assert!(h.app.overlay().is_none());
 }

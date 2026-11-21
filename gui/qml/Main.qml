@@ -57,8 +57,10 @@ ApplicationWindow {
     readonly property color commentColor: dark ? "#8a929c" : "#6b7480"
     readonly property color nameColor: dark ? "#6fd0e0" : "#0b6e80"
     readonly property color removedColor: dark ? "#ff7b72" : "#c62828"
-    readonly property color selectionTint: Qt.rgba(0.78, 0.56, 0.10, dark ? 0.22 : 0.16)
-    readonly property color selectedText: dark ? "#f0c060" : "#7a4d00"
+    // The blue of the logo (#1F6BFF), transparent, marks the selected entries.
+    readonly property color brandBlue: "#1F6BFF"
+    readonly property color selectionTint: Qt.rgba(0x1F / 255, 0x6B / 255, 1.0, dark ? 0.32 : 0.22)
+    readonly property color selectedText: dark ? "#8db6ff" : "#0b3fa8"
     readonly property color lineColor: Qt.rgba(palette.windowText.r, palette.windowText.g,
                                                palette.windowText.b, 0.18)
     readonly property color dim: Qt.rgba(palette.windowText.r, palette.windowText.g,

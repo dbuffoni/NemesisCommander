@@ -228,7 +228,7 @@ Rectangle {
                             visible: entry.selected
                             width: 3
                             height: parent.height
-                            color: panel.theme.accent
+                            color: panel.theme.brandBlue
                         }
                         RowLayout {
                             anchors.fill: parent
