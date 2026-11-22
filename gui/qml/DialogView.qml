@@ -1,0 +1,528 @@
+// The open dialog or window over the panels (`view`, an OverlayView of the
+// screen description, by `kind`), and above everything a copy conflict
+// question (`conflict`). The hints name the keys, since the keyboard is
+// how dialogs are answered.
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+Item {
+    id: dialogs
+    property var view: null
+    property var conflict: null
+    readonly property var theme: ApplicationWindow.window
+    visible: view !== null || conflict !== null
+
+    // Dims the panels behind a dialog.
+    Rectangle {
+        anchors.fill: parent
+        color: "#000000"
+        opacity: 0.25
+    }
+
+    // Sized by the dialog it shows.
+    Loader {
+        anchors.centerIn: parent
+        active: dialogs.view !== null
+        sourceComponent: {
+            switch (dialogs.view ? dialogs.view.kind : "") {
+            case "help": return help
+            case "commands": return commands
+            case "input": return input
+            case "confirm": return confirm
+            case "choose": return choose
+            case "message": return message
+            case "viewer": return viewer
+            case "jobs": return jobs
+            case "settings": return settings
+            default: return null
+            }
+        }
+    }
+
+    // A list with a highlighted row that stays in sight.
+    component CursorList: ListView {
+        id: list
+        property int cursor: 0
+        property var stateOf: (item) => ""
+        // Rows laid out in columns (drives, bookmarks) need a fixed-width font.
+        property bool fixed: false
+        // The rows are as wide as the window; a longer row is cut in the
+        // middle, where a path keeps its start and its end.
+        property bool keepsSize: false
+        Layout.fillWidth: true
+        Layout.preferredHeight: keepsSize ? dialogs.height * 0.6
+                                          : Math.min(contentHeight, dialogs.height * 0.6)
+        implicitWidth: 480
+        interactive: false
+        clip: true
+        onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)
+        onCountChanged: positionViewAtIndex(cursor, ListView.Contain)
+        delegate: Component {
+            Rectangle {
+                width: ListView.view.width
+                height: dialogs.theme.rowHeight
+                color: index === list.cursor ? palette.highlight : "transparent"
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: 4
+                    width: parent.width - 8
+                    elide: Text.ElideMiddle
+                    font: list.fixed ? dialogs.theme.fixedFont : Qt.application.font
+                    text: typeof modelData === "string" ? modelData : modelData.text
+                    color: index === list.cursor ? palette.highlightedText
+                         : list.stateOf(modelData) === "failed" ? dialogs.theme.errorColor
+                         : palette.windowText
+                }
+            }
+        }
+    }
+
+    component Lines: Repeater {
+        delegate: Label {
+            Layout.fillWidth: true
+            text: modelData
+            wrapMode: Text.Wrap
+            textFormat: Text.PlainText
+        }
+    }
+
+    Component {
+        id: help
+        Box {
+            title: "Main shortcuts"
+            hint: "F9 lists every command.    Esc: close"
+            GridLayout {
+                columns: 3
+                columnSpacing: 32
+                Repeater {
+                    model: dialogs.view.groups
+                    delegate: ColumnLayout {
+                        Layout.alignment: Qt.AlignTop
+                        Label {
+                            text: modelData.title
+                            font.bold: true
+                            color: dialogs.theme.accent
+                        }
+                        Repeater {
+                            model: modelData.rows
+                            delegate: RowLayout {
+                                spacing: 12
+                                Label {
+                                    text: modelData[0]
+                                    font.bold: true
+                                    Layout.preferredWidth: 110
+                                }
+                                Label { text: modelData[1] }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // The command list: category buttons, what was typed, then every
+    // command as Category/Command with its shortcuts. Buttons and rows take
+    // clicks too (MouseAreas, so the keyboard stays with the window).
+    Component {
+        id: commands
+        Box {
+            title: "Commands"
+            hint: dialogs.view.hint
+            hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
+            width: Math.min(dialogs.theme.width * 0.9, 860)
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
+                Repeater {
+                    model: dialogs.view.categories
+                    delegate: Rectangle {
+                        readonly property bool chosen: index === dialogs.view.category
+                        implicitWidth: name.implicitWidth + 20
+                        implicitHeight: name.implicitHeight + 8
+                        radius: 3
+                        color: chosen ? palette.highlight : "transparent"
+                        border.color: chosen ? palette.highlight : dialogs.theme.lineColor
+                        Label {
+                            id: name
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: chosen ? palette.highlightedText : palette.windowText
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: dialogs.theme.app.pick("category", index)
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                implicitHeight: dialogs.theme.rowHeight + 6
+                color: palette.base
+                border.color: palette.highlight
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: 6
+                    text: dialogs.view.recording
+                          ? "Press the new shortcut for " + dialogs.view.recording
+                          : "> " + dialogs.view.filter + "_"
+                    color: dialogs.view.recording ? dialogs.theme.accent : palette.text
+                    font: dialogs.theme.fixedFont
+                }
+            }
+            ListView {
+                id: rows
+                Layout.fillWidth: true
+                // A fixed height (SC-69): the window keeps its size whatever
+                // the filter leaves in the list.
+                Layout.preferredHeight: Math.min(16 * dialogs.theme.rowHeight, dialogs.height * 0.6)
+                implicitWidth: 600
+                interactive: false
+                clip: true
+                model: dialogs.view.rows
+                currentIndex: dialogs.view.item
+                onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                onCountChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                delegate: Rectangle {
+                    readonly property bool current: index === dialogs.view.item
+                    width: ListView.view.width
+                    height: dialogs.theme.rowHeight
+                    radius: 2
+                    color: current ? palette.highlight : "transparent"
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 6
+                        anchors.rightMargin: 6
+                        spacing: 16
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: modelData.name
+                            color: current ? palette.highlightedText : palette.windowText
+                        }
+                        Label {
+                            text: modelData.keys
+                            font: dialogs.theme.fixedFont
+                            color: current ? palette.highlightedText : dialogs.theme.dim
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: dialogs.theme.app.pick("command", index)
+                    }
+                }
+            }
+            // F1: what the highlighted command does. Its room is always
+            // reserved, so showing or hiding it does not move the window.
+            Label {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                Layout.preferredHeight: 2 * dialogs.theme.rowHeight
+                verticalAlignment: Text.AlignTop
+                clip: true
+                text: dialogs.view.rows.length === 0 ? "Nothing matches" : dialogs.view.help
+                wrapMode: Text.Wrap
+                color: dialogs.view.rows.length === 0 ? dialogs.theme.dim : dialogs.theme.accent
+            }
+        }
+    }
+
+    Component {
+        id: input
+        Box {
+            title: dialogs.view.title
+            hint: dialogs.view.hint
+            Label {
+                text: dialogs.view.prompt
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+            }
+            // The answer; a longer one scrolls with the cursor (the whole
+            // answer of a place is written under the field).
+            Rectangle {
+                id: fieldBox
+                Layout.fillWidth: true
+                implicitHeight: dialogs.theme.rowHeight + 6
+                color: palette.base
+                border.color: palette.highlight
+                clip: true
+                // How far the text moves left so that the cursor stays in.
+                readonly property real shift: Math.min(0, width - 14 - beforeCursor.advanceWidth)
+                Text {
+                    id: field
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: 4 + fieldBox.shift
+                    text: dialogs.view.text
+                    font: dialogs.theme.fixedFont
+                    color: palette.text
+                    textFormat: Text.PlainText
+                }
+                TextMetrics {
+                    id: beforeCursor
+                    font: dialogs.theme.fixedFont
+                    text: Array.from(dialogs.view.text).slice(0, dialogs.view.cursor).join("")
+                }
+                Rectangle {
+                    x: 4 + fieldBox.shift + beforeCursor.advanceWidth
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 2
+                    height: dialogs.theme.rowHeight
+                    color: palette.text
+                }
+            }
+            // The whole place, wrapped, with room for three rows.
+            Item {
+                visible: dialogs.view.is_path
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 3 * dialogs.theme.rowHeight : 0
+                clip: true
+                Label {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    text: dialogs.view.text
+                    wrapMode: Text.WrapAnywhere
+                    textFormat: Text.PlainText
+                    font: dialogs.theme.fixedFont
+                    color: dialogs.theme.dim
+                }
+            }
+            // Under the field: examples, what was understood, the new names.
+            // The room is kept whatever is written, so the window stays put.
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(dialogs.view.preview_rows * dialogs.theme.rowHeight,
+                                                 previewLines.implicitHeight)
+                clip: true
+                ColumnLayout {
+                    id: previewLines
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    spacing: 0
+                    Lines { model: dialogs.view.preview }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: confirm
+        Box {
+            title: dialogs.view.title
+            hint: dialogs.view.hint
+            Lines { model: dialogs.view.lines }
+        }
+    }
+
+    Component {
+        id: choose
+        Box {
+            title: dialogs.view.title
+            hint: dialogs.view.footer
+            CursorList {
+                fixed: true
+                keepsSize: dialogs.view.keeps_size
+                cursor: dialogs.view.cursor
+                model: dialogs.view.items
+            }
+        }
+    }
+
+    Component {
+        id: message
+        Box {
+            id: messageBox
+            title: dialogs.view.title
+            hint: dialogs.view.hint
+            // A log (the steps of an install, a connection test) keeps one
+            // size while lines are added, and shows its end.
+            readonly property bool log: dialogs.view.busy || dialogs.view.lines.length > 8
+            fixedHeight: log ? dialogs.height * 0.7 : 0
+            // About: the logo above the text.
+            Image {
+                visible: !!dialogs.view.logo_url
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: visible ? 128 : 0
+                Layout.preferredHeight: visible ? 128 : 0
+                source: dialogs.view.logo_url
+                        ? (dialogs.theme.dark ? dialogs.view.logo_url : dialogs.view.logo_url_light)
+                        : ""
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                mipmap: true
+            }
+            Lines { visible: !messageBox.log; model: messageBox.log ? [] : dialogs.view.lines }
+            ListView {
+                id: logLines
+                visible: messageBox.log
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                interactive: false
+                model: messageBox.log ? dialogs.view.lines : []
+                onCountChanged: positionViewAtEnd()
+                delegate: Label {
+                    width: ListView.view.width
+                    text: modelData
+                    wrapMode: Text.WrapAnywhere
+                    textFormat: Text.PlainText
+                    font: dialogs.theme.fixedFont
+                    color: modelData.indexOf("Failed") >= 0 || modelData.indexOf("! ") >= 0
+                           || modelData.indexOf("✗") === 0 ? dialogs.theme.errorColor
+                           : modelData.indexOf("✓") === 0 ? dialogs.theme.codeColor
+                           : palette.windowText
+                }
+            }
+        }
+    }
+
+    Component {
+        id: viewer
+        Rectangle {
+            width: dialogs.width
+            height: dialogs.height
+            color: palette.base
+            ViewerView {
+                anchors.fill: parent
+                anchors.margins: 8
+                view: dialogs.view
+            }
+        }
+    }
+
+    Component {
+        id: jobs
+        Box {
+            title: "Transfers"
+            hint: "p: pause    r: resume/retry    c: cancel    +/-: priority    "
+                  + "[/]: files at once    a: auto    x: remove finished    Esc: close"
+            fixedHeight: dialogs.height * 0.8
+            width: Math.min(dialogs.theme.width * 0.9, 1100)
+            Label {
+                visible: dialogs.view.rows.length === 0
+                text: "No transfers."
+                color: dialogs.theme.dim
+            }
+            // Newest first. Each transfer takes a few rows: the job, then
+            // where from and to, then how the data travels; long text wraps.
+            ListView {
+                id: jobRows
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                interactive: false
+                clip: true
+                model: dialogs.view.rows
+                onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                currentIndex: dialogs.view.cursor
+                delegate: Rectangle {
+                    readonly property bool current: index === dialogs.view.cursor
+                    readonly property color ink: current ? palette.highlightedText
+                        : modelData.state === "failed" ? dialogs.theme.errorColor
+                        : palette.windowText
+                    width: ListView.view.width
+                    height: jobText.implicitHeight + jobDetail.implicitHeight + 8
+                    color: current ? palette.highlight : "transparent"
+                    radius: 2
+                    Label {
+                        id: jobText
+                        x: 6
+                        y: 2
+                        width: parent.width - 12
+                        text: modelData.text
+                        font: dialogs.theme.fixedFont
+                        wrapMode: Text.WrapAnywhere
+                        color: ink
+                    }
+                    Label {
+                        id: jobDetail
+                        x: 6
+                        anchors.top: jobText.bottom
+                        width: parent.width - 12
+                        text: modelData.detail
+                        wrapMode: Text.WrapAnywhere
+                        color: current ? palette.highlightedText : dialogs.theme.dim
+                    }
+                }
+            }
+        }
+    }
+
+    // Ctrl+,: options and shortcuts, changed in place. A dot marks values
+    // that differ from the built-in ones.
+    Component {
+        id: settings
+        Box {
+            title: "Settings    " + dialogs.view.percent + "%"
+            hint: dialogs.view.hint
+            hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
+            width: Math.min(dialogs.theme.width * 0.9, 860)
+            Repeater {
+                model: dialogs.view.rows
+                delegate: Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: dialogs.theme.rowHeight
+                    readonly property bool current: index === dialogs.view.cursor
+                    readonly property bool header: modelData.kind === "header"
+                    color: current ? palette.highlight : "transparent"
+                    radius: 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: header ? 0 : 12
+                        anchors.rightMargin: 6
+                        spacing: 12
+                        Label {
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            text: modelData.label
+                            font.bold: header
+                            color: current ? palette.highlightedText
+                                 : header ? dialogs.theme.headingColor
+                                 : modelData.kind === "command" ? dialogs.theme.linkColor
+                                 : palette.windowText
+                        }
+                        Label {
+                            visible: !header && modelData.kind !== "command"
+                            Layout.preferredWidth: parent.width * 0.38
+                            elide: Text.ElideRight
+                            text: (modelData.changed ? "• " : "") + modelData.value
+                            font: dialogs.theme.fixedFont
+                            color: current ? palette.highlightedText
+                                 : modelData.changed ? dialogs.theme.selectedText
+                                 : modelData.value === "none" ? dialogs.theme.dim
+                                 : palette.windowText
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A copy conflict waits for an answer before anything else. The paths
+    // wrap, so the whole of them can be read.
+    Box {
+        anchors.centerIn: parent
+        visible: dialogs.conflict !== null
+        title: "File exists"
+        hint: "o: overwrite    s: skip    r: keep both    a / Esc: abort\n"
+              + "Capital letter (O, S, R): same answer for all"
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WrapAnywhere
+            text: dialogs.conflict ? dialogs.conflict.destination + " already exists." : ""
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: dialogs.conflict ? "Existing:  " + dialogs.conflict.existing : ""
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: dialogs.conflict ? "New:          " + dialogs.conflict.incoming : ""
+        }
+    }
+}

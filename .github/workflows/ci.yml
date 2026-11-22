@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # The toolchain version comes from rust-toolchain.toml.
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
+      - run: cargo fmt --all --check
+      # The desktop interface needs Qt: it is checked in the `gui` job.
+      - run: cargo clippy --workspace --exclude nmc-gui --all-targets
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS and Windows are off for now (they take too long). To turn
+        # them back on, set the repository variable CI_ALL_OS to "true"
+        # (Settings > Secrets and variables > Actions > Variables).
+        os: ${{ fromJSON(vars.CI_ALL_OS == 'true' && '["ubuntu-24.04","macos-latest","windows-latest"]' || '["ubuntu-24.04"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
+      # OpenSSH's sftp-server and Samba, for the SFTP and SMB provider tests,
+      # and a private sshd for the `nmc serve install` test.
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-sftp-server openssh-server samba
+          sudo scripts/smb-test-server.sh /var/tmp/nmc-smb >> "$GITHUB_ENV"
+          sudo mkdir -p /run/sshd
+          scripts/ssh-test-server.sh /var/tmp/nmc-ssh >> "$GITHUB_ENV"
+      - run: cargo test --workspace --exclude nmc-gui
+
+  gui:
+    name: Desktop interface (Qt 6)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gui
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
+      # lld: cxx-qt picks a linker that handles Qt's object files; without
+      # it, it picks gold, which drops cxx-qt's initializers.
+      - name: Install Qt 6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lld \
+            qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
+            qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            qml6-module-qtqml-workerscript qml6-module-qtqml-models
+      - run: cargo clippy -p nmc-gui --all-targets
+      # The window tests use Qt's offscreen platform: no display needed.
+      - run: cargo test -p nmc-gui
+
+  gui-other:
+    name: Desktop interface (${{ matrix.os }})
+    # Off for now (it takes too long); set the repository variable
+    # CI_ALL_OS to "true" to run it again.
+    if: vars.CI_ALL_OS == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: gui
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
+      # Qt's official build, as the installers will use; it puts qmake and
+      # Qt's libraries on PATH.
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.3"
+          cache: true
+      # Qt's qyieldcpu.h calls the ARM intrinsic __yield without including
+      # its header, which the current Xcode's clang rejects.
+      - if: runner.os == 'macOS'
+        run: echo "CXXFLAGS=-include arm_acle.h" >> "$GITHUB_ENV"
+      - run: cargo test -p nmc-gui
+        env:
+          QT_QPA_PLATFORM: offscreen

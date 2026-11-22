@@ -1,0 +1,37 @@
+[package]
+name = "nmc-script"
+description = "NemesisCommander's TypeScript scripting: V8 through deno_core, the `nmc` API over the copy engine and providers, and per-script permissions."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+# V8 adds about 60 MB to a program: only `nmc` turns on `engine` (with its
+# `scripting` feature, which agent builds leave out); the window runs
+# scripts through `nmc` (ADR 0020).
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-ops.workspace = true
+deno_core = { version = "0.413.0", optional = true }
+deno_error = { version = "0.7.1", optional = true }
+deno_ast = { version = "0.53.3", features = ["transpiling"], optional = true }
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "net"] }
+
+[features]
+default = ["engine"]
+# V8 and the `nmc` API: running scripts. Without it, only plugin manifests,
+# grants and permissions (nmc-gui runs scripts through the `nmc` program).
+engine = ["dep:deno_core", "dep:deno_error", "dep:deno_ast"]
+
+[dev-dependencies]
+nmc-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

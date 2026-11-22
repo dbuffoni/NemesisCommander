@@ -1,0 +1,180 @@
+# Builds the distributable files:
+#
+# * the AppImage of the main application (x86_64): the window, with Qt
+#   bundled, and the `nmc` program, and
+# * the agent: a static Linux `nmc` per architecture, built without the
+#   terminal UI and desktop features, that controllers copy to servers.
+#
+# Every push to dev builds them and keeps them as workflow artifacts; a
+# tag like v0.2.0 also publishes them as a GitHub release.
+name: Release
+
+on:
+  push:
+    branches: [dev]
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    name: AppImage (x86_64)
+    # The oldest supported runner: the AppImage then runs on older glibc too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: appimage
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
+      # A recent Qt from the Qt project (the system one is too old here); the
+      # AppImage bundles it.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          cache: true
+      - name: Install packaging tools and the libraries Qt's X11 plugin needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends file desktop-file-utils lld \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libegl1 libgl1
+      - name: Build nmc and nmc-gui
+        run: |
+          echo "QMAKE=$QT_ROOT_DIR/bin/qmake" >> "$GITHUB_ENV"
+          # Two builds: built together, Cargo would unify features and give
+          # nmc-gui nmc's script engine (V8) as well.
+          cargo build --release --locked -p nmc-cli --features rar
+          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p nmc-gui --features rar
+      - name: Smoke test
+        run: |
+          target/release/nmc --version
+          target/release/nmc keys | grep -q "Copy"
+          QT_QPA_PLATFORM=offscreen target/release/nmc-gui --self-test --keys=F1 | grep -q '"help"'
+      # Sizes and idle memory must stay within budget (raise one only on
+      # purpose); the benchmark table is for reading, it never fails.
+      - name: Footprint
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          { echo "### Footprint"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          ok=true
+          scripts/footprint.py size target/release/nmc 90 || ok=false
+          scripts/footprint.py size target/release/nmc-gui 35 || ok=false
+          scripts/footprint.py idle 20 -- target/release/nmc agent --stdio || ok=false
+          scripts/footprint.py idle 90 -- target/release/nmc-gui || ok=false
+          { echo; echo "### Benchmarks (nmc)"; } >> "$GITHUB_STEP_SUMMARY"
+          scripts/footprint.py bench target/release/nmc
+          $ok
+      - name: Package
+        run: packaging/linux/build-appimage.sh target/release "${GITHUB_REF_NAME//\//-}"
+      - name: Check the AppImage starts
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          chmod +x NemesisCommander-*.AppImage
+          ./NemesisCommander-*.AppImage nmc --version
+          ./NemesisCommander-*.AppImage --version
+          # The window, with the bundled Qt and QML modules.
+          ./NemesisCommander-*.AppImage --self-test --keys="F1" | grep -q '"help"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-x86_64
+          path: NemesisCommander-*.AppImage
+          if-no-files-found: error
+      - name: AppImage footprint
+        run: |
+          { echo; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          scripts/footprint.py size NemesisCommander-*.AppImage 90
+
+  agent:
+    name: Agent (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: x86_64
+          - target: aarch64-unknown-linux-musl
+            arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: agent-${{ matrix.target }}
+      - name: Install Zig (C cross compiler)
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.1
+      - name: Install cargo-zigbuild
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Build the static agent
+        # No default features: no terminal UI, no recycle bin, no scripting,
+        # no SFTP/WebDAV/S3/SMB clients.
+        run: cargo zigbuild --release --locked -p nmc-cli --no-default-features --target ${{ matrix.target }}
+      - name: Check it is static and starts
+        run: |
+          bin=target/${{ matrix.target }}/release/nmc
+          file "$bin"
+          file "$bin" | grep -Eq "statically linked|static-pie linked"
+          if [ "${{ matrix.arch }}" = x86_64 ]; then "$bin" --version; fi
+          cp "$bin" "nmc-agent-linux-${{ matrix.arch }}"
+          ls -l "nmc-agent-linux-${{ matrix.arch }}"
+      - name: Footprint
+        run: |
+          { echo "### Agent footprint (${{ matrix.arch }})"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
+          ok=true
+          scripts/footprint.py size "nmc-agent-linux-${{ matrix.arch }}" 16 || ok=false
+          if [ "${{ matrix.arch }}" = x86_64 ]; then
+            scripts/footprint.py idle 12 -- "./nmc-agent-linux-${{ matrix.arch }}" agent --stdio || ok=false
+          fi
+          $ok
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ matrix.arch }}
+          path: nmc-agent-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [appimage, agent]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

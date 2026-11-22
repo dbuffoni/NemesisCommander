@@ -1,0 +1,43 @@
+[package]
+name = "nmc-app"
+description = "Wires NemesisCommander together: settings, providers and the transfer manager, for every front end."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-providers.workspace = true
+nmc-archive.workspace = true
+nmc-index.workspace = true
+futures.workspace = true
+nmc-config.workspace = true
+nmc-ops.workspace = true
+nmc-transfer.workspace = true
+nmc-agent.workspace = true
+async-trait.workspace = true
+nmc-ssh.workspace = true
+nmc-sftp = { workspace = true, optional = true }
+nmc-webdav = { workspace = true, optional = true }
+nmc-s3 = { workspace = true, optional = true }
+nmc-smb = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["io-util"] }
+
+[features]
+default = ["desktop", "remote"]
+# Everything a desktop build wants (recycle bin, ...). Server builds of
+# `nmc` disable it.
+desktop = ["nmc-providers/trash"]
+# SFTP, WebDAV, S3 and SMB. Agent-only server builds leave them out: the
+# agent serves its own disk, and agent:// / scs:// stay in every build.
+remote = ["dep:nmc-sftp", "dep:nmc-webdav", "dep:nmc-s3", "dep:nmc-smb"]
+rar = ["nmc-archive/rar"]
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

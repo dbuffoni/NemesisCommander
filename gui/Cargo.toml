@@ -1,0 +1,40 @@
+[package]
+name = "nmc-gui"
+description = "NemesisCommander's desktop interface (Qt 6 / QML): two panels, menus and hotkeys, F1 for the main shortcuts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+# Needs Qt 6 (qmake6 on the PATH, or QMAKE pointing at it) to build, which
+# is why the workspace builds it only when asked: `cargo build -p nmc-gui`.
+
+[[bin]]
+name = "nmc-gui"
+path = "src/main.rs"
+
+[dependencies]
+nmc-frontend = { workspace = true, features = ["scripting"] }
+nmc-app = { workspace = true, features = ["desktop", "remote"] }
+nmc-config.workspace = true
+nmc-vfs.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
+cxx = "1"
+cxx-qt = "0.10.0"
+cxx-qt-lib = { version = "0.10.0", features = ["qt_full"] }
+
+[features]
+# Read RAR archives (RARLAB's unRAR, not OSI-approved; see TODO.md).
+rar = ["nmc-app/rar"]
+
+[build-dependencies]
+cxx-qt-build = { version = "0.10.0", features = ["link_qt_object_files"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+nmc-preview.workspace = true
+
+[lints]
+workspace = true

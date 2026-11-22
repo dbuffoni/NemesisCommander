@@ -1,0 +1,15 @@
+[package]
+name = "nmc-ssh"
+description = "Starting programs on other machines through the OpenSSH client, for NemesisCommander's SFTP and agent providers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+tokio = { workspace = true, features = ["process"] }
+
+[lints]
+workspace = true
