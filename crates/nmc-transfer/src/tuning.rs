@@ -112,6 +112,9 @@ pub struct Decision {
     pub reason: Option<String>,
     /// A limit of simultaneous files for the server, learned from errors.
     pub suggest_limit: Option<usize>,
+    /// Intervals the server is given to recover (set when the job starts to
+    /// wait for it).
+    pub wait_ticks: Option<u32>,
 }
 
 /// The state of the controller of one job.
@@ -174,7 +177,8 @@ impl Tuner {
     /// what to do next.
     pub fn next(&mut self, bytes_per_second: f64, retries: u32, limit: usize) -> Decision {
         let ceiling = self.profile.max_level().min(limit).clamp(MIN_PARALLELISM, MAX_PARALLELISM);
-        let mut decision = Decision { level: self.level, reason: None, suggest_limit: None };
+        let mut decision =
+            Decision { level: self.level, reason: None, suggest_limit: None, wait_ticks: None };
 
         if self.level == 0 {
             self.wait_left = self.wait_left.saturating_sub(1);
@@ -210,6 +214,7 @@ impl Tuner {
             } else {
                 self.level = 0;
                 self.wait_left = self.wait;
+                decision.wait_ticks = Some(self.wait);
                 decision.reason =
                     Some(format!("server not answering, waiting {} s", self.wait * 3));
                 self.wait = (self.wait * 2).min(LONGEST_WAIT);

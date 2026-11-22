@@ -1174,6 +1174,10 @@ pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
         if active.queued > 0 && active.running > 0 {
             parts.push(format!("{} queued", active.queued));
         }
+        let waiting = app.manager.waiting_for_server_count();
+        if waiting > 0 && !active.waiting {
+            parts.push(format!("{waiting} waiting for the server"));
+        }
     }
     if active.paused > 0 {
         parts.push(format!("{} paused", active.paused));
@@ -1284,6 +1288,9 @@ pub fn job_line(job: &JobInfo, app: &App) -> String {
         {
             text.push_str(&format!("  {reason}"));
         }
+    }
+    if job.state == JobState::Queued && app.manager.job_waiting_for_server(job.id) {
+        text.push_str("  [waiting for the server]");
     }
     if let Some(error) = job.errors.first() {
         text.push_str(&format!("  ({error})"));

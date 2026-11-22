@@ -69,8 +69,15 @@ empties it. It tidies itself:
 - the file is written through a temporary file, a broken file counts as empty,
   and an empty store has no file.
 
-**Not done**: waiting at the level of whole queued jobs (a job whose server is
-down still starts and then waits itself), parallelism inside one big file (range requests / multipart).
+**Queued jobs wait for a down server.** When a job's controller starts waiting
+for its server, the server is marked as not answering for that time. Queued
+jobs that use it stay queued (shown as `[waiting for the server]`, and counted
+in the status line) while jobs for other servers go on; when the time is up the
+queue wakes, starts one, and its first file is the probe: if it works the mark
+is cleared, if it fails the wait grows (6 s ... 96 s). The good level per
+server is kept across runs by the memory file.
+
+**Not done**: parallelism inside one big file (range requests / multipart).
 
 **Job indicators** (status bar): `Copying 2 jobs · 1.2 GiB of 3.0 GiB (40%) ·
 12.4 MiB/s · 0:42 left · 4 files at once (auto) · 1 queued · 1 paused · 1

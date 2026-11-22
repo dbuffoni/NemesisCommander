@@ -115,6 +115,8 @@ struct EndpointInfo {
     learned: Option<usize>,
     /// The level a job ended with at its best, to start from next time.
     good: Option<usize>,
+    /// The server did not answer: queued jobs for it wait until then.
+    blocked_until: Option<std::time::Instant>,
 }
 
 impl EndpointInfo {
@@ -158,8 +160,10 @@ struct Inner {
     stats: Mutex<StatsStore>,
     /// The saved connection of each server.
     owners: Mutex<HashMap<String, Owner>>,
+    /// Queued jobs that wait because their server is not answering.
+    waiting: Mutex<HashSet<JobId>>,
     events: broadcast::Sender<JobEvent>,
-    wake: Notify,
+    wake: Arc<Notify>,
 }
 
 impl TransferManager {
@@ -186,8 +190,9 @@ impl TransferManager {
                 endpoints: Mutex::new(HashMap::new()),
                 stats: Mutex::new(StatsStore::disabled()),
                 owners: Mutex::new(HashMap::new()),
+                waiting: Mutex::new(HashSet::new()),
                 events,
-                wake: Notify::new(),
+                wake: Arc::new(Notify::new()),
             }),
         })
     }
@@ -418,10 +423,14 @@ impl TransferManager {
     }
 
     /// Starts jobs while there are free slots. Returns how many started.
+    /// A queued job whose server is not answering stays queued (it shows as
+    /// waiting for the server) and the next one is tried; the first copy that
+    /// starts after the wait is the probe of the server.
     fn fill_slots(&self) -> usize {
         let mut started = 0;
+        let mut skipped: HashSet<JobId> = HashSet::new();
         loop {
-            let running: HashSet<JobId> = self
+            let mut exclude: HashSet<JobId> = self
                 .inner
                 .running
                 .lock()
@@ -429,14 +438,20 @@ impl TransferManager {
                 .keys()
                 .copied()
                 .collect();
-            if running.len()
-                >= self.inner.max_jobs.load(std::sync::atomic::Ordering::Relaxed).max(1)
-            {
-                return started;
+            let running = exclude.len();
+            if running >= self.inner.max_jobs.load(std::sync::atomic::Ordering::Relaxed).max(1) {
+                break;
             }
-            let Ok(Some(id)) = self.inner.journal.next_queued(&running) else {
-                return started;
+            exclude.extend(skipped.iter().copied());
+            let Ok(Some(id)) = self.inner.journal.next_queued(&exclude) else {
+                break;
             };
+            if let Ok(job) = self.inner.journal.job(id)
+                && self.inner.is_blocked(&Inner::job_endpoints(&job.spec))
+            {
+                skipped.insert(id);
+                continue;
+            }
             let token = CancellationToken::new();
             self.inner.running.lock().unwrap_or_else(|e| e.into_inner()).insert(id, token.clone());
             let inner = self.inner.clone();
@@ -447,6 +462,18 @@ impl TransferManager {
             });
             started += 1;
         }
+        *self.inner.waiting.lock().unwrap_or_else(|e| e.into_inner()) = skipped;
+        started
+    }
+
+    /// Whether a queued job waits because its server is not answering.
+    pub fn job_waiting_for_server(&self, id: JobId) -> bool {
+        self.inner.waiting.lock().unwrap_or_else(|e| e.into_inner()).contains(&id)
+    }
+
+    /// How many queued jobs wait for a server.
+    pub fn waiting_for_server_count(&self) -> usize {
+        self.inner.waiting.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     fn running_count(&self) -> usize {
@@ -459,7 +486,7 @@ impl TransferManager {
         loop {
             let notified = self.inner.wake.notified();
             self.fill_slots();
-            if self.running_count() == 0 {
+            if self.running_count() == 0 && self.waiting_for_server_count() == 0 {
                 return;
             }
             notified.await;
@@ -480,6 +507,57 @@ impl TransferManager {
 }
 
 impl Inner {
+    /// The servers do not answer: queued jobs for them wait for `time`.
+    fn block_endpoints(&self, endpoints: &[String], time: Duration) {
+        let until = std::time::Instant::now() + time;
+        let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        for endpoint in endpoints {
+            map.entry(endpoint.clone()).or_default().blocked_until = Some(until);
+        }
+        drop(map);
+        // The queue looks again when the time is up, to try the server.
+        let wake = self.wake.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(time).await;
+            wake.notify_one();
+        });
+    }
+
+    /// The servers answered: queued jobs for them may start.
+    fn unblock_endpoints(&self, endpoints: &[String]) {
+        let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        let mut any = false;
+        for endpoint in endpoints {
+            if let Some(info) = map.get_mut(endpoint)
+                && info.blocked_until.take().is_some()
+            {
+                any = true;
+            }
+        }
+        drop(map);
+        if any {
+            self.wake.notify_one();
+        }
+    }
+
+    /// Whether a server of the job is waiting to recover.
+    fn is_blocked(&self, endpoints: &[String]) -> bool {
+        let now = std::time::Instant::now();
+        let map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        endpoints
+            .iter()
+            .any(|e| map.get(e).and_then(|i| i.blocked_until).is_some_and(|until| until > now))
+    }
+
+    /// The servers a job talks to.
+    fn job_endpoints(spec: &JobSpec) -> Vec<String> {
+        let mut endpoints: Vec<String> =
+            spec.sources.iter().chain(spec.destination.iter()).filter_map(endpoint_key).collect();
+        endpoints.sort();
+        endpoints.dedup();
+        endpoints
+    }
+
     /// Puts what the stats file holds into the live limits.
     fn seed_from_stats(&self) {
         let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
@@ -800,6 +878,11 @@ impl Inner {
                 shown = decision.level;
                 if let Some(reason) = decision.reason {
                     *control.reason.lock().unwrap_or_else(|e| e.into_inner()) = reason;
+                }
+                if let Some(ticks) = decision.wait_ticks {
+                    self.block_endpoints(&control.endpoints, TUNING_INTERVAL * ticks);
+                } else if speed > 0.0 && failures == 0 {
+                    self.unblock_endpoints(&control.endpoints);
                 }
                 if let Some(learned) = decision.suggest_limit {
                     self.learn_limit(&control.endpoints, learned);
@@ -1188,6 +1271,34 @@ mod tests {
         // resume does nothing on a cancelled job
         manager.resume(id).unwrap();
         assert_eq!(manager.job(id).unwrap().state, JobState::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn queued_jobs_wait_while_their_server_does_not_answer() {
+        let (registry, a, b) = setup();
+        a.put_file("/src/x", "1");
+        let manager = TransferManager::new(
+            registry,
+            Journal::open_in_memory().unwrap(),
+            ManagerOptions::default(),
+        )
+        .unwrap();
+        let spec = copy_spec(0);
+        let endpoints = Inner::job_endpoints(&spec);
+        assert!(!endpoints.is_empty(), "the test servers are not local");
+        let id = manager.submit(spec).unwrap();
+        manager.inner.block_endpoints(&endpoints, Duration::from_millis(500));
+        let runner = {
+            let manager = manager.clone();
+            tokio::spawn(async move { manager.run_until_idle().await })
+        };
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(manager.job(id).unwrap().state, JobState::Queued, "waits for the server");
+        assert!(manager.job_waiting_for_server(id));
+        runner.await.unwrap();
+        assert_eq!(manager.job(id).unwrap().state, JobState::Completed, "then it runs");
+        assert!(!manager.job_waiting_for_server(id));
+        assert_eq!(b.get_file("/src/x").unwrap(), b"1");
     }
 
     #[tokio::test]

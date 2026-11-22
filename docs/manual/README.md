@@ -707,7 +707,7 @@ By default the number of files copied at the same time is automatic: a copy
 starts with two, adds files while they make it clearly faster, goes back when
 they do not help and uses fewer when the speed drops or the server returns
 errors. If a server keeps failing, the copy waits (6 s, then longer) and tries
-again by itself. Under **Settings → Transfers**: *Parallelism of transfers*
+again by itself; other queued jobs for that server wait (`waiting for the server`) while jobs for other servers keep going, and the first one to start after the wait tests the server. Under **Settings → Transfers**: *Parallelism of transfers*
 (automatic or fixed) and *Automatic profile*: **balanced** (up to 8 files),
 **max speed** (up to 16) or **discreet** (up to 3, leaves room for other work).
 A server that refuses sessions gets a limit saved on its saved connection
