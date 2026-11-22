@@ -1,6 +1,7 @@
 //! Transfer speed and time left, measured over the last few seconds.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// How far back the speed looks.
@@ -48,6 +49,43 @@ impl SpeedMeter {
     }
 }
 
+/// How often a readout that changes with every sample (the time left, the
+/// speed) is allowed to change on screen, so that it can be read.
+pub const READOUT_EVERY: Duration = Duration::from_secs(3);
+
+/// Texts that are worked out at most once every [`READOUT_EVERY`] and shown
+/// as they were in between, so they do not flicker.
+#[derive(Debug, Default)]
+pub struct Steady {
+    shown: Mutex<HashMap<String, (Instant, String)>>,
+}
+
+impl Steady {
+    /// The text for `key`: the one shown less than three seconds ago, or
+    /// `compute()` when there is none or it is older.
+    pub fn get(&self, key: &str, now: Instant, compute: impl FnOnce() -> String) -> String {
+        let mut shown = self.shown.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((at, text)) = shown.get(key)
+            && now.duration_since(*at) < READOUT_EVERY
+        {
+            return text.clone();
+        }
+        let text = compute();
+        shown.insert(key.to_owned(), (now, text.clone()));
+        text
+    }
+
+    /// Forgets the text of `key`.
+    pub fn forget(&self, key: &str) {
+        self.shown.lock().unwrap_or_else(|e| e.into_inner()).remove(key);
+    }
+
+    /// Forgets every text.
+    pub fn clear(&self) {
+        self.shown.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    }
+}
+
 /// `0:42`, or `1:02:03` from an hour on.
 pub fn clock(seconds: u64) -> String {
     let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
@@ -73,6 +111,19 @@ mod tests {
         assert_eq!(meter.speed(at(14)), Some(500.0));
         meter.clear();
         assert_eq!(meter.speed(at(14)), None);
+    }
+
+    #[test]
+    fn a_readout_changes_at_most_every_three_seconds() {
+        let start = Instant::now();
+        let steady = Steady::default();
+        let at = |s: u64| start + Duration::from_secs(s);
+        assert_eq!(steady.get("eta", at(0), || "0:40".into()), "0:40");
+        assert_eq!(steady.get("eta", at(2), || "0:38".into()), "0:40", "kept");
+        assert_eq!(steady.get("other", at(2), || "x".into()), "x", "keys are separate");
+        assert_eq!(steady.get("eta", at(3), || "0:37".into()), "0:37", "refreshed");
+        steady.forget("eta");
+        assert_eq!(steady.get("eta", at(4), || "0:36".into()), "0:36");
     }
 
     #[test]

@@ -60,7 +60,10 @@ pub fn criteria(
 ) -> Result<SearchCriteria, String> {
     let mut criteria = SearchCriteria {
         name: Mask::parse(mask).map_err(|e| e.to_string())?,
-        content: (!content.is_empty()).then(|| ContentQuery::text(content, false)),
+        content: (!content.is_empty())
+            .then(|| ContentQuery::parse(content, false))
+            .transpose()
+            .map_err(|e| format!("Not a regular expression: {e}"))?,
         ..SearchCriteria::default()
     };
     apply_filters(&mut criteria, filters, now)?;
@@ -99,6 +102,16 @@ mod tests {
         assert!(c.content.is_none());
         assert!(!c.archives);
         assert!(criteria("*", "", "archives >1k", now).unwrap().archives);
+    }
+
+    #[test]
+    fn names_and_contents_can_be_regular_expressions() {
+        let now = SystemTime::now();
+        let c = criteria(r"re:^img-\d+\.jpe?g$", r"re:TODO\(\w+\)", "", now).unwrap();
+        assert!(c.name.matches("IMG-12.jpeg") && !c.name.matches("img-x.jpg"));
+        assert!(c.content.is_some());
+        assert!(criteria("*", "re:(", "", now).unwrap_err().contains("regular expression"));
+        assert!(criteria("re:[", "", "", now).is_err());
     }
 
     #[test]

@@ -50,6 +50,7 @@ taken while implementing it.
 | 0042 | [Card batch K: tolerant filters, e-book/audio/video viewers, launcher icon, install dialog](0042-card-batch-k.md) | Accepted |
 | 0043 | [Agent protocol experience and dialogs](0043-agent-protocol-and-dialogs.md) | Accepted |
 | 0044 | [Adaptive transfer parallelism](0044-adaptive-transfer-parallelism.md) | Accepted |
+| 0045 | [Shift+arrow selection, queue statistics, regular expressions](0045-selection-queue-readouts-regex.md) | Accepted |
 
 Template:
 

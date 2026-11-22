@@ -17,9 +17,9 @@ use nmc_frontend::drives::drive_label;
 use nmc_frontend::icons::icon_for;
 use nmc_frontend::preview::Zoom;
 use nmc_frontend::view::{
-    column_headers, commands_view, describe, entry_details, git_mark, git_of, job_line, job_route,
-    job_transport, jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset,
-    size_text, tab_title,
+    column_headers, commands_view, describe, entry_details, git_mark, git_of, job_how, job_line,
+    job_route, jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset, size_text,
+    tab_title,
 };
 use nmc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -960,7 +960,7 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
             let text = fit(&job_line(job, app), inner.width as usize);
             let width = inner.width as usize;
             let route = fit(&format!("      {}", job_route(job, app)), width);
-            let how = fit(&format!("      {}", job_transport(job, app)), width);
+            let how = fit(&format!("      {}", job_how(job, app)), width);
             let style = match job.state {
                 JobState::Failed => Style::new().fg(Color::Red),
                 JobState::Completed | JobState::Cancelled => dim(),
