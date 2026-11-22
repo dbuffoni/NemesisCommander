@@ -321,6 +321,9 @@ impl InputDialog {
             InputPurpose::PackInto(_) => {
                 hint.push_str("    Ctrl+O: more options (format, level, password)")
             }
+            InputPurpose::InstallServe => {
+                hint.push_str("    Ctrl+T: test without installing    F1: what this does")
+            }
             purpose if purpose.testable() => hint.push_str("    Ctrl+T: test the connection"),
             _ => {}
         }
@@ -459,8 +462,6 @@ pub enum ChoosePurpose {
 pub enum JumpRow {
     /// The bookmark at this index of the configuration.
     Bookmark(usize),
-    /// The command to bookmark the folder of the active panel.
-    AddHere,
     /// A recently opened folder (as a VFS URI).
     Recent(String),
     /// The title of the recent folders; cannot be chosen.

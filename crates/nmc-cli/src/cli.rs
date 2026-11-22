@@ -62,6 +62,8 @@ pub enum Command {
     Run(RunArgs),
     /// Install, list, allow and run TypeScript plugins.
     Plugin(PluginArgs),
+    /// The launcher and icon of the window on a Linux desktop.
+    Desktop(DesktopArgs),
     /// Try a script or a plugin on sample files in a throwaway folder and
     /// report what it did (for authors and AI assistants).
     Test(TestArgs),
@@ -630,6 +632,23 @@ pub enum AiAction {
     },
     /// Save an Anthropic API key (read from standard input) for `nmc ai`.
     Key,
+}
+
+#[derive(Debug, Args)]
+pub struct DesktopArgs {
+    #[command(subcommand)]
+    pub action: DesktopAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DesktopAction {
+    /// Write the launcher (applications menu, dock) with the current icon.
+    /// The icon is named by its content, so the desktop never shows an old
+    /// one. Run it again after an update; the window also does it by itself
+    /// when its launcher exists.
+    Install,
+    /// Remove the launcher and the icons written by `install`.
+    Remove,
 }
 
 #[derive(Debug, Args)]

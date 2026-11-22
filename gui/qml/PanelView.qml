@@ -130,10 +130,6 @@ Rectangle {
                 color: panel.theme.dim
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
-            Item {
-                visible: panel.view !== null && panel.view.bars
-                Layout.preferredWidth: 40
-            }
             Label {
                 Layout.preferredWidth: sizeWidth.width
                 horizontalAlignment: Text.AlignRight
@@ -164,7 +160,7 @@ Rectangle {
             visible: panel.view !== null && !panel.view.quick_view
             readonly property var blank: ({ cursor: false, selected: false, hidden: false,
                 dir: false, name: "", folder: "", size: "", date: "", git: "", icon: "", icon_color: "",
-                url: "", bar: -1, bar_color: "" })
+                url: "" })
 
             WheelHandler {
                 onWheel: (event) => panel.theme.app.scroll_rows(panel.side,
@@ -293,23 +289,6 @@ Rectangle {
                                 text: entry.folder
                                 elide: Text.ElideLeft
                                 color: panel.theme.dim
-                            }
-                            // Once folder sizes are counted: how big it is against
-                            // the biggest here, from green to red.
-                            Rectangle {
-                                visible: panel.view.bars
-                                opacity: entry.bar >= 0 ? 1 : 0
-                                Layout.preferredWidth: 40
-                                Layout.preferredHeight: 6
-                                Layout.alignment: Qt.AlignVCenter
-                                color: panel.theme.lineColor
-                                radius: 2
-                                Rectangle {
-                                    width: Math.max(2, parent.width * Math.max(0, entry.bar) / 100)
-                                    height: parent.height
-                                    radius: 2
-                                    color: entry.bar_color
-                                }
                             }
                             Label {
                                 text: entry.size

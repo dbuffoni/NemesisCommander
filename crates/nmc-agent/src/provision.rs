@@ -120,6 +120,98 @@ async fn upload(target: &Target, from: &Path, relative: &str, mode: &str) -> Res
     run(target, &script, Some(from.to_owned())).await.map(drop)
 }
 
+/// Checks that `nmc serve` could be installed on the server, without
+/// installing anything: it only reads (the system, the port, an earlier
+/// install) and creates nothing there, and no certificate authority is made
+/// on this computer. `found` is told what each check found.
+pub async fn check_serve(
+    options: &InstallOptions,
+    mut found: impl FnMut(&str),
+) -> Result<(), String> {
+    let target = Target::parse(&options.authority)?;
+    found(&format!("Connecting to {} over SSH…", target.host));
+    let system = run(
+        &target,
+        "uname -sm; command -v systemctl >/dev/null && echo systemd || echo no-systemd; \
+         test -w \"$HOME\" && echo home-ok || echo home-readonly",
+        None,
+    )
+    .await
+    .map_err(|e| {
+        format!(
+            "SSH to {} fails: {}",
+            options.authority,
+            if e.is_empty() { "no answer" } else { &e }
+        )
+    })?;
+    let mut lines = system.lines();
+    let platform = lines.next().unwrap_or_default().to_owned();
+    found(&format!("SSH works; the server runs {platform}"));
+    if !platform.starts_with("Linux") {
+        return Err(format!("the server runs {platform}: nmc serve needs Linux"));
+    }
+    match agent_binary() {
+        None => {
+            return Err(
+                "no Linux nmc binary to copy to the server (set NMC_AGENT_BINARY to one)".into()
+            );
+        }
+        Some(path) => found(&format!("nmc to copy: {}", path.display())),
+    }
+    if std::env::var(crate::launch::AGENT_BINARY_VAR).is_err()
+        && platform != format!("Linux {}", std::env::consts::ARCH)
+    {
+        return Err(format!(
+            "the server runs {platform}: set NMC_AGENT_BINARY to a matching nmc build"
+        ));
+    }
+    if lines.next() != Some("systemd") {
+        return Err("the server has no systemd (systemctl): start `nmc serve` there by hand".into());
+    }
+    found("systemd is available (the service runs as your user)");
+    if lines.next() != Some("home-ok") {
+        return Err("the home folder of the server is not writable".into());
+    }
+    let state = run(
+        &target,
+        &format!(
+            "test -f \"$HOME/{REMOTE_BINARY}\" && echo binary || echo no-binary; \
+             test -f \"$HOME/{REMOTE_TLS_DIR}/server.pem\" && echo cert || echo no-cert; \
+             systemctl --user is-active {UNIT_NAME} 2>/dev/null || echo inactive; \
+             {{ ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null; }} | grep -q \":{port}[[:space:]]\" \
+               && echo port-busy || echo port-free",
+            port = options.port
+        ),
+        None,
+    )
+    .await?;
+    let state: Vec<&str> = state.lines().collect();
+    let installed = state.first() == Some(&"binary");
+    let active = state.get(2) == Some(&"active");
+    if installed {
+        found("nmc is already installed there: it would be updated");
+    } else {
+        found("nmc is not installed there yet: it would be copied to ~/.local/bin");
+    }
+    if state.get(1) == Some(&"cert") && !options.renew {
+        found("the server already has certificates: they would be kept (--renew replaces them)");
+    }
+    match (state.get(3), active) {
+        (Some(&"port-busy"), true) => {
+            found(&format!("port {} is used by the nmc serve already installed", options.port));
+        }
+        (Some(&"port-busy"), false) => {
+            return Err(format!(
+                "port {} is already used by another program on the server: choose --port",
+                options.port
+            ));
+        }
+        _ => found(&format!("port {} is free", options.port)),
+    }
+    found("nothing was installed or changed");
+    Ok(())
+}
+
 /// Installs and starts `nmc serve` on the server. `progress` is told what
 /// is being done. Returns the `scs://` location to open afterwards.
 pub async fn install_serve(

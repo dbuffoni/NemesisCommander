@@ -1003,6 +1003,8 @@ async fn jobs_window_lists_transfers() {
     h.key("Ctrl+J");
     let screen = h.screen();
     assert!(screen.contains("Transfer queue") && screen.contains("done"), "{screen}");
+    // Where the items came from and went to, with the system of each.
+    assert!(screen.contains("from Local:") && screen.contains("to Local:"), "{screen}");
     h.press(KeyPress::char('x'));
     assert!(h.app.jobs().is_empty(), "finished jobs removed");
     h.key("Esc");
@@ -1382,16 +1384,6 @@ async fn shift_keys_scroll_the_quick_view() {
     h.key("Shift+Home");
     assert_eq!(scroll(&h), 0);
     assert_eq!(h.current(), "long.txt", "the cursor of the panel stayed");
-}
-
-#[tokio::test]
-async fn counted_folder_sizes_get_bars() {
-    let mut h = Harness::new().await;
-    assert!(h.app.folder_sizes().is_empty());
-    h.key("Alt+S");
-    h.settle().await;
-    let screen = h.screen();
-    assert!(screen.contains('█') || screen.contains('▁'), "{screen}");
 }
 
 #[tokio::test]
@@ -1996,7 +1988,7 @@ async fn bookmarks_filter_as_you_type_and_list_recent_folders() {
     assert!(rows.iter().any(|r| r.contains("Recent folders")), "{rows:?}");
     // Typing narrows the bookmarks (case does not matter) and the recent folders.
     h.type_text("ZZZ");
-    assert!(results(&h).is_empty(), "nothing matches ZZZ");
+    assert_eq!(results(&h), ["(nothing matches)"], "nothing matches ZZZ");
     h.key("Backspace");
     h.key("Backspace");
     h.key("Backspace");
@@ -2021,14 +2013,14 @@ async fn the_bookmark_list_has_a_command_to_add_the_current_folder() {
     let mut h = Harness::new().await;
     assert!(h.app.context().config.bookmarks.is_empty());
     h.key("Ctrl+D");
+    // The command is in the key line at the bottom, not a row of the list.
     let rows = results(&h);
-    assert!(rows[0].contains("Bookmark this folder"), "{rows:?}");
-    h.key("Enter");
-    h.settle().await;
-    assert_eq!(h.app.context().config.bookmarks.len(), 1);
-    // Once bookmarked, the folder is no longer offered.
+    assert!(rows.iter().all(|r| !r.contains("Bookmark this folder")), "{rows:?}");
+    assert!(h.screen().contains("Ctrl+D: bookmark this folder"), "{}", h.screen());
     h.key("Ctrl+D");
-    assert!(results(&h).iter().all(|r| !r.contains("Bookmark this folder")), "{:?}", results(&h));
+    assert_eq!(h.app.context().config.bookmarks.len(), 1);
+    // Once bookmarked, the command is no longer offered.
+    assert!(!h.screen().contains("Ctrl+D: bookmark this folder"), "{}", h.screen());
 }
 
 #[tokio::test]
@@ -2267,25 +2259,6 @@ async fn the_terminal_has_no_font_list() {
     h.key("Enter");
     assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))));
     assert!(h.status().contains("terminal uses its own font"), "{}", h.status());
-}
-
-#[tokio::test]
-async fn folder_sizes_replace_dir_until_the_folder_is_listed_again() {
-    let mut h = Harness::new().await;
-    let docs_row = |h: &mut Harness| {
-        h.screen().lines().find(|l| l.contains("docs/")).unwrap_or_default().to_owned()
-    };
-    let row = docs_row(&mut h);
-    assert!(row.contains("<DIR>"), "{row}");
-    h.key("Alt+S");
-    h.settle().await;
-    assert!(h.status().contains("1 folder: 9 B in all"), "{}", h.status());
-    let row = docs_row(&mut h);
-    assert!(row.contains("9 B") && !row.contains("<DIR>"), "{row}");
-    h.key("Ctrl+R");
-    h.settle().await;
-    let row = docs_row(&mut h);
-    assert!(row.contains("<DIR>"), "listing again forgets the count: {row}");
 }
 
 #[tokio::test]
@@ -3017,4 +2990,65 @@ async fn ssh_and_s3_connections_offer_the_login_choice_too() {
     let saved = h.app.context().config.connections.last().unwrap().clone();
     assert_eq!(saved.uri, "sftp://carol@box.invalid/");
     assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
+}
+
+#[tokio::test]
+async fn the_command_list_forgives_spelling_mistakes() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("settngs");
+    let screen = h.screen();
+    assert!(screen.contains("Settings"), "{screen}");
+    // Typed right, only the exact matches stay.
+    h.key("Esc");
+    h.key("F9");
+    h.type_text("copy");
+    assert!(!h.screen().contains("Settings"), "{}", h.screen());
+}
+
+#[tokio::test]
+async fn the_install_question_helps_while_typing_and_explains_itself() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::InstallServe);
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("the install question") };
+    assert!(dialog.preview[0].starts_with("Examples"), "{:?}", dialog.preview);
+    assert!(dialog.hint().contains("Ctrl+T") && dialog.hint().contains("F1"));
+    h.type_text("me@nas.lan --re");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("still the question") };
+    assert!(dialog.preview[0].starts_with("✓ install on me@nas.lan"), "{:?}", dialog.preview);
+    assert!(dialog.preview.iter().any(|l| l.contains("--renew")), "{:?}", dialog.preview);
+    // F1 explains, Enter goes back to the question with the text kept.
+    h.key("F1");
+    let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("the explanation") };
+    assert!(message.lines.join("\n").contains("systemd"));
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("back to the question") };
+    assert_eq!(dialog.field.text(), "me@nas.lan --re");
+    // A wrong answer is refused by the test with the reason.
+    h.key("Ctrl+U");
+    h.type_text("--bogus");
+    h.key("Ctrl+T");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("asked again") };
+    assert!(dialog.preview[0].starts_with('✗'), "{:?}", dialog.preview);
+}
+
+#[tokio::test]
+async fn the_entry_line_says_what_a_git_mark_means() {
+    let mut h = Harness::new().await;
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(h.path("left"))
+            .args(args)
+            .output()
+            .expect("git");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    };
+    git(&["init", "-q"]);
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("notes.txt");
+    h.settle().await;
+    let screen = h.screen();
+    assert!(screen.contains("git ?: not tracked by git yet"), "{screen}");
 }

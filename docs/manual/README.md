@@ -109,8 +109,8 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
 - **Ctrl+L** goes to any location: a path, `~/…`, or a URI such as
   `sftp://host/dir`.
 - **Ctrl+F3 / Ctrl+F4 / Ctrl+F5** sort by name, extension or date; pressing
-  the same one again reverses the order. (There is no "sort by size": count
-  the folder sizes with **Alt+S** instead, below.)
+  the same one again reverses the order. (There is no "sort by size": use
+  the disk usage list, **Alt+U**, below.)
 - **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`). While a
   filter is on, the line under the panel says `filter: … (Esc clears)`.
@@ -141,13 +141,7 @@ the kinds of files** (Panels) turns them off.
 ### Folder sizes and disk usage
 
 A folder shows `<DIR>` instead of a size because counting is slow on big
-trees. **Alt+S** counts the selected folders (all the folders of the panel when
-nothing is selected) in the background and shows their sizes in the size
-column; the status line adds up what was counted. The sizes stay until the
-folder is listed again (Ctrl+R, or opening it again). Once some are counted,
-every row gets a small bar showing how big it is next to the biggest item of
-the folder, from green (small) to red (the biggest): in the window a
-bar before the size, in the terminal a block (▁ to █) in the same colours.
+trees. To see what takes the space, use the disk usage list below.
 Files are drawn on the same scale as the folders, so you see at a glance
 what takes the space.
 
@@ -204,7 +198,11 @@ listed, and listings stop at 100 000 files (the footer says so).
 Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:
 one commit to push, two to pull) and a mark before each name: **M** changed or
 staged, **?** untracked, **!** ignored. A folder carries the mark of what is
-inside it. It uses the `git` program of your system, only for local folders,
+inside it. The marks are not the result of **Alt+C** (Compare): they are what
+`git status` says now, read again every time the folder is listed, so they
+disappear when the file is committed or ignored. With the cursor on a marked
+entry, the line under the panel says what the mark means (for example
+`git M: changed since the last commit`). It uses the `git` program of your system, only for local folders,
 and can be switched off in the settings ("Git marks and branch in
 repositories").
 
@@ -378,6 +376,20 @@ spreadsheets (`.xlsx`, `.xls`, `.ods`) as one table per sheet; presentations
 | Word | Spreadsheet | Slides |
 |---|---|---|
 | ![Word](images/viewer-docx.png) | ![Spreadsheet](images/viewer-xlsx.png) | ![Slides](images/viewer-pptx.png) |
+
+**E-books** are read as formatted text: EPUB (`.epub`, chapters in reading
+order, with title and author on top) and FictionBook (`.fb2`, UTF-8 or
+Windows-1251). Headings, emphasis, lists and quotes are kept; pictures, fonts
+and styles are not. Up to 400 sections of a book are shown.
+
+**Audio and video** files are not played, but described from their headers:
+for audio (`.mp3`, `.flac`, `.ogg`, `.opus`, `.wav`, `.m4a`, `.aac`, `.aiff`,
+`.ape`, `.wv`, `.mpc`) the tags (title, artist, album, year, genre), the
+duration, the bit rate, the sample rate and the channels; for video (`.mp4`,
+`.m4v`, `.mov`, `.3gp`, `.mkv`, `.webm`, `.avi`) the container, the duration
+and each track (codec, picture size, frames per second, language). Only the
+first 32 MiB of a file are read: an MP4 whose header is at the end of a large
+file says so.
 
 **PDF** pages are drawn by a built-in renderer (no external program).
 PgDn/Space and PgUp turn the pages, Home and End go to the first and last;
@@ -667,7 +679,10 @@ checksums and copies between folders of that server run on the server.
   (it keeps running after you log out) and checks the connection. Options:
   `--name`, `--port`, `--root DIR`, `--read-only`, `--renew`. Run it again to
   update; `nmc serve uninstall me@host` removes it. In the window or the
-  terminal use **Install nmc serve on a server…** in the commands list (F9);
+  terminal use **Install nmc serve on a server…** in the commands list (F9):
+  the dialog checks what you type, shows examples and completes the options;
+  **F1** explains what will be done, **Ctrl+T** tests the server without
+  installing anything (it only reads), and the install ends with its log;
   you can give it a key with Ctrl+K.
 
 The drive list (Shift+F1) shows how each remote place is reached, for example
@@ -685,6 +700,9 @@ progress, speed and errors of each job, with keys to pause (`p`), resume or
 retry (`r`), cancel (`c`), change priority (`+`/`-`), change how many files
 are copied at once (`[`/`]`), switch the automatic choice of that number on or
 off for the job (`a`) and clear finished jobs (`x`).
+
+Each job in the queue shows where it comes from and where it goes, with the
+system of each (`from Local: ~/docs  →  to nas: /backup`).
 
 While jobs run, a thin line above the status line shows their progress and,
 next to it, the numbers: `2 jobs · 40% · 12.4 MiB/s · 0:42 left · 3 queued`
@@ -721,11 +739,27 @@ listing fails because the connection was lost it adds "connection lost", and
 as Ctrl+R) opens the connection again; both disappear when a listing works.
 An SMB connection that the server dropped is signed in again on the next call.
 
+## Filters forgive typos
+
+The filters of the command list (F9) and of the settings screen accept small
+spelling mistakes: `settngs` finds Settings, `renmae` finds Rename. If
+something fits exactly as typed, only that is listed.
+
+## The launcher and its icon (Linux)
+
+`nmc desktop install` writes the launcher (applications menu, dock) for this
+user, with an icon named by its content, so GNOME cannot keep showing an old
+one after an update; the window brings that launcher up to date when it
+starts. `nmc desktop remove` takes it away. From the AppImage:
+`NemesisCommander.AppImage nmc desktop install`.
+
 ## Bookmarks, tabs and history
 
 - **Ctrl+Shift+D** bookmarks the current folder, **Ctrl+D** lists the
-  bookmarks (with a row "+ Bookmark this folder" to add the current one) and, below them, the recent folders (Enter opens one; Delete
-  removes a bookmark). Move with the arrows, or just type: only the
+  bookmarks and, below them, the recent folders (Enter opens one; Delete
+  removes a bookmark). While the current folder is not a bookmark, the line
+  at the bottom of the list offers **Ctrl+D: bookmark this folder**; once it is
+  one, the command goes away. Move with the arrows, or just type: only the
   bookmarks whose name or folder contains the text (case does not matter)
   stay, and the five most recent folders that match are listed below them.
 - **Ctrl+Alt+D** bookmarks the current folder together with the folder
@@ -975,7 +1009,6 @@ on the settings screen (Ctrl+,).
 | Ctrl+S | Quick filter |
 | Ctrl+F3, Ctrl+F4, Ctrl+F5 | Sort by name, extension, date |
 | Ctrl+Q | Quick view in the other panel |
-| Alt+S | Count folder sizes |
 
 | Tools | |
 |---|---|

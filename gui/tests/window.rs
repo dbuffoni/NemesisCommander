@@ -70,20 +70,11 @@ fn the_window_shows_both_panels() {
 }
 
 #[test]
-fn counted_folder_sizes_draw_bars_and_the_key_bar_follows_modifiers() {
+fn the_key_bar_names_the_function_keys() {
     let home = home();
-    std::fs::create_dir(home.path().join("left/big")).unwrap();
-    std::fs::write(home.path().join("left/big/data.bin"), vec![0u8; 100_000]).unwrap();
-    let run = run(home.path(), "Alt+S", None);
+    let run = run(home.path(), "", None);
     assert_no_qml_warnings(&run);
-    let panel = &run.screen["panels"][0];
-    assert_eq!(panel["bars"], true, "{panel}");
-    let bars: Vec<i64> =
-        panel["rows"].as_array().unwrap().iter().map(|r| r["bar"].as_i64().unwrap()).collect();
-    assert!(bars.contains(&100), "the biggest is full: {bars:?}");
-    assert!(bars.contains(&-1), "the parent row has none: {bars:?}");
-    let plain = run.screen["keys"][4]["label"].as_str().unwrap().to_owned();
-    assert_eq!(plain, "Copy");
+    assert_eq!(run.screen["keys"][4]["label"], "Copy");
 }
 
 #[test]
@@ -192,10 +183,16 @@ fn every_viewer_draws_cleanly() {
         std::fs::write(home.path().join("left").join(name), data).unwrap();
     }
     let shot = home.path().join("viewer.png");
-    // left/: .., budget.xlsx, guide.md, kickoff.pptx, notes.txt, offer.docx, report.pdf, torus.stl
-    for (downs, mode) in
-        [(1, "document"), (2, "document"), (5, "document"), (6, "pdf"), (7, "model")]
-    {
+    // left/: .., budget.xlsx, guide.md, kickoff.pptx, notes.txt, offer.docx, report.pdf, story.epub, tone.wav, torus.stl
+    for (downs, mode) in [
+        (1, "document"),
+        (2, "document"),
+        (5, "document"),
+        (6, "pdf"),
+        (7, "document"),
+        (8, "document"),
+        (9, "model"),
+    ] {
         let keys = format!("{}F3", "Down ".repeat(downs));
         let run = run(home.path(), &keys, Some(&shot));
         assert_no_qml_warnings(&run);

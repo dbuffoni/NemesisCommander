@@ -92,9 +92,6 @@ pub struct PanelView {
     pub quick_view: Option<ViewerView>,
     /// Column titles (name, size, date), the sorted one with an arrow.
     pub headers: [String; 3],
-    /// Rows carry size bars (folder sizes were counted): the front end
-    /// leaves room for them.
-    pub bars: bool,
     /// The panel shows the flat (branch) view: rows carry a folder column.
     pub flat: bool,
 }
@@ -138,11 +135,6 @@ pub struct RowView {
     /// The file as a `file://` URL, for dragging it to other programs;
     /// empty for anything that is not on this disk.
     pub url: String,
-    /// Its size against the biggest in the folder, in percent, once the
-    /// folder sizes were counted (see [`size_ratio`]); -1 for no bar.
-    pub bar: i32,
-    /// The colour of the bar (`#rrggbb`), green for small to red for big.
-    pub bar_color: String,
 }
 
 /// The status line.
@@ -461,7 +453,10 @@ impl Screen {
                 StatusView { text: status.text.clone(), message: true, error: status.error }
             }
             None => StatusView {
-                text: entry_details(app.workspace.active()),
+                text: entry_details(
+                    app.workspace.active(),
+                    git_of(app, app.workspace.active_side()).as_deref(),
+                ),
                 message: false,
                 error: false,
             },
@@ -572,20 +567,14 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         Vec::new()
     };
     let git = git_of(app, side);
-    let sizes = app.folder_sizes();
     let panel = app.workspace.side(side).panel();
-    let biggest = biggest_size(sizes, panel);
     let row_views = panel
         .entries()
         .iter()
         .enumerate()
         .skip(offset)
         .take(rows)
-        .map(|(i, entry)| {
-            let counted = counted_size(sizes, panel.location(), entry);
-            let bar = biggest.and_then(|biggest| size_ratio(entry, counted, biggest));
-            row_view(panel, entry, i == cursor, human, git.as_deref(), counted, bar, icons)
-        })
+        .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref(), icons))
         .collect();
     let view = PanelView {
         title: if panel.is_branch() {
@@ -614,7 +603,6 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         loading: panel.is_loading(),
         quick_view: None,
         headers: column_headers(panel.sort()),
-        bars: biggest.is_some(),
     };
     app.scroll[index] = offset;
     view
@@ -635,74 +623,6 @@ pub fn git_mark(git: Option<&crate::git::GitStatus>, name: &str) -> String {
     git.and_then(|g| g.marks.get(name)).map(|m| m.to_string()).unwrap_or_default()
 }
 
-/// The bytes counted for the folder `entry` of `folder`, if "count folder
-/// sizes" was run for it.
-pub fn counted_size(
-    sizes: &std::collections::HashMap<nmc_vfs::VfsPath, (u64, u64)>,
-    folder: &nmc_vfs::VfsPath,
-    entry: &Entry,
-) -> Option<u64> {
-    if !entry.is_dir() || entry.name == PARENT {
-        return None;
-    }
-    sizes.get(&folder.join(&entry.name)).map(|(bytes, _)| *bytes)
-}
-
-/// The biggest size in `panel`, when the size of at least one of its
-/// folders was counted: files and counted folders are drawn against it as
-/// small bars. `None` when nothing was counted here (no bars).
-pub fn biggest_size(
-    sizes: &std::collections::HashMap<nmc_vfs::VfsPath, (u64, u64)>,
-    panel: &Panel,
-) -> Option<u64> {
-    let mut any = false;
-    let mut biggest = 0;
-    for entry in panel.entries() {
-        match counted_size(sizes, panel.location(), entry) {
-            Some(bytes) => {
-                any = true;
-                biggest = biggest.max(bytes);
-            }
-            None if !entry.is_dir() => biggest = biggest.max(entry.size),
-            None => {}
-        }
-    }
-    (any && biggest > 0).then_some(biggest)
-}
-
-/// How big an entry is against `biggest`, 0 to 1 (folders whose size was
-/// not counted have none).
-pub fn size_ratio(entry: &Entry, counted: Option<u64>, biggest: u64) -> Option<f32> {
-    if entry.name == PARENT {
-        return None;
-    }
-    let bytes = match (entry.is_dir(), counted) {
-        (true, None) => return None,
-        (true, Some(bytes)) => bytes,
-        (false, _) => entry.size,
-    };
-    Some((bytes as f64 / biggest.max(1) as f64).clamp(0.0, 1.0) as f32)
-}
-
-/// The colour of a bar of `ratio`: green when small, through yellow, to red
-/// for the biggest.
-pub fn bar_color(ratio: f32) -> String {
-    let hue = 120.0 * (1.0 - ratio.clamp(0.0, 1.0));
-    let (s, l) = (0.75_f32, 0.5_f32);
-    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
-    let x = c * (1.0 - ((hue / 60.0) % 2.0 - 1.0).abs());
-    let m = l - c / 2.0;
-    let (r, g, b) = if hue < 60.0 { (c, x, 0.0) } else { (x, c, 0.0) };
-    let byte = |v: f32| ((v + m) * 255.0).round() as u8;
-    format!("#{:02x}{:02x}{:02x}", byte(r), byte(g), byte(b))
-}
-
-/// A block character as high as `ratio` (eight levels), for terminals.
-pub fn bar_glyph(ratio: f32) -> char {
-    const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-    BLOCKS[((ratio.clamp(0.0, 1.0) * 7.0).round() as usize).min(7)]
-}
-
 #[allow(clippy::too_many_arguments)]
 fn row_view(
     panel: &Panel,
@@ -710,8 +630,6 @@ fn row_view(
     cursor: bool,
     human: bool,
     git: Option<&crate::git::GitStatus>,
-    counted: Option<u64>,
-    bar: Option<f32>,
     icons: bool,
 ) -> RowView {
     let icon = (icons && entry.name != PARENT).then(|| crate::icons::icon_for(entry));
@@ -730,7 +648,7 @@ fn row_view(
     RowView {
         name,
         folder,
-        size: size_text_counted(entry, human, counted),
+        size: size_text(entry, human),
         date: entry.modified.map(local_time).unwrap_or_default(),
         dir: entry.is_dir(),
         hidden: entry.is_hidden(),
@@ -739,8 +657,6 @@ fn row_view(
         git: git_mark(git, &entry.name),
         icon: icon.map(|i| i.shape.id().to_owned()).unwrap_or_default(),
         icon_color: icon.map(|i| i.color.to_owned()).unwrap_or_default(),
-        bar: bar.map(|r| (r * 100.0).round() as i32).unwrap_or(-1),
-        bar_color: bar.map(bar_color).unwrap_or_default(),
         url: if entry.name == PARENT {
             String::new()
         } else {
@@ -810,7 +726,6 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         loading: false,
         quick_view: Some(quick_view),
         headers: Default::default(),
-        bars: false,
         flat: false,
     }
 }
@@ -860,7 +775,10 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             rows: app
                 .jobs
                 .iter()
-                .map(|job| JobRow { text: job_line(job, app), state: job_state(job.state).into() })
+                .map(|job| JobRow {
+                    text: format!("{}   {}", job_line(job, app), job_route(job, app)),
+                    state: job_state(job.state).into(),
+                })
                 .collect(),
             cursor: view.cursor,
         },
@@ -1013,16 +931,6 @@ pub fn tab_title(panel: &Panel) -> String {
     panel.location().file_name().unwrap_or("/").to_owned()
 }
 
-/// The size column of a folder whose contents were counted (`counted`),
-/// else as [`size_text`].
-pub fn size_text_counted(entry: &Entry, human: bool, counted: Option<u64>) -> String {
-    match counted {
-        Some(bytes) if human => human_size(bytes),
-        Some(bytes) => bytes.to_string(),
-        None => size_text(entry, human),
-    }
-}
-
 /// The size column: `UP`, `<DIR>`, or the size.
 pub fn size_text(entry: &Entry, human: bool) -> String {
     if entry.name == PARENT {
@@ -1071,7 +979,7 @@ pub fn panel_footer(panel: &Panel) -> String {
 
 /// Name, size, date, permissions and link target of the entry under the
 /// cursor.
-pub fn entry_details(panel: &Panel) -> String {
+pub fn entry_details(panel: &Panel, git: Option<&crate::git::GitStatus>) -> String {
     let Some(entry) = panel.current_entry().filter(|e| e.name != PARENT) else {
         return String::new();
     };
@@ -1087,6 +995,10 @@ pub fn entry_details(panel: &Panel) -> String {
     }
     if let Some(target) = &entry.symlink_target {
         parts.push(format!("→ {target}"));
+    }
+    // What a git mark in front of the name means.
+    if let Some(mark) = git.and_then(|g| g.marks.get(entry.name.as_str())) {
+        parts.push(format!("git {}", crate::git::legend(*mark)));
     }
     parts.join("  ")
 }
@@ -1183,6 +1095,27 @@ pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
     Some(parts.join(" · "))
 }
 
+/// A place for the queue: the system it is on (the saved connection, or
+/// Local, Archive…) and the path in it: `nas: /backup`.
+fn job_place(app: &App, path: &nmc_vfs::VfsPath) -> String {
+    let system = crate::drives::drive_label(&app.context().config, path);
+    let inside =
+        if path.scheme() == "file" { display_location(path) } else { path.path().to_owned() };
+    format!("{system}: {inside}")
+}
+
+/// Where a job takes its items from and puts them: `from Local: ~/docs  to
+/// nas: /backup` (deletes only say where from).
+pub fn job_route(job: &JobInfo, app: &App) -> String {
+    let from = job.spec.source_folder().map(|p| job_place(app, &p)).unwrap_or_default();
+    match (&job.spec.destination, job.spec.kind) {
+        (Some(to), JobKind::Copy | JobKind::Move) => {
+            format!("from {from}  →  to {}", job_place(app, to))
+        }
+        _ => format!("in {from}"),
+    }
+}
+
 /// A job's state in words.
 pub fn job_state(state: JobState) -> &'static str {
     match state {
@@ -1206,7 +1139,7 @@ pub fn job_line(job: &JobInfo, app: &App) -> String {
         job_state(job.state),
         human_size(job.total_bytes),
         job.spec.priority,
-        job.spec.title()
+        job.spec.what()
     );
     if matches!(job.state, JobState::Queued | JobState::Running | JobState::Paused)
         && job.spec.kind != JobKind::Delete

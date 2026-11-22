@@ -3,6 +3,8 @@
 //! Native previews of files that are neither plain text nor a picture,
 //! for the viewer (F3) and the quick view of every interface:
 //!
+//! * [`ebook`]: EPUB and FictionBook e-books as formatted text.
+//! * [`media`]: an information sheet for audio and video files.
 //! * [`markdown`]: Markdown as formatted text.
 //! * [`office`]: Word, PowerPoint, Excel and OpenDocument files as
 //!   formatted text and tables.
@@ -17,7 +19,9 @@
 //! a terminal or a window draws with one fixed-width font. Everything here
 //! is plain data in, plain data out: no interface, no files, no threads.
 
+pub mod ebook;
 pub mod markdown;
+pub mod media;
 pub mod model;
 pub mod office;
 pub mod pdf;
@@ -36,6 +40,12 @@ pub enum Kind {
     Pdf,
     /// A 3D model.
     Model,
+    /// An e-book.
+    Ebook(ebook::Format),
+    /// An audio file (its tags and properties).
+    Audio,
+    /// A video file (its container information).
+    Video,
 }
 
 impl Kind {
@@ -46,6 +56,9 @@ impl Kind {
             "md" | "markdown" | "mdown" | "mkd" => Some(Kind::Markdown),
             "pdf" => Some(Kind::Pdf),
             _ if model::is_model_name(name) => Some(Kind::Model),
+            _ if media::is_audio_name(name) => Some(Kind::Audio),
+            _ if media::is_video_name(name) => Some(Kind::Video),
+            _ if ebook::Format::of(name).is_some() => ebook::Format::of(name).map(Kind::Ebook),
             _ => office::Format::of(name).map(Kind::Office),
         }
     }
@@ -61,6 +74,10 @@ impl Kind {
             Kind::Office(office::Format::Odt) => "OpenDocument text",
             Kind::Pdf => "PDF",
             Kind::Model => "3D model",
+            Kind::Ebook(ebook::Format::Epub) => "EPUB e-book",
+            Kind::Ebook(ebook::Format::Fb2) => "FictionBook e-book",
+            Kind::Audio => "Audio file (information)",
+            Kind::Video => "Video file (information)",
         }
     }
 }
@@ -77,6 +94,10 @@ mod tests {
         assert_eq!(Kind::of("scene.glb"), Some(Kind::Model));
         assert_eq!(Kind::of("letter.docx"), Some(Kind::Office(office::Format::Docx)));
         assert_eq!(Kind::of("budget.ods"), Some(Kind::Office(office::Format::Sheet)));
+        assert_eq!(Kind::of("book.epub"), Some(Kind::Ebook(ebook::Format::Epub)));
+        assert_eq!(Kind::of("book.FB2"), Some(Kind::Ebook(ebook::Format::Fb2)));
+        assert_eq!(Kind::of("song.mp3"), Some(Kind::Audio));
+        assert_eq!(Kind::of("film.mkv"), Some(Kind::Video));
         assert_eq!(Kind::of("notes.txt"), None);
         assert_eq!(Kind::of("Makefile"), None);
     }

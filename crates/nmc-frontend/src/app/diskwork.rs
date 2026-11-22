@@ -1,5 +1,4 @@
-//! What takes the space on disks: folder sizes in the panel, the disk
-//! usage list, the duplicate finder and the table of disks.
+//! What takes the space on disks: the disk usage list, the duplicate finder and the table of disks.
 
 use std::collections::{BTreeMap, HashSet};
 use std::time::SystemTime;
@@ -18,60 +17,6 @@ use crate::usage::{self, Usage};
 type Copy = (VfsPath, Option<SystemTime>);
 
 impl App {
-    // --------------------------------------------------------- folder sizes
-
-    /// Counts the folders of the active panel (the selected ones, else all
-    /// of them) and shows their sizes in the size column.
-    pub(super) fn count_folder_sizes(&mut self) {
-        let panel = self.workspace.active();
-        let folder = panel.location().clone();
-        let selected: Vec<String> = panel
-            .entries()
-            .iter()
-            .filter(|e| e.is_dir() && e.name != ".." && panel.is_selected(&e.name))
-            .map(|e| e.name.clone())
-            .collect();
-        let names: Vec<String> = if selected.is_empty() {
-            panel
-                .entries()
-                .iter()
-                .filter(|e| e.is_dir() && e.name != "..")
-                .map(|e| e.name.clone())
-                .collect()
-        } else {
-            selected
-        };
-        if names.is_empty() {
-            return self.set_status("No folders to count");
-        }
-        let registry = self.context.registry.clone();
-        self.set_status("Counting folders…");
-        self.spawn_task(async move {
-            let mut sizes = Vec::new();
-            for name in names {
-                let path = folder.join(&name);
-                if let Ok(found) = usage::measure_total(&registry, &path).await {
-                    sizes.push((path, found));
-                }
-            }
-            AppEvent::FolderSizes { sizes }
-        });
-    }
-
-    /// Remembers the counted sizes (shown until the folder is listed again).
-    pub(super) fn folder_sizes_counted(&mut self, sizes: Vec<(VfsPath, (u64, u64))>) {
-        let total: u64 = sizes.iter().map(|(_, (bytes, _))| bytes).sum();
-        let count = sizes.len();
-        for (path, found) in sizes {
-            self.folder_sizes.insert(path, found);
-        }
-        self.set_status(format!(
-            "{count} folder{}: {} in all",
-            if count == 1 { "" } else { "s" },
-            human_size(total)
-        ));
-    }
-
     // ----------------------------------------------------------- disk usage
 
     /// Lists the items of `folder` by size, biggest first, in a window.

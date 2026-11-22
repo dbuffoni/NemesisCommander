@@ -17,6 +17,7 @@ hayro = "0.9.0"
 stl_io = "0.11.0"
 tobj = { version = "4.0.5", default-features = false }
 gltf = { version = "1.4.1", default-features = false, features = ["import", "utils"] }
+lofty = "0.25.5"
 
 [dev-dependencies]
 zip = { workspace = true, features = ["deflate"] }

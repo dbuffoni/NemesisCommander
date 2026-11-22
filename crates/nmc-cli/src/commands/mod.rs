@@ -50,6 +50,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Tls(args) => serve::tls(&context, args),
         Command::Run(args) => script::run(&context, args).await,
         Command::Plugin(args) => script::plugin(&context, args).await,
+        Command::Desktop(args) => desktop(args),
         Command::Test(args) => script_test::test(&context, args).await,
         Command::Ai(args) => ai::ai(&context, args).await,
         Command::Pick(args) => pick::pick(context, args).await,
@@ -90,4 +91,17 @@ async fn agent(_context: AppContext, args: crate::cli::AgentArgs) -> CmdResult {
 #[cfg(not(target_os = "linux"))]
 async fn agent(_context: AppContext, _args: crate::cli::AgentArgs) -> CmdResult {
     Err("the agent runs on Linux only; on this system use nmc as a controller".into())
+}
+
+/// `nmc desktop install|remove`.
+fn desktop(args: crate::cli::DesktopArgs) -> CmdResult {
+    use crate::cli::DesktopAction;
+    let lines = match args.action {
+        DesktopAction::Install => nmc_app::desktop::install(),
+        DesktopAction::Remove => nmc_app::desktop::remove(),
+    }?;
+    for line in lines {
+        crate::out!("{line}");
+    }
+    Ok(ExitCode::SUCCESS)
 }

@@ -85,10 +85,15 @@ impl CommandEntry {
     }
 
     /// Whether every word of `filter` is in its name or id, ignoring case
-    /// (`cop` finds Files/Copy, `files ren` Files/Rename…).
+    /// and small spelling mistakes (`cop` finds Files/Copy, `files ren`
+    /// Files/Rename, `settngs` Settings).
     pub fn matches(&self, filter: &str) -> bool {
-        let haystack = format!("{} {}", self.name(), self.id).to_lowercase();
-        filter.to_lowercase().split_whitespace().all(|word| haystack.contains(word))
+        self.score(filter).is_some()
+    }
+
+    /// How well it fits `filter` (0 is best), see [`crate::fuzzy::score`].
+    pub fn score(&self, filter: &str) -> Option<usize> {
+        crate::fuzzy::score(filter, &format!("{} {}", self.name(), self.id))
     }
 }
 
@@ -146,7 +151,8 @@ impl CommandPalette {
     }
 
     /// The rows listed: those of the chosen category that match the
-    /// filter, with names starting with the filter first.
+    /// filter (spelling mistakes allowed), names starting with the filter
+    /// first, then the closest fits.
     pub fn shown(&self) -> Vec<&CommandEntry> {
         let category = self.categories.get(self.category).filter(|c| *c != ALL);
         let mut rows: Vec<&CommandEntry> = self
@@ -156,8 +162,19 @@ impl CommandPalette {
             .filter(|e| e.matches(&self.filter))
             .collect();
         let query = self.filter.trim().to_lowercase();
+        if rows
+            .iter()
+            .any(|e| e.score(&self.filter).is_some_and(|s| crate::fuzzy::is_exact(&self.filter, s)))
+        {
+            rows.retain(|e| {
+                e.score(&self.filter).is_some_and(|s| crate::fuzzy::is_exact(&self.filter, s))
+            });
+        }
         if !query.is_empty() {
-            rows.sort_by_key(|e| !e.label.to_lowercase().starts_with(&query));
+            // Names starting with the filter first, then the best fits.
+            rows.sort_by_key(|e| {
+                (!e.label.to_lowercase().starts_with(&query), e.score(&self.filter))
+            });
         }
         rows
     }
@@ -245,6 +262,15 @@ mod tests {
         assert_eq!(palette.shown().len(), Action::ALL.len() + 1);
         assert_eq!(plugin_category(Some("files")), "Files");
         assert_eq!(plugin_category(Some("Images")), PLUGINS);
+    }
+
+    #[test]
+    fn a_misspelled_filter_still_finds_the_command() {
+        let mut palette = palette();
+        for c in "settngs".chars() {
+            palette.type_char(c);
+        }
+        assert_eq!(palette.selected().unwrap().target, Target::Action(Action::Settings));
     }
 
     #[test]

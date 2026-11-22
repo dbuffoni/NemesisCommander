@@ -1,5 +1,5 @@
 //! What takes the space: the totals of a folder's items, with and without
-//! their contents ("folder sizes" and "disk usage").
+//! their contents ("disk usage").
 
 use std::collections::BTreeMap;
 

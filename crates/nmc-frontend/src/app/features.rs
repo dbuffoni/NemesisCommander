@@ -287,9 +287,6 @@ impl App {
     /// typing narrows both.
     pub(super) fn open_bookmarks(&mut self) {
         let (items, rows) = self.bookmark_rows("");
-        if rows.is_empty() {
-            return self.set_status("No bookmarks yet");
-        }
         let mut dialog = ChooseDialog::new("Bookmarks", items, ChoosePurpose::Bookmarks(rows));
         dialog.query = Some(String::new());
         self.refresh_bookmarks(&mut dialog);
@@ -310,11 +307,6 @@ impl App {
                 rows.push(JumpRow::Bookmark(index));
             }
         }
-        let here_path = display_location(self.workspace.active().location());
-        if needle.is_empty() && !self.context.config.bookmarks.iter().any(|b| b.path == here_path) {
-            items.push(format!("+ Bookmark this folder: {here_path}"));
-            rows.push(JumpRow::AddHere);
-        }
         let here = self.workspace.active().location().to_string();
         let recent: Vec<String> = self
             .frecency
@@ -334,7 +326,21 @@ impl App {
                 rows.push(JumpRow::Recent(uri));
             }
         }
+        if rows.is_empty() {
+            items.push(if needle.is_empty() {
+                "(no bookmarks yet)".into()
+            } else {
+                "(nothing matches)".into()
+            });
+            rows.push(JumpRow::Header);
+        }
         (items, rows)
+    }
+
+    /// Whether the active folder is not a bookmark yet.
+    fn here_can_be_bookmarked(&self) -> bool {
+        let here = display_location(self.workspace.active().location());
+        !self.context.config.bookmarks.iter().any(|b| b.path == here)
     }
 
     /// Rebuilds the rows of the bookmarks list from its query, with the
@@ -345,10 +351,14 @@ impl App {
         dialog.cursor = rows.iter().position(|r| *r != JumpRow::Header).unwrap_or(0);
         dialog.items = items;
         dialog.purpose = ChoosePurpose::Bookmarks(rows);
+        // The command to bookmark this folder is offered only while the
+        // folder is not a bookmark.
+        let add =
+            if self.here_can_be_bookmarked() { "   Ctrl+D: bookmark this folder" } else { "" };
         dialog.footer = if query.is_empty() {
-            "Type to filter   Enter: open or add   Delete: remove bookmark".into()
+            format!("Type to filter   Enter: open   Delete: remove bookmark{add}")
         } else {
-            format!("Filter: {query}_   Enter: open   Backspace: erase")
+            format!("Filter: {query}_   Enter: open   Backspace: erase{add}")
         };
     }
 
@@ -361,6 +371,13 @@ impl App {
     ) -> Option<bool> {
         let key = press.plain();
         let mut query = dialog.query.clone().unwrap_or_default();
+        if press.chord.ctrl && !press.chord.alt && press.chord.key == Key::Char('d') {
+            if self.here_can_be_bookmarked() {
+                self.add_bookmark(false);
+            }
+            self.refresh_bookmarks(dialog);
+            return Some(true);
+        }
         match (key, press.text) {
             (Some(Key::Delete), _) => {
                 let ChoosePurpose::Bookmarks(rows) = &dialog.purpose else { return None };

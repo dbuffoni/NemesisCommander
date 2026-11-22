@@ -84,6 +84,25 @@ pub struct JobSpec {
 }
 
 impl JobSpec {
+    /// What the job does, without the places: "Copy 3 items", "Move a.txt",
+    /// "Delete b.txt".
+    pub fn what(&self) -> String {
+        let what = match self.sources.as_slice() {
+            [one] => one.file_name().unwrap_or("/").to_owned(),
+            many => format!("{} items", many.len()),
+        };
+        match (self.kind, &self.destination) {
+            (JobKind::Copy, Some(_)) => format!("Copy {what}"),
+            (JobKind::Move, Some(_)) => format!("Move {what}"),
+            (JobKind::Delete, _) | (_, None) => format!("Delete {what}"),
+        }
+    }
+
+    /// The folder the items come from (the parent of the first one).
+    pub fn source_folder(&self) -> Option<VfsPath> {
+        self.sources.first().and_then(|s| s.parent())
+    }
+
     /// A short human-readable description ("Copy 3 items to /backup").
     pub fn title(&self) -> String {
         let what = match self.sources.as_slice() {

@@ -47,6 +47,7 @@ taken while implementing it.
 | 0037 | [A template plugin, and `nmc.writeBytes` for binary files](0037-first-plugin-template.md) | Accepted |
 | 0040 | [Saved logins go to the system keyring, not ~/.netrc](0040-keyring-logins.md) | Accepted |
 | 0041 | [Window size remembered, bookmark list can add the folder, dialogs wrap their key row](0041-card-batch-j.md) | Accepted |
+| 0042 | [Card batch K: tolerant filters, e-book/audio/video viewers, launcher icon, install dialog](0042-card-batch-k.md) | Accepted |
 
 Template:
 
