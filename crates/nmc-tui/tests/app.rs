@@ -3052,3 +3052,62 @@ async fn the_entry_line_says_what_a_git_mark_means() {
     let screen = h.screen();
     assert!(screen.contains("git ?: not tracked by git yet"), "{screen}");
 }
+
+#[tokio::test]
+async fn install_asks_before_it_starts_and_alt_left_goes_back() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::InstallServe);
+    h.type_text("me@nas.lan --read-only");
+    h.key("Enter");
+    // Nothing is touched before a yes: a question shows what will be done.
+    let Some(Overlay::Confirm(dialog)) = h.app.overlay() else { panic!("confirm dialog") };
+    assert_eq!(dialog.title, "Install nmc serve?");
+    assert!(dialog.lines.join("\n").contains("read only"), "{:?}", dialog.lines);
+    assert!(h.screen().contains("Alt+←: back"));
+    h.key("Alt+Left");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("back to the question") };
+    assert_eq!(dialog.field.text(), "me@nas.lan --read-only", "what was typed is kept");
+    h.key("Esc");
+    assert!(h.app.overlay().is_none());
+    h.key("Alt+Left");
+    assert!(h.app.overlay().is_none(), "nothing to go back to");
+}
+
+#[tokio::test]
+async fn binary_files_show_their_properties_and_hex_on_request() {
+    let mut h = Harness::new().await;
+    let mut elf = vec![0u8; 256];
+    elf[..4].copy_from_slice(b"\x7fELF");
+    elf[4] = 2;
+    elf[5] = 1;
+    elf[16] = 2;
+    elf[18] = 0x3e;
+    fs::write(h.path("left/prog.bin"), &elf).unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("prog.bin");
+    h.key("F3");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(v)) if v.data.is_some()))
+        .await;
+    let screen = h.screen();
+    assert!(screen.contains("ELF") && screen.contains("x86-64"), "{screen}");
+    assert!(!screen.contains("00000000"), "no hex dump unless asked:\n{screen}");
+    h.key("F4");
+    let screen = h.screen();
+    assert!(screen.contains("00000000"), "hex on request:\n{screen}");
+}
+
+#[tokio::test]
+async fn the_transfer_queue_lists_the_newest_first() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("F5");
+    h.key("Enter");
+    h.settle().await;
+    h.focus("notes.txt");
+    h.key("F5");
+    h.key("Enter");
+    h.settle().await;
+    let ids: Vec<i64> = h.app.jobs().iter().map(|j| j.id.0).collect();
+    assert!(ids.len() >= 2 && ids[0] > ids[1], "{ids:?}");
+}

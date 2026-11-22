@@ -23,6 +23,9 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 use crate::client::AgentProvider;
 use crate::server::{AgentService, Limits, ServeState, Session, resolve_roots};
 
+/// How long reaching a server may take (the connection, then the handshake).
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// How long a client has to complete the TLS handshake.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -77,12 +80,25 @@ pub async fn connect(
     token: Option<&str>,
 ) -> std::result::Result<AgentProvider, String> {
     let fail = |e: &dyn std::fmt::Display| format!("{host}:{port}: {e}");
-    let tcp = TcpStream::connect((host, port)).await.map_err(|e| fail(&e))?;
+    let silent = || {
+        format!(
+            "{host}:{port}: no answer in {} seconds (a firewall may drop the connection)",
+            CONNECT_TIMEOUT.as_secs()
+        )
+    };
+    // The operating system would wait for minutes on a silent host.
+    let tcp = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect((host, port)))
+        .await
+        .map_err(|_| silent())?
+        .map_err(|e| fail(&e))?;
     let _ = tcp.set_nodelay(true);
     let name = ServerName::try_from(host.to_owned()).map_err(|e| fail(&e))?;
-    let tls = TlsConnector::from(config).connect(name, tcp).await.map_err(|e| fail(&e))?;
-    let client = nmc_proto::transport::connect(tls).await.map_err(|e| fail(&e))?;
-    AgentProvider::handshake_with(client, "scs", token, None).await.map_err(|e| fail(&e))
+    let session = async {
+        let tls = TlsConnector::from(config).connect(name, tcp).await.map_err(|e| fail(&e))?;
+        let client = nmc_proto::transport::connect(tls).await.map_err(|e| fail(&e))?;
+        AgentProvider::handshake_with(client, "scs", token, None).await.map_err(|e| fail(&e))
+    };
+    tokio::time::timeout(CONNECT_TIMEOUT, session).await.map_err(|_| silent())?
 }
 
 /// Splits `host[:port]` (the port defaults to [`DEFAULT_PORT`]).

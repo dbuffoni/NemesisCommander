@@ -213,3 +213,45 @@ async fn copies_between_local_and_agent_with_the_normal_engine() {
     assert!(report.failed.is_empty(), "{:?}", report.failed);
     assert_eq!(fs::read_to_string(dir.path().join("back/source/one.txt")).unwrap(), "1");
 }
+
+/// Copying onto files that exist, with each policy: overwriting must work
+/// in both directions, and refusing must say which file is in the way.
+#[tokio::test]
+async fn existing_files_are_overwritten_or_named() {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("src")).unwrap();
+    fs::create_dir_all(dir.path().join("remote")).unwrap();
+    fs::write(dir.path().join("src/a.txt"), "new contents").unwrap();
+    fs::write(dir.path().join("remote/a.txt"), "old").unwrap();
+    let registry = nmc_providers::default_registry();
+    let destination = remote(&dir.path().join("remote"));
+    registry.insert(&destination, Arc::new(agent(Limits::default()).await));
+    let registry = Arc::new(registry);
+
+    for policy in [ConflictPolicy::Overwrite, ConflictPolicy::Fail] {
+        fs::write(dir.path().join("remote/a.txt"), "old").unwrap();
+        let plan = plan_copy(
+            &registry,
+            &[local(&dir.path().join("src/a.txt"))],
+            &destination,
+            PlanOptions::default(),
+        )
+        .await
+        .unwrap();
+        let options = ExecuteOptions { conflict: policy, ..Default::default() };
+        let report = Executor::new(registry.clone(), options).run(&plan).await.unwrap();
+        match policy {
+            ConflictPolicy::Overwrite => {
+                assert!(report.failed.is_empty(), "{:?}", report.failed);
+                assert_eq!(
+                    fs::read_to_string(dir.path().join("remote/a.txt")).unwrap(),
+                    "new contents"
+                );
+            }
+            _ => {
+                let (_, message) = &report.failed[0];
+                assert!(message.contains("a.txt"), "{message}");
+            }
+        }
+    }
+}

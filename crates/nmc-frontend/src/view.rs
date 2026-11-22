@@ -180,6 +180,11 @@ pub enum OverlayView {
         cursor: usize,
         /// Lines below the field (multi-rename: the new names).
         preview: Vec<String>,
+        /// How many rows the window keeps for `preview`, so it does not
+        /// change size while the lines do.
+        preview_rows: usize,
+        /// The answer is a place: shown whole under the field.
+        is_path: bool,
         /// The keys shown under the field.
         hint: String,
     },
@@ -189,6 +194,8 @@ pub enum OverlayView {
         title: String,
         /// Text.
         lines: Vec<String>,
+        /// The keys shown under the text.
+        hint: String,
     },
     /// A list to pick from.
     Choose {
@@ -200,6 +207,8 @@ pub enum OverlayView {
         cursor: usize,
         /// Text below the list.
         footer: String,
+        /// The rows change while the list is open: the window keeps one size.
+        keeps_size: bool,
     },
     /// Information to read.
     Message {
@@ -211,6 +220,8 @@ pub enum OverlayView {
         has_next: bool,
         /// The keys line below the text.
         hint: String,
+        /// The work behind the window goes on, adding lines.
+        busy: bool,
         /// The logo to show above the text (About): a `file://` URL of
         /// a PNG for a window.
         logo_url: Option<String>,
@@ -410,6 +421,8 @@ impl SpanView {
 pub struct JobRow {
     /// The job as one line.
     pub text: String,
+    /// Where from and to, and how the data travels (second line).
+    pub detail: String,
     /// `queued`, `running`, `paused`, `done`, `failed` or `cancelled`.
     pub state: String,
 }
@@ -577,10 +590,9 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref(), icons))
         .collect();
     let view = PanelView {
-        title: if panel.is_branch() {
-            format!("{}  (every file below)", display_location(panel.location()))
-        } else {
-            display_location(panel.location())
+        title: {
+            let place = crate::drives::panel_location(&app.context().config, panel.location());
+            if panel.is_branch() { format!("{place}  (every file below)") } else { place }
         },
         flat: panel.is_branch(),
         drive: {
@@ -751,22 +763,28 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             text: dialog.shown().text().to_owned(),
             cursor: dialog.shown().cursor(),
             preview: dialog.preview.clone(),
-            hint: dialog.hint(),
+            preview_rows: dialog.purpose.preview_rows(),
+            is_path: dialog.purpose.is_path(),
+            hint: app.with_back(dialog.hint()),
         },
-        Overlay::Confirm(dialog) => {
-            OverlayView::Confirm { title: dialog.title.clone(), lines: dialog.lines.clone() }
-        }
+        Overlay::Confirm(dialog) => OverlayView::Confirm {
+            title: dialog.title.clone(),
+            lines: dialog.lines.clone(),
+            hint: app.with_back("Enter / y: yes    Esc / n: no".into()),
+        },
         Overlay::Choose(dialog) => OverlayView::Choose {
             title: dialog.title.clone(),
             items: dialog.items.clone(),
             cursor: dialog.cursor,
-            footer: dialog.footer.clone(),
+            footer: app.with_back(dialog.footer.clone()),
+            keeps_size: dialog.keeps_size(),
         },
         Overlay::Message(dialog) => OverlayView::Message {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
             has_next: dialog.then.is_some() || dialog.then_choose.is_some(),
-            hint: dialog.hint(),
+            hint: app.with_back(dialog.hint()),
+            busy: dialog.busy,
             logo_url: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.0)).flatten(),
             logo_url_light: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.1)).flatten(),
         },
@@ -776,7 +794,8 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
                 .jobs
                 .iter()
                 .map(|job| JobRow {
-                    text: format!("{}   {}", job_line(job, app), job_route(job, app)),
+                    text: job_line(job, app),
+                    detail: format!("{}  ·  {}", job_route(job, app), job_transport(job, app)),
                     state: job_state(job.state).into(),
                 })
                 .collect(),
@@ -1113,6 +1132,41 @@ pub fn job_route(job: &JobInfo, app: &App) -> String {
             format!("from {from}  →  to {}", job_place(app, to))
         }
         _ => format!("in {from}"),
+    }
+}
+
+/// How the data of a job travels, in words: inside one place, between this
+/// computer and a server, through this computer between two servers, or
+/// server to server without passing through it.
+pub fn job_transport(job: &JobInfo, app: &App) -> String {
+    use nmc_transfer::JobKind;
+    let Some(to) = job.spec.destination.as_ref().filter(|_| job.spec.kind != JobKind::Delete)
+    else {
+        return "on the place itself".into();
+    };
+    let Some(from) = job.spec.sources.first() else { return String::new() };
+    let remote = |p: &nmc_vfs::VfsPath| !matches!(p.scheme(), "file" | "archive");
+    let same_place = from.scheme() == to.scheme() && from.authority() == to.authority();
+    let servers = from.scheme() == "scs" && to.scheme() == "scs" && !same_place;
+    if let Some(route) = app.job_routes.get(&job.id) {
+        return format!("server to server, {route}: the data does not pass through this computer");
+    }
+    if same_place && remote(from) {
+        return "inside one server: the data stays there when it can".into();
+    }
+    if servers {
+        return match job.state {
+            nmc_transfer::JobState::Completed | nmc_transfer::JobState::Failed => {
+                "through this computer: the servers could not reach each other".into()
+            }
+            _ => "server to server if they can reach each other, else through this computer".into(),
+        };
+    }
+    match (remote(from), remote(to)) {
+        (true, true) => "through this computer, from one server to another".into(),
+        (true, false) => "downloaded to this computer".into(),
+        (false, true) => "uploaded from this computer".into(),
+        (false, false) => "on this computer".into(),
     }
 }
 

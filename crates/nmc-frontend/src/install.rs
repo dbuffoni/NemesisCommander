@@ -7,6 +7,8 @@ use std::time::Instant;
 
 use nmc_agent::provision::{self, InstallOptions};
 
+use crate::dialogs::{InputDialog, InputPurpose, MessageDialog, Secret};
+
 /// The text above the field.
 pub fn prompt() -> &'static str {
     "Server over SSH, then options:"
@@ -159,14 +161,47 @@ pub fn explanation() -> Vec<String> {
 }
 
 fn stamp(started: Instant, text: &str) -> String {
+    // What a command printed is shown under the step, without a time.
+    if text.starts_with("    ") {
+        return format!("{:>11}{}", "", text.trim_start());
+    }
     format!("[{:>5.2} s] {text}", started.elapsed().as_secs_f64())
 }
 
+/// What the install will do, for the question before it starts.
+pub fn plan(options: &InstallOptions) -> Vec<String> {
+    let mut lines = vec![summary(options), String::new(), "It will, over SSH:".into()];
+    lines.extend(
+        [
+            "  - check the server (Linux, same processor, systemd);",
+            "  - copy nmc to ~/.local/bin/nmc;",
+            "  - keep or create certificates in ~/.config/nmc/serve-tls;",
+            "  - add and start the user service nmc-serve;",
+            "  - connect to it, to prove that it works.",
+        ]
+        .map(str::to_owned),
+    );
+    if options.roots.is_empty() {
+        lines.push("The server will let you read and change every file you can.".into());
+    }
+    lines.push(String::new());
+    lines.push("Nothing needs root. Every step is shown while it runs.".into());
+    lines
+}
+
 /// The log of a test that changes nothing; the last line is the verdict.
-pub async fn run_check(options: InstallOptions) -> Vec<String> {
+/// Every line is also given to `emit` as it happens.
+pub async fn run_check(options: InstallOptions, emit: impl Fn(&str) + Send + Sync) -> Vec<String> {
     let started = Instant::now();
-    let mut log = vec![stamp(started, &summary(&options))];
-    let result = provision::check_serve(&options, |line| log.push(stamp(started, line))).await;
+    let first = stamp(started, &summary(&options));
+    emit(&first);
+    let mut log = vec![first];
+    let result = provision::check_serve(&options, |step| {
+        let line = stamp(started, step);
+        emit(&line);
+        log.push(line);
+    })
+    .await;
     match result {
         Ok(()) => log.push(format!(
             "Result: it can be installed ({:.2} s). Enter in the question installs it.",
@@ -181,24 +216,76 @@ pub async fn run_check(options: InstallOptions) -> Vec<String> {
     log
 }
 
-/// Installs, and returns the log (each step with its time) and the
-/// location when it worked.
-pub async fn run_install(options: InstallOptions) -> (Vec<String>, Result<String, String>) {
+/// Installs, and returns the log (each step with its time, the commands
+/// run on the server included) and the location when it worked. Every line
+/// is also given to `emit` as it happens.
+pub async fn run_install(
+    options: InstallOptions,
+    emit: impl Fn(&str) + Send + Sync,
+) -> (Vec<String>, Result<String, String>) {
     let started = Instant::now();
-    let mut log = vec![stamp(started, &summary(&options))];
-    let result = provision::install_serve(&options, |step| log.push(stamp(started, step))).await;
+    let log = std::sync::Mutex::new(Vec::new());
+    let say = |text: &str| {
+        let line = stamp(started, text);
+        emit(&line);
+        log.lock().unwrap_or_else(|e| e.into_inner()).push(line);
+    };
+    say(&summary(&options));
+    let result = provision::install_serve(&options, |step| say(step)).await;
     match &result {
         Ok(location) => {
-            log.push(stamp(started, &format!("nmc serve is running at {location}")));
-            log.push(format!("Result: installed ({:.2} s)", started.elapsed().as_secs_f64()));
+            say(&format!("nmc serve is running at {location}"));
+            let line = format!("Result: installed ({:.2} s)", started.elapsed().as_secs_f64());
+            emit(&line);
+            log.lock().unwrap_or_else(|e| e.into_inner()).push(line);
         }
         Err(e) => {
-            log.push(stamp(started, "Failed"));
-            log.extend(e.lines().filter(|l| !l.trim().is_empty()).map(|l| format!("    {l}")));
-            log.push("Result: not installed".to_owned());
+            say("Failed");
+            for line in e.lines().filter(|l| !l.trim().is_empty()) {
+                say(&format!("    {line}"));
+            }
+            let line = "Result: not installed".to_owned();
+            emit(&line);
+            log.lock().unwrap_or_else(|e| e.into_inner()).push(line);
         }
     }
-    (log, result)
+    (log.into_inner().unwrap_or_else(|e| e.into_inner()), result)
+}
+
+/// The window that ends an install: says plainly whether it worked and, if
+/// so, Enter saves the connection.
+pub fn finished(lines: Vec<String>, result: Result<String, String>) -> MessageDialog {
+    match result {
+        Ok(location) => {
+            let mut all = vec![
+                format!("✓ nmc serve is installed and answering at {location}"),
+                String::new(),
+            ];
+            all.extend(lines);
+            let mut window = MessageDialog::new("Install nmc serve: done", all);
+            let name = location
+                .trim_start_matches("scs://")
+                .split(['/', ':'])
+                .next()
+                .unwrap_or("")
+                .to_owned();
+            window.then = Some(InputDialog::new(
+                "Save connection",
+                &format!("Name for {location} (it appears in the drive list):"),
+                &name,
+                InputPurpose::NameConnection { uri: location, secret: Secret::default() },
+            ));
+            window
+        }
+        Err(_) => {
+            let mut all = vec![
+                "✗ The install did not finish. Read the steps below.".to_owned(),
+                String::new(),
+            ];
+            all.extend(lines);
+            MessageDialog::new("Install nmc serve: failed", all)
+        }
+    }
 }
 
 #[cfg(test)]

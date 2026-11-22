@@ -48,21 +48,13 @@ Item {
         property var stateOf: (item) => ""
         // Rows laid out in columns (drives, bookmarks) need a fixed-width font.
         property bool fixed: false
+        // The rows are as wide as the window; a longer row is cut in the
+        // middle, where a path keeps its start and its end.
+        property bool keepsSize: false
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(contentHeight, dialogs.height * 0.6)
-        // Columns in a fixed-width font may need more than the usual width
-        // (the disk table); the dialog is capped by the window.
-        implicitWidth: {
-            var longest = 0
-            var rows = model ? model : []
-            for (var i = 0; i < rows.length; i++)
-                longest = Math.max(longest, rows[i].length)
-            return fixed ? Math.max(480, longest * rowMetrics.averageCharacterWidth + 32) : 480
-        }
-        FontMetrics {
-            id: rowMetrics
-            font: dialogs.theme.fixedFont
-        }
+        Layout.preferredHeight: keepsSize ? dialogs.height * 0.6
+                                          : Math.min(contentHeight, dialogs.height * 0.6)
+        implicitWidth: 480
         interactive: false
         clip: true
         onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)
@@ -76,7 +68,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     x: 4
                     width: parent.width - 8
-                    elide: Text.ElideRight
+                    elide: Text.ElideMiddle
                     font: list.fixed ? dialogs.theme.fixedFont : Qt.application.font
                     text: typeof modelData === "string" ? modelData : modelData.text
                     color: index === list.cursor ? palette.highlightedText
@@ -250,15 +242,21 @@ Item {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
             }
+            // The answer; a longer one scrolls with the cursor (the whole
+            // answer of a place is written under the field).
             Rectangle {
+                id: fieldBox
                 Layout.fillWidth: true
                 implicitHeight: dialogs.theme.rowHeight + 6
                 color: palette.base
                 border.color: palette.highlight
+                clip: true
+                // How far the text moves left so that the cursor stays in.
+                readonly property real shift: Math.min(0, width - 14 - beforeCursor.advanceWidth)
                 Text {
                     id: field
                     anchors.verticalCenter: parent.verticalCenter
-                    x: 4
+                    x: 4 + fieldBox.shift
                     text: dialogs.view.text
                     font: dialogs.theme.fixedFont
                     color: palette.text
@@ -270,15 +268,44 @@ Item {
                     text: Array.from(dialogs.view.text).slice(0, dialogs.view.cursor).join("")
                 }
                 Rectangle {
-                    x: 4 + beforeCursor.advanceWidth
+                    x: 4 + fieldBox.shift + beforeCursor.advanceWidth
                     anchors.verticalCenter: parent.verticalCenter
                     width: 2
                     height: dialogs.theme.rowHeight
                     color: palette.text
                 }
             }
-            // Multi-rename: the new names, following the template.
-            Lines { model: dialogs.view.preview }
+            // The whole place, wrapped, with room for three rows.
+            Item {
+                visible: dialogs.view.is_path
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 3 * dialogs.theme.rowHeight : 0
+                clip: true
+                Label {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    text: dialogs.view.text
+                    wrapMode: Text.WrapAnywhere
+                    textFormat: Text.PlainText
+                    font: dialogs.theme.fixedFont
+                    color: dialogs.theme.dim
+                }
+            }
+            // Under the field: examples, what was understood, the new names.
+            // The room is kept whatever is written, so the window stays put.
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(dialogs.view.preview_rows * dialogs.theme.rowHeight,
+                                                 previewLines.implicitHeight)
+                clip: true
+                ColumnLayout {
+                    id: previewLines
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    spacing: 0
+                    Lines { model: dialogs.view.preview }
+                }
+            }
         }
     }
 
@@ -286,7 +313,7 @@ Item {
         id: confirm
         Box {
             title: dialogs.view.title
-            hint: "Enter / y: yes    Esc / n: no"
+            hint: dialogs.view.hint
             Lines { model: dialogs.view.lines }
         }
     }
@@ -298,6 +325,7 @@ Item {
             hint: dialogs.view.footer
             CursorList {
                 fixed: true
+                keepsSize: dialogs.view.keeps_size
                 cursor: dialogs.view.cursor
                 model: dialogs.view.items
             }
@@ -307,8 +335,13 @@ Item {
     Component {
         id: message
         Box {
+            id: messageBox
             title: dialogs.view.title
             hint: dialogs.view.hint
+            // A log (the steps of an install, a connection test) keeps one
+            // size while lines are added, and shows its end.
+            readonly property bool log: dialogs.view.busy || dialogs.view.lines.length > 8
+            fixedHeight: log ? dialogs.height * 0.7 : 0
             // About: the logo above the text.
             Image {
                 visible: !!dialogs.view.logo_url
@@ -322,7 +355,28 @@ Item {
                 smooth: true
                 mipmap: true
             }
-            Lines { model: dialogs.view.lines }
+            Lines { visible: !messageBox.log; model: messageBox.log ? [] : dialogs.view.lines }
+            ListView {
+                id: logLines
+                visible: messageBox.log
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                interactive: false
+                model: messageBox.log ? dialogs.view.lines : []
+                onCountChanged: positionViewAtEnd()
+                delegate: Label {
+                    width: ListView.view.width
+                    text: modelData
+                    wrapMode: Text.WrapAnywhere
+                    textFormat: Text.PlainText
+                    font: dialogs.theme.fixedFont
+                    color: modelData.indexOf("Failed") >= 0 || modelData.indexOf("! ") >= 0
+                           || modelData.indexOf("✗") === 0 ? dialogs.theme.errorColor
+                           : modelData.indexOf("✓") === 0 ? dialogs.theme.codeColor
+                           : palette.windowText
+                }
+            }
         }
     }
 
@@ -346,15 +400,53 @@ Item {
             title: "Transfers"
             hint: "p: pause    r: resume/retry    c: cancel    +/-: priority    "
                   + "[/]: files at once    a: auto    x: remove finished    Esc: close"
+            fixedHeight: dialogs.height * 0.8
+            width: Math.min(dialogs.theme.width * 0.9, 1100)
             Label {
                 visible: dialogs.view.rows.length === 0
                 text: "No transfers."
                 color: dialogs.theme.dim
             }
-            CursorList {
-                cursor: dialogs.view.cursor
+            // Newest first. Each transfer takes a few rows: the job, then
+            // where from and to, then how the data travels; long text wraps.
+            ListView {
+                id: jobRows
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                interactive: false
+                clip: true
                 model: dialogs.view.rows
-                stateOf: (row) => row.state
+                onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                currentIndex: dialogs.view.cursor
+                delegate: Rectangle {
+                    readonly property bool current: index === dialogs.view.cursor
+                    readonly property color ink: current ? palette.highlightedText
+                        : modelData.state === "failed" ? dialogs.theme.errorColor
+                        : palette.windowText
+                    width: ListView.view.width
+                    height: jobText.implicitHeight + jobDetail.implicitHeight + 8
+                    color: current ? palette.highlight : "transparent"
+                    radius: 2
+                    Label {
+                        id: jobText
+                        x: 6
+                        y: 2
+                        width: parent.width - 12
+                        text: modelData.text
+                        font: dialogs.theme.fixedFont
+                        wrapMode: Text.WrapAnywhere
+                        color: ink
+                    }
+                    Label {
+                        id: jobDetail
+                        x: 6
+                        anchors.top: jobText.bottom
+                        width: parent.width - 12
+                        text: modelData.detail
+                        wrapMode: Text.WrapAnywhere
+                        color: current ? palette.highlightedText : dialogs.theme.dim
+                    }
+                }
             }
         }
     }
@@ -409,7 +501,8 @@ Item {
         }
     }
 
-    // A copy conflict waits for an answer before anything else.
+    // A copy conflict waits for an answer before anything else. The paths
+    // wrap, so the whole of them can be read.
     Box {
         anchors.centerIn: parent
         visible: dialogs.conflict !== null
@@ -418,10 +511,18 @@ Item {
               + "Capital letter (O, S, R): same answer for all"
         Label {
             Layout.fillWidth: true
-            wrapMode: Text.Wrap
+            wrapMode: Text.WrapAnywhere
             text: dialogs.conflict ? dialogs.conflict.destination + " already exists." : ""
         }
-        Label { text: dialogs.conflict ? "Existing:  " + dialogs.conflict.existing : "" }
-        Label { text: dialogs.conflict ? "New:          " + dialogs.conflict.incoming : "" }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: dialogs.conflict ? "Existing:  " + dialogs.conflict.existing : ""
+        }
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: dialogs.conflict ? "New:          " + dialogs.conflict.incoming : ""
+        }
     }
 }

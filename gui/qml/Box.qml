@@ -13,14 +13,19 @@ Rectangle {
     default property alias content: column.data
     readonly property var theme: ApplicationWindow.window
 
-    // Sized by its content, up to 90% of the window; a key row that is still
-    // longer wraps onto more lines, so it is always shown whole (also with a
-    // large font). Whoever shows it centers it.
+    // A window keeps its size while its text changes (typing, a log that
+    // grows, a list that is filtered): the width is a share of the window,
+    // never taken from the content, so long paths wrap instead of making the
+    // window wider. A key row that is longer wraps onto more lines, so it
+    // is always shown whole (also with a large font). The height follows
+    // the content only for windows whose content never changes; the others
+    // ask for a `fixedHeight` (a share of the window). Whoever shows it
+    // centers it.
     readonly property real maxWidth: theme.width * 0.9
-    width: Math.min(maxWidth, Math.max(420, column.implicitWidth + 32,
-                                       footer.implicitWidth + 32))
-    height: Math.min(theme.height * 0.9,
-                     header.height + column.implicitHeight + footer.implicitHeight + 44)
+    property real fixedHeight: 0
+    width: Math.min(maxWidth, Math.max(theme.width * 0.6, 560))
+    height: Math.min(theme.height * 0.9, fixedHeight > 0 ? fixedHeight
+            : header.height + column.implicitHeight + footer.implicitHeight + 44)
     color: palette.window
     border.color: palette.highlight
     border.width: 2

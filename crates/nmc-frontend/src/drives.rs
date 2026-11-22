@@ -134,6 +134,24 @@ pub fn drive_label(config: &Config, location: &nmc_vfs::VfsPath) -> String {
         .map_or_else(|| scheme.to_owned(), |c| c.name.clone())
 }
 
+/// The location of a panel as its title: on a saved connection the drive
+/// label already names the server, so only the path inside it is written
+/// (`/home/me/Downloads`, not `agent://me@host/home/me/Downloads`).
+/// Everything else keeps the whole location.
+pub fn panel_location(config: &Config, location: &nmc_vfs::VfsPath) -> String {
+    let scheme = location.scheme();
+    if scheme == "file" || ARCHIVE_SCHEMES.contains(&scheme) {
+        return crate::display_location(location);
+    }
+    let text = location.to_string();
+    let saved = config.connections.iter().any(|c| text.starts_with(c.uri.trim_end_matches('/')));
+    match (saved, location.path()) {
+        (true, "") => "/".to_owned(),
+        (true, path) => path.to_owned(),
+        (false, _) => crate::display_location(location),
+    }
+}
+
 /// Every drive of the list, grouped by category (Local, Remote, Archive):
 /// this computer's drives first, then the saved connections in their order.
 pub fn drives(config: &Config) -> Vec<Drive> {

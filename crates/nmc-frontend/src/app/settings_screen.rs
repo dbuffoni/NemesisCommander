@@ -8,7 +8,8 @@ use nmc_config::{ExportBundle, Key};
 
 use super::{App, AppEvent, External, home_file};
 use crate::dialogs::{
-    ChooseDialog, ChoosePurpose, InputDialog, InputPurpose, MessageDialog, Overlay,
+    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
+    MessageDialog, Overlay,
 };
 use crate::input::KeyPress;
 use crate::settings::{Command, Field, FieldKind, Row, SettingsScreen};
@@ -302,18 +303,51 @@ impl App {
             Ok(options) => options,
             Err(e) => return self.set_error(e),
         };
-        self.set_status(format!("Installing nmc serve on {}…", options.authority));
+        // Nothing is touched on the server before the user has seen what
+        // will be done and said yes.
+        self.overlay = Some(Overlay::Confirm(ConfirmDialog {
+            title: "Install nmc serve?".into(),
+            lines: crate::install::plan(&options),
+            purpose: ConfirmPurpose::InstallServe(text.to_owned()),
+        }));
+    }
+
+    /// The user said yes: installs, showing every step as it happens, then
+    /// says plainly whether it worked and offers to save the connection.
+    pub(super) fn start_install(&mut self, text: &str) {
+        let options = match crate::install::parse(text, self.context.paths.tls_dir()) {
+            Ok(options) => options,
+            Err(e) => return self.set_error(e),
+        };
+        let title = "Install nmc serve";
+        let mut window = MessageDialog::new(title, vec![crate::install::summary(&options)]);
+        window.busy = true;
+        self.overlay = Some(Overlay::Message(window));
+        let events = self.events.clone();
         self.spawn_task(async move {
-            let (lines, result) = crate::install::run_install(options).await;
-            let _ = result;
-            AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
-                title: "Install nmc serve".into(),
-                lines,
-                then: None,
-                then_choose: None,
-                logo: false,
-            })))
+            let live = events.clone();
+            let (lines, result) = crate::install::run_install(options, move |line| {
+                let _ =
+                    live.send(AppEvent::Progress { title: title.into(), line: line.to_owned() });
+            })
+            .await;
+            AppEvent::Show(Box::new(Overlay::Message(crate::install::finished(lines, result))))
         });
+    }
+
+    /// A saved `scs://` server does not answer: offers to install it.
+    pub(super) fn offer_install(&mut self, host: &str, reason: &str) {
+        self.overlay = Some(Overlay::Confirm(ConfirmDialog {
+            title: "Install nmc serve?".into(),
+            lines: vec![
+                format!("{host} does not answer as an nmc serve server:"),
+                format!("  {reason}"),
+                String::new(),
+                "nmc serve may not be installed there yet. Install it now over SSH?".into(),
+                "(You will see what is done and can change the options before it starts.)".into(),
+            ],
+            purpose: ConfirmPurpose::OfferInstall(host.to_owned()),
+        }));
     }
 
     /// Ctrl+T in the install question: tests the server without installing,
@@ -324,16 +358,21 @@ impl App {
             Ok(options) => options,
             Err(e) => return self.ask_again(dialog, e),
         };
-        self.set_status(format!("Testing {} (nothing is installed)…", options.authority));
+        let title = "Test install";
+        let mut window = MessageDialog::new(title, vec![crate::install::summary(&options)]);
+        window.busy = true;
+        window.then = Some(dialog.clone());
+        self.overlay = Some(Overlay::Message(window));
+        let events = self.events.clone();
         self.spawn_task(async move {
-            let lines = crate::install::run_check(options).await;
-            AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
-                title: "Test install".into(),
-                lines,
-                then: Some(dialog),
-                then_choose: None,
-                logo: false,
-            })))
+            let lines = crate::install::run_check(options, move |line| {
+                let _ =
+                    events.send(AppEvent::Progress { title: title.into(), line: line.to_owned() });
+            })
+            .await;
+            let mut window = MessageDialog::new(title, lines);
+            window.then = Some(dialog);
+            AppEvent::Show(Box::new(Overlay::Message(window)))
         });
     }
 
@@ -345,6 +384,7 @@ impl App {
             then: Some(dialog),
             then_choose: None,
             logo: false,
+            busy: false,
         }));
     }
 }

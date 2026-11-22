@@ -37,6 +37,33 @@ pub const RENDER_SIZE: (u32, u32) = (1600, 1600);
 /// See [`RENDER_SIZE`].
 pub const QUICK_RENDER_SIZE: (u32, u32) = (800, 800);
 
+/// What the file system says about the file shown: it goes on the
+/// information sheet of binary files.
+#[derive(Debug, Clone, Default)]
+pub struct Facts {
+    /// The whole size of the file (it may be longer than what was read).
+    pub size: Option<u64>,
+    /// Rows of the sheet: modified, permissions...
+    pub rows: Vec<Vec<String>>,
+}
+
+impl Facts {
+    /// The facts of a listing entry.
+    pub fn of(entry: &nmc_vfs::Entry) -> Self {
+        let mut rows = Vec::new();
+        if let Some(modified) = entry.modified {
+            rows.push(vec!["Modified".to_owned(), nmc_panel::format::local_time(modified)]);
+        }
+        if let Some(mode) = entry.permissions {
+            rows.push(vec![
+                "Permissions".to_owned(),
+                format!("{} ({:o})", nmc_panel::format::permissions(mode), mode & 0o7777),
+            ]);
+        }
+        Facts { size: Some(entry.size), rows }
+    }
+}
+
 /// A loaded file, ready to show.
 #[derive(Debug, Clone)]
 pub enum Prepared {
@@ -60,8 +87,25 @@ pub fn kind_of(name: &str) -> Option<Kind> {
 
 /// Turns the bytes of `name` into what the viewer shows. Runs in the
 /// background: Office files and models can take a moment.
-pub fn prepare(name: &str, data: &Arc<Vec<u8>>, truncated: bool) -> Result<Prepared, String> {
-    let Some(kind) = kind_of(name) else { return Ok(Prepared::Plain) };
+pub fn prepare(
+    name: &str,
+    data: &Arc<Vec<u8>>,
+    truncated: bool,
+    facts: &Facts,
+) -> Result<Prepared, String> {
+    let Some(kind) = kind_of(name) else {
+        // Binary data is described, not dumped: the hex dump is F4.
+        let picture = nmc_preview::binary::is_picture(data) || crate::viewer::is_image_name(name);
+        if !picture && !crate::viewer::looks_like_text(data) {
+            return Ok(Prepared::Rich(nmc_preview::binary::describe(
+                name,
+                data,
+                facts.size,
+                facts.rows.clone(),
+            )));
+        }
+        return Ok(Prepared::Plain);
+    };
     // Audio and video are described from their start, however long they are.
     if truncated && !matches!(kind, Kind::Audio | Kind::Video) {
         return Err(format!("the file is too large to preview (over {} MiB)", PREVIEW_LIMIT >> 20));
@@ -240,11 +284,18 @@ mod tests {
     #[test]
     fn plain_files_need_no_preparation() {
         let bytes = |text: &[u8]| Arc::new(text.to_vec());
-        assert!(matches!(prepare("a.txt", &bytes(b"hello"), false), Ok(Prepared::Plain)));
+        assert!(matches!(
+            prepare("a.txt", &bytes(b"hello"), false, &Facts::default()),
+            Ok(Prepared::Plain)
+        ));
         assert!(
-            matches!(prepare("a.md", &bytes(b"# Hi"), false), Ok(Prepared::Rich(blocks)) if blocks.len() == 1)
+            matches!(prepare("a.md", &bytes(b"# Hi"), false, &Facts::default()), Ok(Prepared::Rich(blocks)) if blocks.len() == 1)
         );
-        assert!(prepare("a.pdf", &bytes(b"%PDF-1.4"), true).unwrap_err().contains("too large"));
-        assert!(prepare("a.stl", &bytes(b"nonsense"), false).is_err());
+        assert!(
+            prepare("a.pdf", &bytes(b"%PDF-1.4"), true, &Facts::default())
+                .unwrap_err()
+                .contains("too large")
+        );
+        assert!(prepare("a.stl", &bytes(b"nonsense"), false, &Facts::default()).is_err());
     }
 }

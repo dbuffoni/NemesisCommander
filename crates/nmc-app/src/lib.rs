@@ -117,6 +117,17 @@ struct ServerCopies {
 
 #[async_trait::async_trait]
 impl nmc_transfer::ServerCopier for ServerCopies {
+    fn between_servers(
+        &self,
+        sources: &[nmc_vfs::VfsPath],
+        destination: &nmc_vfs::VfsPath,
+    ) -> bool {
+        let copy =
+            nmc_agent::route::ServerCopy { sources, destination, conflict: ConflictPolicy::Skip };
+        copy.is_between_servers()
+            && nmc_agent::ServeFactory::new(self.tls_dir.clone()).identity().is_ok()
+    }
+
     async fn copy(
         &self,
         sources: &[nmc_vfs::VfsPath],
