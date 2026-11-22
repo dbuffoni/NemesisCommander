@@ -70,8 +70,7 @@ empties it. It tidies itself:
   and an empty store has no file.
 
 **Not done**: waiting at the level of whole queued jobs (a job whose server is
-down still starts and then waits itself), saving the remembered level between
-runs, parallelism inside one big file (range requests / multipart).
+down still starts and then waits itself), parallelism inside one big file (range requests / multipart).
 
 **Job indicators** (status bar): `Copying 2 jobs · 1.2 GiB of 3.0 GiB (40%) ·
 12.4 MiB/s · 0:42 left · 4 files at once (auto) · 1 queued · 1 paused · 1
