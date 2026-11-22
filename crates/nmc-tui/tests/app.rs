@@ -3343,7 +3343,8 @@ if (command === "column:chars") {
     let row = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap().to_owned();
     assert!(row("a.txt").contains(" 6 "), "{}", row("a.txt"));
     assert!(row("notes.txt").contains("19"), "{}", row("notes.txt"));
-    assert!(!row("docs").contains("19"), "folders have no value");
+    // (a bare "19" could come from the time of the folder)
+    assert!(!row("docs").contains(" 19 "), "folders have no value");
 
     // The previewer makes the text of the viewer.
     h.focus("a.txt");
