@@ -49,6 +49,7 @@ taken while implementing it.
 | 0041 | [Window size remembered, bookmark list can add the folder, dialogs wrap their key row](0041-card-batch-j.md) | Accepted |
 | 0042 | [Card batch K: tolerant filters, e-book/audio/video viewers, launcher icon, install dialog](0042-card-batch-k.md) | Accepted |
 | 0043 | [Agent protocol experience and dialogs](0043-agent-protocol-and-dialogs.md) | Accepted |
+| 0044 | [Adaptive transfer parallelism](0044-adaptive-transfer-parallelism.md) | Accepted |
 
 Template:
 

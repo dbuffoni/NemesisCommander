@@ -101,6 +101,11 @@ impl AppPaths {
         std::fs::write(self.window_file(), format!("{width}x{height}\n"))
     }
 
+    /// What worked on each server (level and limit of files at once).
+    pub fn stats_file(&self) -> PathBuf {
+        self.data_dir.join("connection-stats.json")
+    }
+
     /// The SQLite transfer journal.
     pub fn journal_file(&self) -> PathBuf {
         self.data_dir.join("transfers.db")

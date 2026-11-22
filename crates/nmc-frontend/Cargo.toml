@@ -30,7 +30,7 @@ serde.workspace = true
 serde_json.workspace = true
 image.workspace = true
 directories.workspace = true
-tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
+tokio = { workspace = true, features = ["rt", "macros", "sync", "time", "io-util"] }
 tokio-util.workspace = true
 nmc-script = { workspace = true, optional = true }
 

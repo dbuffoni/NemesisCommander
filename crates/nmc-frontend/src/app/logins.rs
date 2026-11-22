@@ -341,6 +341,8 @@ impl App {
                     options: Default::default(),
                 };
                 set(&mut connection.options);
+                // An older connection of this name must not pass its numbers on.
+                self.manager.forget_connection_stats(&name);
                 self.context.config.connections.push(connection);
                 if !self.save_settings() {
                     return;

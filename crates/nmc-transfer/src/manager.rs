@@ -16,8 +16,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::job::{JobEvent, JobId, JobInfo, JobKind, JobSpec, JobState};
 use crate::journal::{Journal, JournalError};
+use crate::stats::{self, Owner, StatsStore};
 use crate::throttle::TokenBucket;
-use crate::tuning::{MAX_PARALLELISM, MIN_PARALLELISM, Tuner};
+use crate::tuning::{MAX_PARALLELISM, MIN_PARALLELISM, Profile, Tuner};
 
 /// Global settings of a [`TransferManager`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,11 +27,17 @@ pub struct ManagerOptions {
     pub max_concurrent_jobs: usize,
     /// Bandwidth limit shared by all jobs, in bytes/s (0 = unlimited).
     pub global_bandwidth_limit: u64,
+    /// How boldly the automatic parallelism raises the number of files.
+    pub profile: Profile,
 }
 
 impl Default for ManagerOptions {
     fn default() -> Self {
-        ManagerOptions { max_concurrent_jobs: 2, global_bandwidth_limit: 0 }
+        ManagerOptions {
+            max_concurrent_jobs: 2,
+            global_bandwidth_limit: 0,
+            profile: Profile::Balanced,
+        }
     }
 }
 
@@ -70,6 +77,22 @@ pub struct ServerCopyReport {
     pub failures: Vec<String>,
 }
 
+fn profile_code(profile: Profile) -> u8 {
+    match profile {
+        Profile::Balanced => 0,
+        Profile::MaxSpeed => 1,
+        Profile::Discreet => 2,
+    }
+}
+
+fn profile_of(code: u8) -> Profile {
+    match code {
+        1 => Profile::MaxSpeed,
+        2 => Profile::Discreet,
+        _ => Profile::Balanced,
+    }
+}
+
 /// How often the automatic tuning looks at a job's throughput.
 const TUNING_INTERVAL: Duration = Duration::from_secs(3);
 
@@ -77,6 +100,39 @@ const TUNING_INTERVAL: Duration = Duration::from_secs(3);
 struct ParallelControl {
     level: Arc<AtomicUsize>,
     auto: AtomicBool,
+    /// The servers the job talks to (see [`endpoint_key`]).
+    endpoints: Vec<String>,
+    /// Why the automatic mode last changed the level, in words.
+    reason: Mutex<String>,
+}
+
+/// What is known about how many files a server takes at once.
+#[derive(Debug, Clone, Copy, Default)]
+struct EndpointInfo {
+    /// Set on the connection by the user (or saved from a suggestion).
+    configured: Option<usize>,
+    /// Learned from repeated errors in this run.
+    learned: Option<usize>,
+    /// The level a job ended with at its best, to start from next time.
+    good: Option<usize>,
+    /// The server did not answer: queued jobs for it wait until then.
+    blocked_until: Option<std::time::Instant>,
+}
+
+impl EndpointInfo {
+    fn limit(&self) -> Option<usize> {
+        self.configured.or(self.learned)
+    }
+}
+
+/// The server a path lives on, as `scheme://authority` (`None` for local
+/// paths). Archives count as the place that holds them.
+pub fn endpoint_key(path: &nmc_vfs::VfsPath) -> Option<String> {
+    let mut path = path;
+    while let Some(container) = path.container() {
+        path = container;
+    }
+    if path.is_local() { None } else { Some(format!("{}://{}", path.scheme(), path.authority())) }
 }
 
 /// Runs jobs in the background and keeps the journal up to date.
@@ -98,8 +154,16 @@ struct Inner {
     running: Mutex<HashMap<JobId, CancellationToken>>,
     /// Live parallelism of the jobs that are copying now.
     controls: Mutex<HashMap<JobId, Arc<ParallelControl>>>,
+    profile: std::sync::atomic::AtomicU8,
+    endpoints: Mutex<HashMap<String, EndpointInfo>>,
+    /// What worked on each server, kept in a small file.
+    stats: Mutex<StatsStore>,
+    /// The saved connection of each server.
+    owners: Mutex<HashMap<String, Owner>>,
+    /// Queued jobs that wait because their server is not answering.
+    waiting: Mutex<HashSet<JobId>>,
     events: broadcast::Sender<JobEvent>,
-    wake: Notify,
+    wake: Arc<Notify>,
 }
 
 impl TransferManager {
@@ -122,8 +186,13 @@ impl TransferManager {
                 global_throttle: Arc::new(TokenBucket::new(options.global_bandwidth_limit)),
                 running: Mutex::new(HashMap::new()),
                 controls: Mutex::new(HashMap::new()),
+                profile: std::sync::atomic::AtomicU8::new(profile_code(options.profile)),
+                endpoints: Mutex::new(HashMap::new()),
+                stats: Mutex::new(StatsStore::disabled()),
+                owners: Mutex::new(HashMap::new()),
+                waiting: Mutex::new(HashSet::new()),
                 events,
-                wake: Notify::new(),
+                wake: Arc::new(Notify::new()),
             }),
         })
     }
@@ -235,13 +304,92 @@ impl TransferManager {
     /// Turns the automatic tuning of a job's parallelism on or off. Off keeps
     /// the current level.
     pub fn set_auto_parallelism(&self, id: JobId, auto: bool) -> Result<(), JournalError> {
-        let current = self.job_parallelism(id)?;
+        let current = self.job_parallelism(id)?.max(1);
         self.inner.journal.set_parallelism(id, current, auto)?;
         if let Some(control) = self.control(id) {
             control.auto.store(auto, Ordering::Relaxed);
         }
         self.inner.emit(JobEvent::ParallelismChanged { id, parallelism: current, auto });
         Ok(())
+    }
+
+    /// Sets how boldly new and running jobs raise the number of files.
+    pub fn set_profile(&self, profile: Profile) {
+        self.inner.profile.store(profile_code(profile), Ordering::Relaxed);
+    }
+
+    /// Sets the most files at once for a server (from its connection), or
+    /// removes the limit with `None`.
+    pub fn set_endpoint_limit(&self, endpoint: &str, limit: Option<usize>) {
+        let mut map = self.inner.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        let info = map.entry(endpoint.to_owned()).or_default();
+        info.configured = limit.map(|l| l.max(1));
+        if limit.is_some() {
+            info.learned = None;
+        }
+    }
+
+    /// Keeps what works on each server in `file` (when `enabled`), and starts
+    /// from what it holds.
+    pub fn use_stats_file(&self, file: std::path::PathBuf, enabled: bool) {
+        *self.inner.stats.lock().unwrap_or_else(|e| e.into_inner()) =
+            StatsStore::load(file, enabled, stats::now());
+        self.inner.seed_from_stats();
+    }
+
+    /// Turns the memory of servers on or off. Off forgets it and deletes the file.
+    pub fn set_stats_enabled(&self, enabled: bool) {
+        self.inner.stats.lock().unwrap_or_else(|e| e.into_inner()).set_enabled(enabled);
+        if !enabled {
+            self.inner.forget_learned();
+        }
+    }
+
+    /// Forgets everything remembered about servers.
+    pub fn reset_stats(&self) {
+        self.inner.stats.lock().unwrap_or_else(|e| e.into_inner()).reset();
+        self.inner.forget_learned();
+    }
+
+    /// Tells the manager which connections are saved (name, address): what was
+    /// remembered for connections that are gone, renamed or moved is dropped.
+    pub fn sync_connections(&self, connections: &[(String, String)]) {
+        let mut owners = HashMap::new();
+        for (name, uri) in connections {
+            if let Ok(path) = nmc_vfs::VfsPath::parse(uri)
+                && let Some(key) = endpoint_key(&path)
+            {
+                owners.insert(key, Owner { name: name.clone(), uri: uri.clone() });
+            }
+        }
+        let known: Vec<Owner> =
+            connections.iter().map(|(n, u)| Owner { name: n.clone(), uri: u.clone() }).collect();
+        *self.inner.owners.lock().unwrap_or_else(|e| e.into_inner()) = owners;
+        let changed = self.inner.stats.lock().unwrap_or_else(|e| e.into_inner()).reconcile(&known);
+        if changed {
+            self.inner.forget_learned();
+            self.inner.seed_from_stats();
+        }
+    }
+
+    /// A new connection is called `name`: what was remembered for an older
+    /// connection of that name does not apply to it.
+    pub fn forget_connection_stats(&self, name: &str) {
+        self.inner.stats.lock().unwrap_or_else(|e| e.into_inner()).forget_name(name);
+        self.inner.forget_learned();
+        self.inner.seed_from_stats();
+    }
+
+    /// What is remembered about servers, for the settings screen: how many.
+    pub fn stats_count(&self) -> usize {
+        self.inner.stats.lock().unwrap_or_else(|e| e.into_inner()).data.servers.len()
+    }
+
+    /// Why the automatic mode last changed the level of a running job.
+    pub fn job_reason(&self, id: JobId) -> Option<String> {
+        let control = self.control(id)?;
+        let reason = control.reason.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        (!reason.is_empty()).then_some(reason)
     }
 
     /// The number of files a job copies at the same time now: the live value
@@ -275,10 +423,14 @@ impl TransferManager {
     }
 
     /// Starts jobs while there are free slots. Returns how many started.
+    /// A queued job whose server is not answering stays queued (it shows as
+    /// waiting for the server) and the next one is tried; the first copy that
+    /// starts after the wait is the probe of the server.
     fn fill_slots(&self) -> usize {
         let mut started = 0;
+        let mut skipped: HashSet<JobId> = HashSet::new();
         loop {
-            let running: HashSet<JobId> = self
+            let mut exclude: HashSet<JobId> = self
                 .inner
                 .running
                 .lock()
@@ -286,14 +438,20 @@ impl TransferManager {
                 .keys()
                 .copied()
                 .collect();
-            if running.len()
-                >= self.inner.max_jobs.load(std::sync::atomic::Ordering::Relaxed).max(1)
-            {
-                return started;
+            let running = exclude.len();
+            if running >= self.inner.max_jobs.load(std::sync::atomic::Ordering::Relaxed).max(1) {
+                break;
             }
-            let Ok(Some(id)) = self.inner.journal.next_queued(&running) else {
-                return started;
+            exclude.extend(skipped.iter().copied());
+            let Ok(Some(id)) = self.inner.journal.next_queued(&exclude) else {
+                break;
             };
+            if let Ok(job) = self.inner.journal.job(id)
+                && self.inner.is_blocked(&Inner::job_endpoints(&job.spec))
+            {
+                skipped.insert(id);
+                continue;
+            }
             let token = CancellationToken::new();
             self.inner.running.lock().unwrap_or_else(|e| e.into_inner()).insert(id, token.clone());
             let inner = self.inner.clone();
@@ -304,6 +462,18 @@ impl TransferManager {
             });
             started += 1;
         }
+        *self.inner.waiting.lock().unwrap_or_else(|e| e.into_inner()) = skipped;
+        started
+    }
+
+    /// Whether a queued job waits because its server is not answering.
+    pub fn job_waiting_for_server(&self, id: JobId) -> bool {
+        self.inner.waiting.lock().unwrap_or_else(|e| e.into_inner()).contains(&id)
+    }
+
+    /// How many queued jobs wait for a server.
+    pub fn waiting_for_server_count(&self) -> usize {
+        self.inner.waiting.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     fn running_count(&self) -> usize {
@@ -316,7 +486,7 @@ impl TransferManager {
         loop {
             let notified = self.inner.wake.notified();
             self.fill_slots();
-            if self.running_count() == 0 {
+            if self.running_count() == 0 && self.waiting_for_server_count() == 0 {
                 return;
             }
             notified.await;
@@ -337,6 +507,120 @@ impl TransferManager {
 }
 
 impl Inner {
+    /// The servers do not answer: queued jobs for them wait for `time`.
+    fn block_endpoints(&self, endpoints: &[String], time: Duration) {
+        let until = std::time::Instant::now() + time;
+        let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        for endpoint in endpoints {
+            map.entry(endpoint.clone()).or_default().blocked_until = Some(until);
+        }
+        drop(map);
+        // The queue looks again when the time is up, to try the server.
+        let wake = self.wake.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(time).await;
+            wake.notify_one();
+        });
+    }
+
+    /// The servers answered: queued jobs for them may start.
+    fn unblock_endpoints(&self, endpoints: &[String]) {
+        let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        let mut any = false;
+        for endpoint in endpoints {
+            if let Some(info) = map.get_mut(endpoint)
+                && info.blocked_until.take().is_some()
+            {
+                any = true;
+            }
+        }
+        drop(map);
+        if any {
+            self.wake.notify_one();
+        }
+    }
+
+    /// Whether a server of the job is waiting to recover.
+    fn is_blocked(&self, endpoints: &[String]) -> bool {
+        let now = std::time::Instant::now();
+        let map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        endpoints
+            .iter()
+            .any(|e| map.get(e).and_then(|i| i.blocked_until).is_some_and(|until| until > now))
+    }
+
+    /// The servers a job talks to.
+    fn job_endpoints(spec: &JobSpec) -> Vec<String> {
+        let mut endpoints: Vec<String> =
+            spec.sources.iter().chain(spec.destination.iter()).filter_map(endpoint_key).collect();
+        endpoints.sort();
+        endpoints.dedup();
+        endpoints
+    }
+
+    /// Puts what the stats file holds into the live limits.
+    fn seed_from_stats(&self) {
+        let stats = self.stats.lock().unwrap_or_else(|e| e.into_inner());
+        if !stats.enabled() {
+            return;
+        }
+        let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        for (key, server) in &stats.data.servers {
+            let info = map.entry(key.clone()).or_default();
+            info.learned = info.learned.or(server.limit);
+            info.good = info.good.or(server.good_level);
+        }
+    }
+
+    /// Drops the learned limits and good levels (the configured limits stay).
+    fn forget_learned(&self) {
+        for info in self.endpoints.lock().unwrap_or_else(|e| e.into_inner()).values_mut() {
+            info.learned = None;
+            info.good = None;
+        }
+    }
+
+    fn record_stats(&self, endpoint: &str, good: Option<usize>, limit: Option<usize>) {
+        let owner = self.owners.lock().unwrap_or_else(|e| e.into_inner()).get(endpoint).cloned();
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).record(
+            endpoint,
+            owner,
+            good,
+            limit,
+            stats::now(),
+        );
+    }
+
+    /// The most files at once the servers of a job allow it: the limit of
+    /// each server shared among the running jobs that use it.
+    fn endpoint_cap(&self, control: &ParallelControl) -> usize {
+        let map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+        let controls = self.controls.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cap = usize::MAX;
+        for endpoint in &control.endpoints {
+            let Some(limit) = map.get(endpoint).and_then(EndpointInfo::limit) else { continue };
+            let users = controls.values().filter(|c| c.endpoints.contains(endpoint)).count().max(1);
+            cap = cap.min(limit.div_ceil(users).max(1));
+        }
+        cap
+    }
+
+    /// Remembers a limit learned from errors and tells the interfaces, so
+    /// that they can save it on the connection.
+    fn learn_limit(&self, endpoints: &[String], limit: usize) {
+        for endpoint in endpoints {
+            let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+            let info = map.entry(endpoint.clone()).or_default();
+            if info.configured.is_some() || info.learned.is_some_and(|l| l <= limit) {
+                continue;
+            }
+            info.learned = Some(limit);
+            drop(map);
+            self.record_stats(endpoint, None, Some(limit));
+            self.emit(JobEvent::EndpointLimit { endpoint: endpoint.clone(), limit });
+        }
+    }
+
     fn emit(&self, event: JobEvent) {
         // No subscribers is fine.
         let _ = self.events.send(event);
@@ -497,10 +781,28 @@ impl Inner {
             ConflictPolicy::Ask if !has_resolver => ConflictPolicy::Skip,
             other => other,
         };
-        let level = Arc::new(AtomicUsize::new(spec.options.parallelism.max(1)));
+        let mut endpoints: Vec<String> =
+            spec.sources.iter().chain(spec.destination.iter()).filter_map(endpoint_key).collect();
+        endpoints.sort();
+        endpoints.dedup();
+        let auto_start = spec.options.auto_parallelism;
+        let profile = profile_of(self.profile.load(Ordering::Relaxed));
+        let start = if auto_start {
+            // Automatic: start low, or where the last job on these servers did well.
+            let remembered = {
+                let map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+                endpoints.iter().filter_map(|e| map.get(e).and_then(|i| i.good)).min()
+            };
+            remembered.unwrap_or(profile.start_level()).clamp(1, profile.max_level())
+        } else {
+            spec.options.parallelism.max(1)
+        };
+        let level = Arc::new(AtomicUsize::new(start));
         let control = Arc::new(ParallelControl {
             level: level.clone(),
-            auto: AtomicBool::new(spec.options.auto_parallelism),
+            auto: AtomicBool::new(auto_start),
+            endpoints: endpoints.clone(),
+            reason: Mutex::new(String::new()),
         });
         self.controls.lock().unwrap_or_else(|e| e.into_inner()).insert(id, control.clone());
         let options = ExecuteOptions {
@@ -547,9 +849,10 @@ impl Inner {
             if copies < 2 {
                 return std::future::pending::<()>().await;
             }
-            let mut tuner = Tuner::new(control.level.load(Ordering::Relaxed));
+            let mut tuner = Tuner::new(control.level.load(Ordering::Relaxed), profile);
             let mut last_bytes = 0;
             let mut shown = control.level.load(Ordering::Relaxed);
+            let mut was_auto = control.auto.load(Ordering::Relaxed);
             loop {
                 tokio::time::sleep(TUNING_INTERVAL).await;
                 let bytes = written.load(Ordering::Relaxed);
@@ -557,18 +860,39 @@ impl Inner {
                 last_bytes = bytes;
                 let failures = retries.swap(0, Ordering::Relaxed);
                 let current = control.level.load(Ordering::Relaxed);
-                if !control.auto.load(Ordering::Relaxed) {
-                    tuner.reset(current);
+                let auto = control.auto.load(Ordering::Relaxed);
+                let profile = profile_of(self.profile.load(Ordering::Relaxed));
+                if !auto {
+                    tuner = Tuner::new(current, profile);
+                    shown = current;
+                    was_auto = false;
                     continue;
                 }
-                if current != shown {
-                    tuner.reset(current); // changed from outside (settings, by hand)
+                if current != shown || !was_auto || tuner.profile() != profile {
+                    tuner = Tuner::new(current, profile); // changed from outside (settings, by hand)
                 }
-                let next = tuner.next(speed, failures);
-                control.level.store(next, Ordering::Relaxed);
-                shown = next;
-                if next != current {
-                    self.emit(JobEvent::ParallelismChanged { id, parallelism: next, auto: true });
+                was_auto = true;
+                let limit = self.endpoint_cap(&control);
+                let decision = tuner.next(speed, failures, limit);
+                control.level.store(decision.level, Ordering::Relaxed);
+                shown = decision.level;
+                if let Some(reason) = decision.reason {
+                    *control.reason.lock().unwrap_or_else(|e| e.into_inner()) = reason;
+                }
+                if let Some(ticks) = decision.wait_ticks {
+                    self.block_endpoints(&control.endpoints, TUNING_INTERVAL * ticks);
+                } else if speed > 0.0 && failures == 0 {
+                    self.unblock_endpoints(&control.endpoints);
+                }
+                if let Some(learned) = decision.suggest_limit {
+                    self.learn_limit(&control.endpoints, learned);
+                }
+                if decision.level != current {
+                    self.emit(JobEvent::ParallelismChanged {
+                        id,
+                        parallelism: decision.level,
+                        auto: true,
+                    });
                 }
             }
         };
@@ -579,9 +903,22 @@ impl Inner {
         // Keep the level the job ended with (hand or automatic) for a resume.
         let _ = self.journal.set_parallelism(
             id,
-            control.level.load(Ordering::Relaxed),
+            control.level.load(Ordering::Relaxed).max(1),
             control.auto.load(Ordering::Relaxed),
         );
+        if control.auto.load(Ordering::Relaxed) && copies >= 2 {
+            let level = control.level.load(Ordering::Relaxed);
+            if level > 0 {
+                let mut map = self.endpoints.lock().unwrap_or_else(|e| e.into_inner());
+                for endpoint in &control.endpoints {
+                    map.entry(endpoint.clone()).or_default().good = Some(level);
+                }
+                drop(map);
+                for endpoint in &control.endpoints {
+                    self.record_stats(endpoint, Some(level), None);
+                }
+            }
+        }
         self.controls.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
         match result {
             Ok(_) => Ok(self.journal.job(id)?.errors.is_empty()),
@@ -745,6 +1082,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn server_memory_follows_the_saved_connections() {
+        let (registry, _, _) = setup();
+        let manager = TransferManager::new(
+            registry,
+            Journal::open_in_memory().unwrap(),
+            ManagerOptions::default(),
+        )
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("connection-stats.json");
+        manager.use_stats_file(file.clone(), true);
+        let nas = vec![("nas".to_owned(), "sftp://me@nas/srv".to_owned())];
+        manager.sync_connections(&nas);
+        manager.inner.record_stats("sftp://me@nas", Some(5), Some(3));
+        assert!(file.exists());
+        assert_eq!(manager.stats_count(), 1);
+        // the connection is deleted: its numbers go
+        manager.sync_connections(&[]);
+        assert_eq!(manager.stats_count(), 0);
+        assert!(!file.exists());
+        // a new connection called nas does not inherit anything
+        manager.sync_connections(&nas);
+        manager.inner.record_stats("sftp://me@nas", Some(5), Some(3));
+        manager.forget_connection_stats("nas");
+        assert_eq!(manager.stats_count(), 0);
+        // off: nothing is written
+        manager.set_stats_enabled(false);
+        manager.inner.record_stats("sftp://me@nas", Some(5), None);
+        assert!(!file.exists());
+    }
+
+    #[tokio::test]
     async fn parallelism_is_stored_with_the_job() {
         let (registry, _, _) = setup();
         let manager = TransferManager::new(
@@ -854,7 +1223,11 @@ mod tests {
             a.put_file(&format!("/src/f{i:02}"), vec![b'x'; 64 * 1024]);
         }
         // 1 MB/s global limit: the job takes ~3 seconds, plenty of time to pause.
-        let options = ManagerOptions { max_concurrent_jobs: 1, global_bandwidth_limit: 1_000_000 };
+        let options = ManagerOptions {
+            max_concurrent_jobs: 1,
+            global_bandwidth_limit: 1_000_000,
+            ..Default::default()
+        };
         let manager =
             TransferManager::new(registry, Journal::open_in_memory().unwrap(), options).unwrap();
         let id = manager.submit(copy_spec(0)).unwrap();
@@ -898,6 +1271,34 @@ mod tests {
         // resume does nothing on a cancelled job
         manager.resume(id).unwrap();
         assert_eq!(manager.job(id).unwrap().state, JobState::Cancelled);
+    }
+
+    #[tokio::test]
+    async fn queued_jobs_wait_while_their_server_does_not_answer() {
+        let (registry, a, b) = setup();
+        a.put_file("/src/x", "1");
+        let manager = TransferManager::new(
+            registry,
+            Journal::open_in_memory().unwrap(),
+            ManagerOptions::default(),
+        )
+        .unwrap();
+        let spec = copy_spec(0);
+        let endpoints = Inner::job_endpoints(&spec);
+        assert!(!endpoints.is_empty(), "the test servers are not local");
+        let id = manager.submit(spec).unwrap();
+        manager.inner.block_endpoints(&endpoints, Duration::from_millis(500));
+        let runner = {
+            let manager = manager.clone();
+            tokio::spawn(async move { manager.run_until_idle().await })
+        };
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(manager.job(id).unwrap().state, JobState::Queued, "waits for the server");
+        assert!(manager.job_waiting_for_server(id));
+        runner.await.unwrap();
+        assert_eq!(manager.job(id).unwrap().state, JobState::Completed, "then it runs");
+        assert!(!manager.job_waiting_for_server(id));
+        assert_eq!(b.get_file("/src/x").unwrap(), b"1");
     }
 
     #[tokio::test]

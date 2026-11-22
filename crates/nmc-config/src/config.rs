@@ -104,6 +104,19 @@ impl PanelSettings {
     }
 }
 
+/// How boldly the automatic parallelism of transfers works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TransferProfile {
+    /// A good speed without overloading anything.
+    #[default]
+    Balanced,
+    /// As fast as possible.
+    MaxSpeed,
+    /// Few files at once, leaves bandwidth and servers free.
+    Discreet,
+}
+
 /// Defaults for copy, move and delete jobs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -116,6 +129,11 @@ pub struct TransferSettings {
     /// Adjust the files copied at the same time while a job runs, from the
     /// measured speed. Can be turned off per job in the job monitor.
     pub auto_parallelism: bool,
+    /// How boldly the automatic parallelism raises the number of files.
+    pub profile: TransferProfile,
+    /// Remember, in a small file, the level and limit that worked on each
+    /// server, so known servers start well.
+    pub keep_stats: bool,
     /// Verification after copying.
     pub verify: VerifyMode,
     /// When `verify` is "same size", check by XXH3 content hash when the
@@ -136,6 +154,8 @@ impl Default for TransferSettings {
             parallel_jobs: 2,
             parallel_files: 4,
             auto_parallelism: true,
+            profile: TransferProfile::Balanced,
+            keep_stats: true,
             verify: VerifyMode::Size,
             verify_remote_fast: true,
             conflict: ConflictPolicy::Ask,
@@ -211,6 +231,14 @@ pub struct Connection {
     /// Free-form provider options (`compression = "yes"`, ...).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub options: BTreeMap<String, String>,
+}
+
+impl Connection {
+    /// The most files at once the transfers may use on this server (option
+    /// `max_connections`), `None` when not set.
+    pub fn max_connections(&self) -> Option<usize> {
+        self.options.get("max_connections").and_then(|v| v.trim().parse().ok()).filter(|n| *n >= 1)
+    }
 }
 
 /// All persistent settings.

@@ -78,6 +78,12 @@ pub enum InputPurpose {
     MoveTo(Vec<VfsPath>),
     /// Create a folder with the typed name.
     MakeDir,
+    /// Generate random text files: the name is asked.
+    GenerateName,
+    /// Generate random text files: how many (the name is known).
+    GenerateCount(String),
+    /// Generate random text files: the size (name and number are known).
+    GenerateSize(String, u64),
     /// Rename this item.
     Rename(VfsPath),
     /// Multi-rename these files with the typed template.
@@ -558,6 +564,8 @@ pub struct MessageDialog {
     pub then: Option<InputDialog>,
     /// Or Enter goes back to this list.
     pub then_choose: Option<Box<ChooseDialog>>,
+    /// Enter or Esc goes back to the settings screen.
+    pub back_to_settings: Option<Box<crate::settings::SettingsScreen>>,
     /// The logo is shown above the text (About).
     pub logo: bool,
     /// The work behind it is still going: lines are added as it goes.
@@ -572,6 +580,7 @@ impl MessageDialog {
             lines,
             then: None,
             then_choose: None,
+            back_to_settings: None,
             logo: false,
             busy: false,
         }

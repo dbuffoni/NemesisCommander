@@ -37,6 +37,7 @@ use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 mod archives;
 mod diskwork;
 mod features;
+mod generate;
 mod logins;
 mod palette;
 mod plugins;
@@ -262,6 +263,8 @@ pub struct App {
     pub jobs: Vec<JobInfo>,
     /// Bytes done of running jobs, updated more often than `jobs`.
     pub live_bytes: HashMap<JobId, u64>,
+    /// When the job list was last read because a running job had no size yet.
+    sizes_refreshed: Option<std::time::Instant>,
     /// How the data of each job travelled between two servers, once known
     /// (`direct` or `reverse`).
     pub job_routes: HashMap<JobId, String>,
@@ -546,6 +549,7 @@ impl App {
             status,
             jobs: Vec::new(),
             live_bytes: HashMap::new(),
+            sizes_refreshed: None,
             job_routes: HashMap::new(),
             speed: crate::speed::SpeedMeter::default(),
             git: [None, None],
@@ -842,12 +846,26 @@ impl App {
                 self.set_status(format!("Retrying {title} ({attempt}/{attempts}): {message}…"));
             }
             AppEvent::Job(JobEvent::ParallelismChanged { .. }) => self.refresh_jobs(),
+            AppEvent::Job(JobEvent::EndpointLimit { endpoint, limit }) => {
+                self.remember_endpoint_limit(&endpoint, limit)
+            }
             AppEvent::Job(JobEvent::Route { id, route }) => {
                 self.job_routes.insert(id, route.clone());
                 self.set_status(format!("Copying {route} between the servers (not through here)"));
             }
             AppEvent::Job(JobEvent::Progress { id, bytes }) => {
                 *self.live_bytes.entry(id).or_default() += bytes;
+                // The size of a job is known once it is planned: read it again then.
+                let unsized_job = self.jobs.iter().any(|j| j.id == id && j.total_bytes == 0);
+                let now = std::time::Instant::now();
+                if unsized_job
+                    && self.sizes_refreshed.is_none_or(|t| {
+                        now.duration_since(t) > std::time::Duration::from_millis(500)
+                    })
+                {
+                    self.sizes_refreshed = Some(now);
+                    self.refresh_jobs();
+                }
                 self.speed.record(std::time::Instant::now(), bytes);
             }
             AppEvent::Job(JobEvent::StateChanged { id, state }) => {
@@ -987,6 +1005,7 @@ impl App {
                             lines: text,
                             then: None,
                             then_choose: None,
+                            back_to_settings: None,
                             logo: false,
                             busy: false,
                         }));
@@ -1322,6 +1341,12 @@ impl App {
                 }
                 Some(Overlay::Choose(dialog))
             }
+            Overlay::Message(dialog) if dialog.back_to_settings.is_some() => match key {
+                Some(Key::Enter | Key::Esc) => {
+                    dialog.back_to_settings.map(|s| Overlay::Settings(*s))
+                }
+                _ => Some(Overlay::Message(dialog)),
+            },
             Overlay::Message(dialog) => match key {
                 Some(Key::Enter) => dialog
                     .then
@@ -1468,6 +1493,7 @@ impl App {
                 lines,
                 then: back,
                 then_choose: choose,
+                back_to_settings: None,
                 logo: false,
                 busy: false,
             })))
@@ -1596,6 +1622,7 @@ impl App {
             }
             Action::AiRename if nothing => self.set_error("Nothing to rename"),
             Action::AiRename => self.ask_ai_rename(targets),
+            Action::GenerateFiles => self.generate_files(),
             Action::MakeDir => self.ask("New folder", "Name:", "", InputPurpose::MakeDir),
             Action::Delete | Action::DeleteForever if nothing => {
                 self.set_error("Nothing to delete")
@@ -1913,6 +1940,9 @@ impl App {
                 Ok(destination) => drop(self.submit_job(JobKind::Move, paths, destination)),
                 Err(e) => self.set_error(e),
             },
+            purpose @ (InputPurpose::GenerateName
+            | InputPurpose::GenerateCount(_)
+            | InputPurpose::GenerateSize(..)) => self.generate_step(purpose, &text),
             InputPurpose::MakeDir => {
                 if text.is_empty() {
                     return;
@@ -2189,6 +2219,7 @@ impl App {
                     lines,
                     then: None,
                     then_choose: None,
+                    back_to_settings: None,
                     logo: false,
                     busy: false,
                 })));
@@ -2584,7 +2615,12 @@ impl App {
     /// Saves the settings; reports and returns `false` on failure.
     fn save_settings(&mut self) -> bool {
         match self.context.save_config() {
-            Ok(()) => true,
+            Ok(()) => {
+                // Connections may have been added, changed or deleted: what was
+                // remembered about their servers follows.
+                nmc_app::apply_endpoint_limits(&self.manager, &self.context.config);
+                true
+            }
             Err(e) => {
                 self.set_error(e.to_string());
                 false
@@ -2687,6 +2723,7 @@ impl App {
             lines,
             then,
             then_choose: None,
+            back_to_settings: None,
             logo: false,
             busy: false,
         }));
@@ -2719,6 +2756,7 @@ impl App {
                     lines,
                     then: None,
                     then_choose: None,
+                    back_to_settings: None,
                     logo: false,
                     busy: false,
                 }))),

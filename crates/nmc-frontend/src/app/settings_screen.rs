@@ -29,6 +29,11 @@ impl App {
         let key = press.plain();
         let typed = press.text.filter(|c| !press.chord.ctrl && !press.chord.alt && !c.is_control());
         match (key, typed) {
+            (Some(Key::F(1)), _) => {
+                let mut help = MessageDialog::new("Settings help", crate::settings::help_lines());
+                help.back_to_settings = Some(Box::new(screen));
+                return Some(Overlay::Message(help));
+            }
             // Esc clears what was typed first, then closes.
             (Some(Key::Esc), _) if !screen.filter.is_empty() => screen.set_filter(""),
             (Some(Key::Esc), _) => return None,
@@ -111,6 +116,15 @@ impl App {
                     &suggestion,
                     InputPurpose::ImportSettings,
                 )));
+            }
+            Command::ResetStats => {
+                let count = self.manager.stats_count();
+                self.manager.reset_stats();
+                self.set_status(format!(
+                    "Forgot what was remembered about {count} server{}",
+                    if count == 1 { "" } else { "s" }
+                ));
+                return Some(Overlay::Settings(*screen));
             }
             Command::EditFile => {
                 self.edit_settings_file();
@@ -225,6 +239,31 @@ impl App {
         }
     }
 
+    /// A server took fewer files at once than tried: keeps the number on its
+    /// saved connection (`max_connections`), where it can be changed.
+    pub(super) fn remember_endpoint_limit(&mut self, endpoint: &str, limit: usize) {
+        let mut name = None;
+        for connection in &mut self.context.config.connections {
+            let Ok(path) = nmc_vfs::VfsPath::parse(&connection.uri) else { continue };
+            if nmc_transfer::endpoint_key(&path).as_deref() == Some(endpoint)
+                && connection.max_connections().is_none()
+            {
+                connection.options.insert("max_connections".into(), limit.to_string());
+                name = Some(connection.name.clone());
+            }
+        }
+        match name {
+            Some(name) => {
+                self.settings_changed(format!(
+                    "{name} keeps refusing sessions: copies to it now use at most {limit} files at once (set in the connection)"
+                ));
+            }
+            None => self.set_status(format!(
+                "{endpoint} seems to take only {limit} files at once: copies to it keep to that until nmc restarts"
+            )),
+        }
+    }
+
     /// Saves and applies the settings after a change, showing `message`.
     pub(super) fn settings_changed(&mut self, message: String) {
         if !self.save_settings() {
@@ -242,6 +281,9 @@ impl App {
         let transfers = &self.context.config.transfers;
         self.manager.set_max_concurrent_jobs(transfers.parallel_jobs);
         self.manager.set_global_bandwidth_limit(transfers.bandwidth_limit_kib * 1024);
+        self.manager.set_profile(nmc_app::to_profile(transfers.profile));
+        self.manager.set_stats_enabled(transfers.keep_stats);
+        nmc_app::apply_endpoint_limits(&self.manager, &self.context.config);
     }
 
     /// Sends the settings to the machine typed in the dialog.
@@ -383,6 +425,7 @@ impl App {
             lines: crate::install::explanation(),
             then: Some(dialog),
             then_choose: None,
+            back_to_settings: None,
             logo: false,
             busy: false,
         }));

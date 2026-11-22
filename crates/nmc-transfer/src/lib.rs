@@ -14,11 +14,13 @@
 mod job;
 mod journal;
 mod manager;
+mod stats;
 mod throttle;
 mod tuning;
 
 pub use job::{JobEvent, JobId, JobInfo, JobKind, JobOptions, JobSpec, JobState};
 pub use journal::{Journal, JournalError};
-pub use manager::{ManagerOptions, ServerCopier, ServerCopyReport, TransferManager};
+pub use manager::{ManagerOptions, ServerCopier, ServerCopyReport, TransferManager, endpoint_key};
+pub use stats::{Owner, ServerStats, StatsData, StatsStore};
 pub use throttle::TokenBucket;
-pub use tuning::{MAX_PARALLELISM, MIN_PARALLELISM, Tuner};
+pub use tuning::{Decision, MAX_PARALLELISM, MIN_PARALLELISM, Profile, Tuner};

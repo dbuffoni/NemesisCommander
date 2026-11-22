@@ -1250,20 +1250,20 @@ async fn the_settings_screen_changes_options_and_saves_them() {
     assert_eq!(h.app.context().config.transfers.verify, nmc_ops::VerifyMode::Fast);
 
     // Numbers are typed; Esc or Enter come back to the screen.
-    settings_row(&mut h, "Jobs at the same time");
+    settings_row(&mut h, "Retries after");
     h.key("Enter");
     h.type_text("1");
     h.key("Enter");
     assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))), "back on the screen");
-    assert_eq!(h.app.context().config.transfers.parallel_jobs, 1);
+    assert_eq!(h.app.context().config.transfers.retries, 1);
     let saved = fs::read_to_string(h.app.context().paths.config_file()).unwrap();
-    assert!(saved.contains("parallel_jobs = 1") && saved.contains("show_hidden = true"), "{saved}");
+    assert!(saved.contains("retries = 1") && saved.contains("show_hidden = true"), "{saved}");
 
     // Delete puts the default back; typing finds settings instead.
     h.key("Delete");
-    assert_eq!(h.app.context().config.transfers.parallel_jobs, 2);
+    assert_eq!(h.app.context().config.transfers.retries, 3);
     h.press(KeyPress::char('r'));
-    assert_eq!(h.app.context().config.transfers.parallel_jobs, 2, "r only types now");
+    assert_eq!(h.app.context().config.transfers.retries, 3, "r only types now");
     h.key("Esc");
     h.key("Esc");
     assert!(h.app.overlay().is_none());
@@ -2321,7 +2321,7 @@ async fn the_disk_table_opens_or_says_why_not() {
 async fn running_transfers_show_a_bar_and_their_numbers() {
     let mut h = Harness::with_settings(|c| c.transfers.conflict = ConflictPolicy::Ask).await;
     let idle = h.screen();
-    assert!(!idle.contains("1 job"), "idle: no transfer line");
+    assert!(!idle.contains("Copying"), "idle: no transfer line");
     fs::write(h.path("right/a.txt"), "old").unwrap();
     h.focus("a.txt");
     h.key("F5");
@@ -2329,11 +2329,11 @@ async fn running_transfers_show_a_bar_and_their_numbers() {
     // The copy waits for the answer, so it is running.
     h.settle_until(|app| app.pending_conflict().is_some()).await;
     let screen = h.screen();
-    assert!(screen.contains("1 job ·"), "{screen}");
+    assert!(screen.contains("Copying ·"), "{screen}");
     h.press(KeyPress::char('o'));
     h.settle_until(|app| nmc_frontend::view::jobs_progress(&app.jobs, app).is_none()).await;
     let screen = h.screen();
-    assert!(!screen.contains("1 job"), "the line goes with the job: {screen}");
+    assert!(!screen.contains("Copying ·"), "the line goes with the job: {screen}");
 }
 
 #[tokio::test]
@@ -3110,4 +3110,108 @@ async fn the_transfer_queue_lists_the_newest_first() {
     h.settle().await;
     let ids: Vec<i64> = h.app.jobs().iter().map(|j| j.id.0).collect();
     assert!(ids.len() >= 2 && ids[0] > ids[1], "{ids:?}");
+}
+
+// ---- parallelism, help and generated files (ADR 0044)
+
+/// Where the screens of these tests are written when `NMC_SCREENS` is set
+/// (the text "screenshots" of the transfer indicators).
+fn save_screen(name: &str, text: &str) {
+    if let Ok(dir) = std::env::var("NMC_SCREENS") {
+        let _ = fs::create_dir_all(&dir);
+        let _ = fs::write(std::path::Path::new(&dir).join(format!("{name}.txt")), text);
+    }
+}
+
+#[tokio::test]
+async fn running_copy_shows_progress_speed_and_files_at_once() {
+    let mut h = Harness::with_settings(|c| c.transfers.bandwidth_limit_kib = 512).await;
+    for i in 0..6 {
+        fs::write(h.path(&format!("left/big{i}.bin")), vec![7u8; 400 * 1024]).unwrap();
+    }
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("big0.bin");
+    for _ in 0..6 {
+        h.key("Insert");
+    }
+    h.key("F5");
+    h.key("Enter");
+    h.settle_until(|app| {
+        let summary = nmc_frontend::view::jobs_summary(app.jobs(), app);
+        summary.is_some_and(|s| s.contains("at once") && s.contains(" of "))
+    })
+    .await;
+    let screen = h.screen();
+    save_screen("status-running", &screen);
+    let line = screen.lines().find(|l| l.contains("at once")).unwrap_or_default().to_owned();
+    assert!(line.contains("Copying"), "{line}");
+    assert!(line.contains("of ") && line.contains('%'), "{line}");
+    assert!(line.contains("(auto)"), "automatic mode is said: {line}");
+    h.key("Ctrl+J");
+    save_screen("job-window", &h.screen());
+    h.key("Esc");
+    h.settle().await;
+}
+
+#[tokio::test]
+async fn f1_on_the_settings_screen_explains_parallelism_and_goes_back() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::Settings);
+    h.key("F1");
+    let screen = h.screen();
+    save_screen("settings-help", &screen);
+    assert!(screen.contains("automatic") && screen.contains("fixed"), "{screen}");
+    assert!(screen.contains("discreet"), "{screen}");
+    h.key("Esc");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Settings(_))), "back on the settings");
+}
+
+#[tokio::test]
+async fn settings_offer_automatic_or_fixed_and_a_profile() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::Settings);
+    for c in "parallelism".chars() {
+        h.press(KeyPress::char(c));
+    }
+    let screen = h.screen();
+    save_screen("settings-transfers", &screen);
+    assert!(
+        screen.contains("Parallelism of transfers") && screen.contains("automatic"),
+        "{screen}"
+    );
+}
+
+#[tokio::test]
+async fn generates_random_text_files_with_a_counter() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::GenerateFiles);
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))));
+    h.type_text("sample.txt");
+    h.key("Enter");
+    h.type_text("3");
+    h.key("Enter");
+    save_screen("generate-size", &h.screen());
+    h.type_text("10k");
+    h.key("Enter");
+    h.settle().await;
+    for name in ["sample-1.txt", "sample-2.txt", "sample-3.txt"] {
+        let text = fs::read_to_string(h.path(&format!("left/{name}"))).unwrap();
+        assert_eq!(text.len(), 10 * 1024, "{name}");
+    }
+    assert_ne!(
+        fs::read_to_string(h.path("left/sample-1.txt")).unwrap(),
+        fs::read_to_string(h.path("left/sample-2.txt")).unwrap(),
+        "different random text"
+    );
+    // one file keeps the name as typed
+    h.app.perform(Action::GenerateFiles);
+    h.type_text("one.txt");
+    h.key("Enter");
+    h.type_text("1");
+    h.key("Enter");
+    h.type_text("2k");
+    h.key("Enter");
+    h.settle().await;
+    assert_eq!(fs::metadata(h.path("left/one.txt")).unwrap().len(), 2048);
 }
