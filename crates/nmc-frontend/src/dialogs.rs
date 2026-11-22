@@ -255,6 +255,9 @@ pub enum InputPurpose {
     AiScript,
     /// Install `nmc serve` on the typed server.
     InstallServe,
+    /// The `sudo` password of the server, to turn lingering on; the text is
+    /// the install it belongs to (the install is run again with it).
+    InstallLinger(String),
 }
 
 impl InputPurpose {
@@ -588,14 +591,25 @@ impl MessageDialog {
 
     /// The hint below the text: `Enter: <next dialog>   Esc: close`.
     pub fn hint(&self) -> String {
+        let copy = if self.can_copy() { "c: copy the log   " } else { "" };
         if self.busy {
-            return "Working…   Esc: close this window (the work goes on)".into();
+            return format!("Working…   {copy}Esc: close this window (the work goes on)");
         }
         match (&self.then, &self.then_choose) {
-            (Some(next), _) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
-            (None, Some(next)) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
-            (None, None) => "Esc: close".into(),
+            (Some(next), _) => {
+                format!("Enter: {}   {copy}Esc: close", next.title.to_lowercase())
+            }
+            (None, Some(next)) => {
+                format!("Enter: {}   {copy}Esc: close", next.title.to_lowercase())
+            }
+            (None, None) => format!("{copy}Esc: close"),
         }
+    }
+
+    /// Whether `c` copies this window's text to the clipboard: a log (an
+    /// install, a test), not a short message or the About window.
+    pub fn can_copy(&self) -> bool {
+        !self.logo && self.lines.len() >= 3
     }
 }
 

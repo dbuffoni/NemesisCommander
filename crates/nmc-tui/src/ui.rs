@@ -196,18 +196,35 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     // The flat view gives a third of the name column to the folder.
+    // Columns of plugins (SC-30) come out of the name column, which keeps
+    // at least 16 characters; the ones that do not fit are left out.
+    let mut plugin_heads: Vec<nmc_frontend::ColumnHead> = Vec::new();
+    for head in app.plugin_columns(side) {
+        let used: usize = plugin_heads.iter().map(|h| h.width + 1).sum();
+        if name_width >= used + head.width + 1 + 16 {
+            plugin_heads.push(head.clone());
+        }
+    }
+    let plugin_width: usize = plugin_heads.iter().map(|h| h.width + 1).sum();
+    name_width = name_width.saturating_sub(plugin_width);
     let folder_width = if panel.is_branch() { (name_width / 3).clamp(0, 28) } else { 0 };
     name_width = name_width.saturating_sub(folder_width + usize::from(folder_width > 0));
     let [name_title, size_title, date_title] = column_headers(panel.sort());
     let header = format!(
-        "{}{} {}{:>SIZE_WIDTH$}{}",
+        "{}{} {}{}{:>SIZE_WIDTH$}{}",
         " ".repeat(mark_width),
         fit(&name_title, name_width),
         if folder_width > 0 { format!("{} ", fit("Folder", folder_width)) } else { String::new() },
+        plugin_heads.iter().map(|h| format!("{} ", fit(&h.title, h.width))).collect::<String>(),
         size_title,
         if show_date { format!(" {:<DATE_WIDTH$}", date_title) } else { String::new() }
     );
-    let rows = inner.height as usize - 1;
+    // The text of nmc_folder.md, at most a third of the panel.
+    let note =
+        nmc_frontend::view::folder_text_lines(app, side, width, (inner.height as usize / 3).max(2));
+    let note_rows = if note.is_empty() { 0 } else { note.len() + 1 };
+    app.note_rows[side_index(side)] = note_rows;
+    let rows = (inner.height as usize - 1).saturating_sub(note_rows).max(1);
     let index = side_index(side);
     let cursor = panel.cursor();
     let offset = scroll_offset(app.scroll[index], cursor, rows, panel.entries().len());
@@ -216,7 +233,11 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         app.page = rows;
     }
 
-    let mut lines = vec![Line::styled(header, dim().add_modifier(Modifier::UNDERLINED))];
+    let mut lines: Vec<Line> = note.iter().map(rich_line).collect();
+    if !note.is_empty() {
+        lines.push(Line::styled("─".repeat(width), dim()));
+    }
+    lines.push(Line::styled(header, dim().add_modifier(Modifier::UNDERLINED)));
     if let Some(error) = panel.error().filter(|_| panel.entries().is_empty()) {
         lines.push(Line::styled(error.to_owned(), Style::new().fg(Color::Red)));
     }
@@ -251,7 +272,13 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         } else {
             String::new()
         };
-        let rest = format!("{:>SIZE_WIDTH$}{date}", size);
+        let cells = app.plugin_cells(side, &entry.name);
+        let plugin_text: String = plugin_heads
+            .iter()
+            .enumerate()
+            .map(|(i, h)| format!("{} ", fit(cells.get(i).map_or("", String::as_str), h.width)))
+            .collect();
+        let rest = format!("{plugin_text}{:>SIZE_WIDTH$}{date}", size);
 
         let mut style = Style::new();
         if entry.is_dir() {
@@ -316,6 +343,31 @@ pub fn fit(text: &str, width: usize) -> String {
     let mut cut: String = text.chars().take(width - 1).collect();
     cut.push('…');
     cut
+}
+
+/// A line of key hints (`a: one    b: two    Esc: close`, items apart by two
+/// or more spaces) that fits `width` columns: when it is too long, items
+/// from the middle go, the first and the last (the way out) stay.
+pub fn shrink_hint(hint: &str, width: usize) -> String {
+    let items: Vec<&str> =
+        hint.split("  ").map(str::trim).filter(|item| !item.is_empty()).collect();
+    let join = |items: &[&str]| items.join("   ");
+    if join(&items).chars().count() <= width || items.len() < 3 {
+        return join(&items);
+    }
+    let last = items[items.len() - 1];
+    let mut kept: Vec<&str> = vec![items[0]];
+    for item in &items[1..items.len() - 1] {
+        let mut trial = kept.clone();
+        trial.push(item);
+        trial.push(last);
+        if join(&trial).chars().count() > width {
+            break;
+        }
+        kept.push(item);
+    }
+    kept.push(last);
+    join(&kept)
 }
 
 /// `text` padded to `width`, or cut at the start with `…` when longer (the
@@ -385,17 +437,29 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
+/// A label that fits five columns: the short word for the long ones, else
+/// the text is cut by `fit` with a `…`.
+fn narrow_label(label: &str) -> &str {
+    match label {
+        "Commands" => "Cmds",
+        "Rename" => "Ren",
+        "Delete" => "Del",
+        "Search" => "Find",
+        "Unpack" => "Unpk",
+        "Drives" => "Disks",
+        "Multi-rename" | "Multi-rename…" => "MRen",
+        other => other,
+    }
+}
+
 fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans = Vec::new();
     for n in 1..=10u8 {
         let label = key_bar_label(app, n);
         // With the "F" in front, ten labels fit 80 columns at five letters.
         let width = if area.width < 90 { 5 } else { 6 };
-        let label = match label {
-            "Commands" if width < 6 => "Cmds",
-            other => other,
-        };
-        let label: String = label.chars().take(width).collect();
+        let label = if width < 6 { narrow_label(label) } else { label };
+        let label = fit(label, width).trim_end().to_owned();
         spans.push(Span::raw(format!("F{n}")));
         spans.push(Span::styled(
             format!("{label:<width$}"),
@@ -487,9 +551,28 @@ fn draw_box_fixed(frame: &mut Frame, title: &str, lines: Vec<Line>, rows: Option
     area
 }
 
+/// The first two shortcuts of `a / b / c`: the help shows the main ones,
+/// the F9 list has all of them.
+fn first_keys(keys: &str) -> String {
+    keys.split(" / ").take(2).collect::<Vec<_>>().join(" / ")
+}
+
 fn draw_help(frame: &mut Frame, app: &App) {
     let groups = app.context().keymap.help();
+    let screen = frame.area();
+    // As wide as the screen allows (up to 100), so labels are seldom cut.
+    let width = screen.width.clamp(20, 100);
+    let column_width = (width as usize).saturating_sub(4) / 2;
     let column = |groups: &[(Category, Vec<(String, &'static str)>)]| -> Vec<Line<'static>> {
+        // The keys column is as wide as its longest keys, within a share
+        // of the column, so a short column does not waste room.
+        let longest = groups
+            .iter()
+            .flat_map(|(_, rows)| rows)
+            .map(|(k, _)| first_keys(k).chars().count())
+            .max();
+        let key_width = longest.unwrap_or(0).min(column_width / 2).max(4);
+        let label_width = column_width.saturating_sub(key_width + 5);
         let mut lines = Vec::new();
         for (category, rows) in groups {
             if !lines.is_empty() {
@@ -497,7 +580,12 @@ fn draw_help(frame: &mut Frame, app: &App) {
             }
             lines.push(Line::styled(category.title().to_owned(), bold().fg(Color::Cyan)));
             for (keys, label) in rows {
-                lines.push(Line::raw(format!("  {:<16} {label}", fit(keys, 16))));
+                let label = fit(label, label_width);
+                lines.push(Line::raw(format!(
+                    "  {} {}",
+                    fit(&first_keys(keys), key_width),
+                    label.trim_end()
+                )));
             }
         }
         lines
@@ -514,14 +602,27 @@ fn draw_help(frame: &mut Frame, app: &App) {
         split = i + 1;
     }
     let (first, second) = groups.split_at(split);
-    let left = column(first);
-    let right = column(second);
+    let mut left = column(first);
+    let mut right = column(second);
+    // On a short screen the lists end in "…" instead of running over the
+    // border; every command stays reachable in the F9 list.
+    let room = screen.height.saturating_sub(4) as usize;
+    for lines in [&mut left, &mut right] {
+        if lines.len() > room && room > 0 {
+            lines.truncate(room - 1);
+            lines.push(Line::styled("  …", dim()));
+        }
+    }
     let height = left.len().max(right.len()) as u16 + 4;
-    let area = centered(frame.area(), 84, height);
+    let area = centered(screen, width, height);
     frame.render_widget(Clear, area);
+    let hint = shrink_hint(
+        "Any key closes  F9: every command in the menu",
+        area.width.saturating_sub(4) as usize,
+    );
     let block = Block::bordered()
         .title(Line::styled(" Main shortcuts ", bold()))
-        .title_bottom(Line::styled(" Any key closes · F9: every command in the menu ", dim()));
+        .title_bottom(Line::styled(format!(" {hint} "), dim()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let [a, b] = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
@@ -544,9 +645,11 @@ fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
     let height = COMMANDS_HEIGHT.min(area.height.saturating_sub(2)).max(8);
     let rect = Rect { y: area.y + 1, ..centered(area, width, height) };
     frame.render_widget(Clear, rect);
-    let block = Block::bordered()
-        .title(Line::styled(" Commands ", bold()))
-        .title_bottom(Line::styled(format!(" {} ", view.hint), dim()));
+    let block =
+        Block::bordered().title(Line::styled(" Commands ", bold())).title_bottom(Line::styled(
+            format!(" {} ", shrink_hint(&view.hint, rect.width.saturating_sub(6) as usize)),
+            dim(),
+        ));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
 
@@ -943,7 +1046,13 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
     frame.render_widget(Clear, rect);
     let block = Block::bordered().title(Line::styled(" Transfer queue ", bold())).title_bottom(
         Line::styled(
-            " p: pause  r: resume  c: cancel  +/-: priority  [/]: files at once  a: auto  x: clear  Esc ",
+            format!(
+                " {} ",
+                shrink_hint(
+                    "p: pause  r: resume  c: cancel  +/-: priority  [/]: files at once  a: auto  x: clear  Esc: close",
+                    rect.width.saturating_sub(6) as usize
+                )
+            ),
             dim(),
         ),
     );

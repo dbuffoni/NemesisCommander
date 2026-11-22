@@ -3227,3 +3227,156 @@ async fn a_refused_serve_connection_offers_the_install() {
     assert_eq!(dialog.title, "Install nmc serve?");
     assert!(dialog.lines[0].starts_with("127.0.0.1"), "{:?}", dialog.lines);
 }
+
+#[tokio::test]
+async fn a_log_window_copies_its_lines() {
+    use nmc_frontend::MessageDialog;
+    let mut h = Harness::new().await;
+    let lines: Vec<String> =
+        ["first step", "second step", "Result: done"].map(str::to_owned).to_vec();
+    h.app.overlay = Some(Overlay::Message(MessageDialog::new("Install nmc serve: done", lines)));
+    assert!(h.screen().contains("c: copy the log"), "{}", h.screen());
+    h.press(KeyPress::char('c'));
+    assert_eq!(h.app.take_clipboard().as_deref(), Some("first step\nsecond step\nResult: done"));
+    assert!(h.status().contains("Copied"), "{}", h.status());
+    assert!(h.app.overlay().is_some(), "the window stays open");
+
+    // A short message is not a log.
+    h.app.overlay = Some(Overlay::Message(MessageDialog::new("Hi", vec!["one line".into()])));
+    assert!(!h.screen().contains("copy the log"));
+    h.press(KeyPress::char('c'));
+    assert_eq!(h.app.take_clipboard(), None);
+}
+
+#[tokio::test]
+async fn the_key_bar_follows_the_modifiers_held() {
+    let mut h = Harness::new().await;
+    let plain = h.screen();
+    assert!(plain.contains("F7Mkdir"), "{plain}");
+    h.app.set_modifiers(false, false, true);
+    let shifted = h.screen();
+    assert!(shifted.contains("F7Search"), "Shift+F7 is the search: {shifted}");
+    assert!(!shifted.contains("F7Mkdir"));
+    h.app.set_modifiers(true, false, false);
+    assert_ne!(h.screen(), plain, "Ctrl changes the bar too");
+}
+
+#[tokio::test]
+async fn the_folder_text_is_drawn_above_the_listing() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/nmc_folder.md"), "# Holiday photos\n\nSorted by **month**.\n").unwrap();
+    h.key("Ctrl+R");
+    h.settle_until(|app| app.folder_text[0].is_some()).await;
+    let screen = h.screen();
+    let title = screen.lines().position(|l| l.contains("Holiday photos")).expect(&screen);
+    let header = screen.lines().position(|l| l.starts_with("│Name")).expect(&screen);
+    assert!(title < header, "the text is above the column headings:\n{screen}");
+    assert!(screen.contains("Sorted by month"), "{screen}");
+    // Rows are still found under the mouse: the first entry is the same.
+    assert_eq!(h.app.note_rows[0], 5, "four rows of text and a rule");
+}
+
+#[tokio::test]
+async fn an_archive_shows_its_files_not_its_bytes() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Shift+F5");
+    h.key("Enter");
+    h.settle().await;
+    h.key("Tab");
+    h.focus("docs.zip");
+    h.key("F3");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(v)) if v.rich.is_some()))
+        .await;
+    let screen = h.screen();
+    assert!(screen.contains("Contents") && screen.contains("readme.md"), "{screen}");
+    assert!(!screen.contains("PK"), "not the bytes: {screen}");
+    h.key("Esc");
+
+    // The quick view shows the same.
+    h.key("Ctrl+Q");
+    h.settle_until(|app| matches!(&app.quick_view, Some(Some(v)) if v.rich.is_some())).await;
+    assert!(h.screen().contains("readme.md"), "{}", h.screen());
+}
+
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn plugins_add_columns_and_previewers() {
+    let mut h = Harness::new().await;
+    let plugin = h.app.context().paths.plugins_dir().join("lens");
+    fs::create_dir_all(&plugin).unwrap();
+    let manifest = r#"{
+        "name": "lens",
+        "version": "1.0.0",
+        "columns": [{ "id": "chars", "title": "Chars", "match": ["*.txt"], "width": 6 }],
+        "previewers": [{ "id": "shout", "title": "Shout", "match": ["*.txt"] }],
+        "permissions": { "read": ["$SELECTION"] }
+    }"#;
+    fs::write(plugin.join("plugin.json"), manifest).unwrap();
+    fs::write(
+        plugin.join("main.ts"),
+        r##"const command = nmc.context!.command;
+const files = nmc.context!.selection;
+if (command === "column:chars") {
+  for (const file of files) nmc.print(String((await nmc.readText(file)).length));
+} else if (command === "preview:shout") {
+  nmc.print("# Shouted\n\n" + (await nmc.readText(files[0])).toUpperCase());
+}"##,
+    )
+    .unwrap();
+
+    // Nothing runs before the user allowed the plugin.
+    h.key("Ctrl+R");
+    h.settle().await;
+    assert!(h.app.plugin_columns(SideId::Left).is_empty());
+    assert!(!h.screen().contains("Chars"));
+
+    let grants = h.app.context().paths.plugin_grants_file();
+    fs::create_dir_all(grants.parent().unwrap()).unwrap();
+    fs::write(&grants, r#"{ "lens": { "read": ["$SELECTION"] } }"#).unwrap();
+    h.key("Ctrl+R");
+    h.settle_until(|app| !app.plugin_columns(SideId::Left).is_empty()).await;
+    let screen = h.screen();
+    assert!(screen.contains("Chars"), "{screen}");
+    // "alpha\n" is 6 characters, "the needle is here\n" 19.
+    let row = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap().to_owned();
+    assert!(row("a.txt").contains(" 6 "), "{}", row("a.txt"));
+    assert!(row("notes.txt").contains("19"), "{}", row("notes.txt"));
+    assert!(!row("docs").contains("19"), "folders have no value");
+
+    // The previewer makes the text of the viewer.
+    h.focus("a.txt");
+    h.key("F3");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(v)) if v.rich.is_some()))
+        .await;
+    let screen = h.screen();
+    assert!(screen.contains("Shouted") && screen.contains("ALPHA"), "{screen}");
+}
+
+/// SC-131: the F1 help keeps inside its border and leaves a gap between its
+/// two columns on every screen size, down to a small terminal.
+#[tokio::test]
+async fn the_help_fits_every_screen_size() {
+    let mut h = Harness::new().await;
+    h.key("F1");
+    for (w, rows) in [(80u16, 24u16), (60, 20), (100, 30), (140, 50), (40, 12)] {
+        let mut terminal = Terminal::new(TestBackend::new(w, rows)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let lines: Vec<String> = (0..rows)
+            .map(|y| (0..w).map(|x| buffer[(x, y)].symbol().to_owned()).collect())
+            .collect();
+        let screen = lines.join("\n");
+        let top = lines.iter().position(|l| l.contains("Main shortcuts")).expect(&screen);
+        let bottom = lines.iter().position(|l| l.contains("Any key")).expect(&screen);
+        assert!(bottom > top, "{w}x{rows}:\n{screen}");
+        let first = lines[top].chars().position(|c| c == '┌').unwrap();
+        for line in &lines[top + 1..bottom] {
+            let chars: Vec<char> = line.chars().collect();
+            assert_eq!(chars[first], '│', "{w}x{rows} left border:\n{screen}");
+            assert!(chars[first + 1..].contains(&'│'), "{w}x{rows} right border:\n{screen}");
+        }
+        // No label touches the next column: keys and labels are cut with …
+        assert!(!screen.contains("Delete (to…Nemesis"), "{w}x{rows}:\n{screen}");
+    }
+}

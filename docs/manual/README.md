@@ -32,9 +32,10 @@ the real window on a demo folder.
 13. [The transfer queue](#the-transfer-queue)
 14. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
 15. [Plugins and scripts](#plugins-and-scripts)
-16. [The command line](#the-command-line)
-17. [Settings](#settings)
-18. [All shortcuts](#all-shortcuts)
+16. [Assistants: `nmc mcp`](#assistants-nmc-mcp)
+17. [The command line](#the-command-line)
+18. [Settings](#settings)
+19. [All shortcuts](#all-shortcuts)
 
 ## Getting started
 
@@ -334,6 +335,12 @@ until you quit.
 
 ![Basket](images/basket.png)
 
+### A text for the folder
+
+A file called `nmc_folder.md` (or `sc_folder.md`) in a folder is shown, as
+Markdown, at the top of its panel in the terminal interface (up to a third of
+the panel; files over 64 KiB are ignored): notes on what the folder is for.
+
 ## Selecting files
 
 - **Insert** or **Space** selects the entry under the cursor and moves down.
@@ -438,6 +445,11 @@ follows. To read the preview itself use **Shift+↑ / ↓** (a line),
 the mouse wheel over the preview scrolls it too. **Ctrl+U** (swap panels)
 exchanges the file panel and the preview, and the focus goes with the file
 panel.
+
+An **archive** (zip, 7z, tar…) shows its contents: the number of files and
+folders, the unpacked size and a list with size, date and name (the first
+5000 entries), instead of the bytes of the file; **F4** in the viewer still
+gives the hex dump.
 
 | PDF | Model | Markdown |
 |---|---|---|
@@ -873,8 +885,44 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   the command line: `nmc ai new "description"` (key: `nmc ai key` or
   `ANTHROPIC_API_KEY`).
 
+- **Panel columns and viewers from plugins.** A manifest can declare
+  `"columns": [{"id": "pages", "title": "Pages", "match": ["*.pdf"],
+  "width": 6}]` and `"previewers": [{"id": "csv", "title": "CSV table",
+  "match": ["*.csv"]}]`. A column runs the script as the command
+  `column:pages` with the matching files of the folder in
+  `nmc.context.selection` (at most 300 at a time) and prints one line per
+  file, in that order: the text of the column. A previewer runs as
+  `preview:csv` with the file in `nmc.context.selection` and prints Markdown,
+  which F3 and the quick view show. Both run only for plugins you have
+  already allowed (run one of their commands, or answer the question of
+  `nmc plugin list`); a plugin may have only columns and previewers. The
+  terminal interface shows the columns before the size; the window shows the
+  viewers.
+
 See [docs/scripting.md](../scripting.md) for the API and the examples in
 `examples/`.
+
+## Assistants: `nmc mcp`
+
+`nmc mcp` makes NemesisCommander a Model Context Protocol server, so an AI
+assistant can look at and organise your files. It talks over standard input
+and output; the assistant starts it. For Claude Code:
+
+```
+claude mcp add nmc -- nmc mcp --read ~/Documents --write ~/Documents/sorted
+```
+
+and the same command line in the configuration of Claude Desktop. Nothing is
+allowed by default: `--read LOCATION` lets it read, `--write LOCATION` read and
+change (repeat them; locations can be `sftp://`, `s3://` or `scs://`), or put
+them in a JSON file `{"read": [...], "write": [...]}` and pass `--grants FILE`.
+`..` and symbolic links cannot lead out of a granted folder. The tools are
+`list`, `stat`, `read` (text, 1 MiB at a time, never `.env`, keys or
+passwords), `search`, `hash`, `mkdir`, `copy`, `move`, `rename` and `trash`.
+Every change accepts `dry_run`; `copy` and `move` never replace a file unless
+asked; deleting only moves to the trash. `--log FILE` keeps one line per
+call. The text of your files is data for the assistant, never instructions:
+the tools say so.
 
 ## The command line
 
@@ -898,6 +946,8 @@ jobs. Every command accepts the same locations as the panels.
 | `nmc config path / show / export / import` | Locate, print, back up and restore the settings |
 | `nmc config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
 | `nmc keys` | Print the main shortcuts |
+| `nmc shell-init bash\|zsh\|fish\|pwsh` | Print the shell function that leaves the shell in the folder of the active panel when the terminal interface ends |
+| `nmc mcp` | Serve file tools to an AI assistant over MCP (see Assistants) |
 | `nmc run` / `nmc plugin` | Scripts and plugins (`nmc run --guide`: the guide for AI assistants) |
 | `nmc test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
 | `nmc ai new` / `nmc ai rename` / `nmc ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
@@ -915,6 +965,17 @@ choosing.
 file=$(nmc pick ~/Documents) && echo "chose $file"
 cd "$(nmc pick --dir ~/Projects)"
 ```
+
+**Leaving the shell in the folder.** Put `eval "$(nmc shell-init bash)"` in
+`~/.bashrc` (zsh: `~/.zshrc`; fish: `nmc shell-init fish | source` in
+`config.fish`; PowerShell: `nmc shell-init pwsh | Out-String |
+Invoke-Expression` in the profile). From then on `nmc` is a function: when the
+terminal interface ends, the shell is in the folder of the active panel.
+Commands (`nmc ls`, `nmc cp`…) are not affected. **Open terminal here**
+(F9, Files) does the same from the interface: it ends and leaves you in the
+folder; in the window it opens a terminal window there (the command is set in
+Settings, `{dir}` is the folder), and on a server reached with SSH it opens an
+SSH session in that folder.
 
 For example:
 

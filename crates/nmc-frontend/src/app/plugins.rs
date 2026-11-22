@@ -395,7 +395,7 @@ fn permission_question(_dir: &Path, _grants: &Path) -> Result<Option<Vec<String>
 
 /// Runs a choice to its end: its title for messages, and its result.
 #[cfg(feature = "script-engine")]
-async fn run_choice(
+pub(super) async fn run_choice(
     choice: PluginChoice,
     panel: VfsPath,
     other: VfsPath,
@@ -461,7 +461,7 @@ async fn run_choice(
 /// Runs a choice with the `nmc` program: what it prints is the output,
 /// what it reports on failure the error.
 #[cfg(all(feature = "scripting", not(feature = "script-engine")))]
-async fn run_choice(
+pub(super) async fn run_choice(
     choice: PluginChoice,
     panel: VfsPath,
     other: VfsPath,
@@ -601,7 +601,7 @@ fn nmc_arguments(
 }
 
 #[cfg(not(feature = "scripting"))]
-async fn run_choice(
+pub(super) async fn run_choice(
     _choice: PluginChoice,
     _panel: VfsPath,
     _other: VfsPath,

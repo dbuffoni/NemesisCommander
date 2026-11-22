@@ -51,6 +51,7 @@ taken while implementing it.
 | 0043 | [Agent protocol experience and dialogs](0043-agent-protocol-and-dialogs.md) | Accepted |
 | 0044 | [Adaptive transfer parallelism](0044-adaptive-transfer-parallelism.md) | Accepted |
 | 0045 | [Shift+arrow selection, queue statistics, regular expressions](0045-selection-queue-readouts-regex.md) | Accepted |
+| 0046 | [Release 0.2.0: shell exit, terminal, folder text, MCP, plugin columns](0046-release-0-2-0.md) | Accepted |
 
 Template:
 

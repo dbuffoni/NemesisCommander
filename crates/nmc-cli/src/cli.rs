@@ -17,6 +17,19 @@ pub struct Cli {
     /// Locations for the left and right panel of the terminal UI.
     #[arg(value_name = "LOCATION", num_args = 0..=2)]
     pub locations: Vec<String>,
+    /// On exit, write the folder of the active panel to this file (the shell
+    /// function of `nmc shell-init` uses it to change folder).
+    #[arg(long, value_name = "FILE")]
+    pub cwd_file: Option<std::path::PathBuf>,
+}
+
+/// The shells `nmc shell-init` knows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    Pwsh,
 }
 
 #[derive(Debug, Subcommand)]
@@ -51,6 +64,18 @@ pub enum Command {
     Config(ConfigArgs),
     /// Print the main keyboard shortcuts of the user interface.
     Keys,
+    /// Serve file operations to an AI assistant over MCP (standard input
+    /// and output). Read-only unless folders are granted with --write.
+    Mcp(McpArgs),
+    /// Print the shell function that makes `nmc` leave the shell in the
+    /// folder of the active panel when it ends. Add it to the startup file:
+    /// `eval "$(nmc shell-init bash)"` (zsh the same; fish: `nmc shell-init
+    /// fish | source`; pwsh: `nmc shell-init pwsh | Out-String | Invoke-Expression`).
+    ShellInit {
+        /// The shell to print the function for.
+        #[arg(value_enum)]
+        shell: Shell,
+    },
     /// Serve a remote controller over standard input/output (Linux only).
     Agent(AgentArgs),
     /// Serve this machine permanently over mutual TLS (Linux only).
@@ -724,4 +749,25 @@ pub struct PickArgs {
     /// End each path with a NUL character instead of a new line.
     #[arg(short = '0', long)]
     pub null: bool,
+}
+
+/// Arguments of `nmc mcp`.
+#[derive(Debug, Args)]
+#[command(
+    after_help = "Nothing is allowed by default: grant folders (or sftp://, s3:// locations). \
+Set it up in Claude Code with: claude mcp add nmc -- nmc mcp --read ~/Documents --write ~/Documents/out"
+)]
+pub struct McpArgs {
+    /// A location the assistant may read (repeatable).
+    #[arg(long, value_name = "LOCATION")]
+    pub read: Vec<String>,
+    /// A location the assistant may read and change (repeatable).
+    #[arg(long, value_name = "LOCATION")]
+    pub write: Vec<String>,
+    /// A JSON file with {"read": [...], "write": [...]}, added to the above.
+    #[arg(long, value_name = "FILE")]
+    pub grants: Option<std::path::PathBuf>,
+    /// Append one line per tool call (time, tool, arguments) to this file.
+    #[arg(long, value_name = "FILE")]
+    pub log: Option<std::path::PathBuf>,
 }

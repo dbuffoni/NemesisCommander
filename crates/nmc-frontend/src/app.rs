@@ -40,10 +40,13 @@ mod features;
 mod generate;
 mod logins;
 mod palette;
+mod plugin_views;
 mod plugins;
 mod pointer;
 mod settings_screen;
+mod terminal;
 
+pub use plugin_views::{ColumnCells, ColumnHead};
 pub use plugins::PluginChoice;
 
 /// Results of background work, delivered to [`App::handle_event`].
@@ -69,6 +72,15 @@ pub enum AppEvent {
     /// Unpacking found the archive encrypted and without a (right) password:
     /// ask for it, then unpack again.
     NeedPassword(VfsPath),
+    /// The plugin columns of a folder were computed.
+    PluginCells(Box<ColumnCells>),
+    /// The text of a folder's `nmc_folder.md` arrived.
+    FolderText {
+        /// The folder.
+        path: VfsPath,
+        /// The document, `None` when the file could not be read.
+        blocks: Option<Vec<nmc_preview::rich::Block>>,
+    },
     /// The git status of a folder arrived (`None`: not a repository).
     Git {
         /// The folder.
@@ -159,6 +171,8 @@ impl AppEvent {
             AppEvent::TaskDone { .. }
                 | AppEvent::NeedPassword(_)
                 | AppEvent::Git { .. }
+                | AppEvent::FolderText { .. }
+                | AppEvent::PluginCells(_)
                 | AppEvent::Show(_)
                 | AppEvent::SearchDone(_)
                 | AppEvent::Loaded { .. }
@@ -311,6 +325,8 @@ pub struct App {
     pub basket: Vec<VfsPath>,
     /// Text waiting to go to the system clipboard.
     clipboard: Option<String>,
+    /// Where the terminal interface writes the folder it ends in.
+    cwd_file: Option<std::path::PathBuf>,
     /// Encrypted archives whose password the user refused to give (until
     /// they are left).
     password_declined: HashSet<String>,
@@ -335,6 +351,13 @@ pub struct App {
     held: (bool, bool, bool),
     /// Git status of what each side shows, with the folder it is for.
     pub git: [Option<(VfsPath, Arc<crate::git::GitStatus>)>; 2],
+    /// The plugin columns of the folder of each panel.
+    pub column_cells: [ColumnCells; 2],
+    /// The text of `nmc_folder.md` in the folder of each panel.
+    pub folder_text: [Option<(VfsPath, Vec<nmc_preview::rich::Block>)>; 2],
+    /// Rows the text of `nmc_folder.md` takes in each panel, measured by the
+    /// renderer (the mouse needs them).
+    pub note_rows: [usize; 2],
     /// Per panel: its last listing failed with a lost connection, and no
     /// listing has worked since (the next one opens the connection again).
     pub connection_lost: [bool; 2],
@@ -371,6 +394,13 @@ pub enum UndoStep {
     Moved(Vec<(VfsPath, VfsPath)>),
 }
 
+/// The file whose Markdown text is shown at the top of a panel (SC-57):
+/// `nmc_folder.md`, or `sc_folder.md` as the card named it.
+pub const FOLDER_TEXT_NAMES: [&str; 2] = ["nmc_folder.md", "sc_folder.md"];
+
+/// The largest folder text read.
+const FOLDER_TEXT_LIMIT: u64 = 64 * 1024;
+
 /// How many steps Ctrl+Z remembers.
 const UNDO_DEPTH: usize = 50;
 
@@ -389,6 +419,44 @@ impl App {
                 .flatten()
                 .map(Box::new);
             AppEvent::Git { path, status }
+        });
+    }
+
+    /// Reads `nmc_folder.md` of a folder that was just listed, if it has one.
+    fn refresh_folder_text(&mut self, path: &VfsPath) {
+        for side in [SideId::Left, SideId::Right] {
+            if self.workspace.side(side).panel().location() == path {
+                self.folder_text[side_index(side)] = None;
+            }
+        }
+        let Some(panel) = [SideId::Left, SideId::Right]
+            .into_iter()
+            .map(|side| self.workspace.side(side).panel())
+            .find(|panel| panel.location() == path)
+        else {
+            return;
+        };
+        let Some(entry) = panel
+            .entries()
+            .iter()
+            .find(|e| FOLDER_TEXT_NAMES.contains(&e.name.as_str()) && !e.is_dir())
+        else {
+            return;
+        };
+        if entry.size > FOLDER_TEXT_LIMIT {
+            return;
+        }
+        let file = path.join(&entry.name);
+        let registry = self.context.registry.clone();
+        let path = path.clone();
+        self.spawn_task(async move {
+            let blocks = match viewer::load(&registry, &file, FOLDER_TEXT_LIMIT).await {
+                Ok((data, _)) => {
+                    Some(nmc_preview::markdown::parse(&String::from_utf8_lossy(&data)))
+                }
+                Err(_) => None,
+            };
+            AppEvent::FolderText { path, blocks }
         });
     }
 
@@ -553,6 +621,7 @@ impl App {
         let mut app = App {
             basket: Vec::new(),
             clipboard: None,
+            cwd_file: None,
             password_declined: HashSet::new(),
             password_wanted: None,
             frecency,
@@ -578,6 +647,9 @@ impl App {
             job_clock: HashMap::new(),
             readouts: crate::speed::Steady::default(),
             git: [None, None],
+            folder_text: [None, None],
+            column_cells: [ColumnCells::default(), ColumnCells::default()],
+            note_rows: [0, 0],
             connection_lost: [false, false],
             undo: Vec::new(),
             undo_jobs: HashSet::new(),
@@ -821,6 +893,15 @@ impl App {
             self.tasks = self.tasks.saturating_sub(1);
         }
         match event {
+            AppEvent::PluginCells(cells) => self.set_plugin_cells(*cells),
+            AppEvent::FolderText { path, blocks } => {
+                for side in [SideId::Left, SideId::Right] {
+                    if self.workspace.side(side).panel().location() == &path {
+                        self.folder_text[side_index(side)] =
+                            blocks.clone().map(|b| (path.clone(), b));
+                    }
+                }
+            }
             AppEvent::Git { path, status } => {
                 let status = status.map(|s| Arc::new(*s));
                 for side in [SideId::Left, SideId::Right] {
@@ -849,6 +930,8 @@ impl App {
                         }
                     }
                     self.refresh_git(&listed);
+                    self.refresh_folder_text(&listed);
+                    self.refresh_plugin_columns(&listed);
                     self.release_archives();
                     if let Some(error) = self.workspace.active().error() {
                         let mut error = error.to_owned();
@@ -1404,6 +1487,17 @@ impl App {
                 }
                 _ => Some(Overlay::Message(dialog)),
             },
+            Overlay::Message(dialog)
+                if press.chord.key == Key::Char('c')
+                    && !press.chord.alt
+                    && (press.chord.ctrl || press.text.is_some())
+                    && dialog.can_copy() =>
+            {
+                // The log of a window (an install, a test) goes to the
+                // clipboard as the text shown.
+                self.copy_text(dialog.lines.join("\n"), "the log");
+                Some(Overlay::Message(dialog))
+            }
             Overlay::Message(dialog) => match key {
                 Some(Key::Enter) => dialog
                     .then
@@ -1725,6 +1819,7 @@ impl App {
             Action::Export => self.ask_export(),
             Action::Link => self.ask_link(),
             Action::BulkRename => self.bulk_rename(),
+            Action::OpenTerminal => self.open_terminal(),
             Action::BasketAdd => self.add_selection_to_basket(),
             Action::Basket => self.open_basket(),
             Action::CompareHash => self.compare_by_hash(),
@@ -2220,6 +2315,7 @@ impl App {
             InputPurpose::FetchSettings(_) => self.fetch_settings(&text),
             InputPurpose::AiScript => self.write_script_with_ai(text),
             InputPurpose::InstallServe => self.install_serve(&text),
+            InputPurpose::InstallLinger(install) => self.start_install_with(&install, Some(text)),
         }
     }
 
@@ -2486,6 +2582,7 @@ impl App {
 
     fn load_file(&mut self, path: VfsPath, quick: bool) {
         let registry = self.context.registry.clone();
+        let paths = self.context.paths.clone();
         let name = path.file_name().unwrap_or_default().to_owned();
         // Quick view reads the start of a file, or a whole image or
         // previewed document.
@@ -2505,10 +2602,26 @@ impl App {
                 Err(_) => None,
             }
             .unwrap_or_default();
+            // An archive shows its files, not its bytes; a plugin's previewer
+            // shows what the plugin makes of the file.
+            let listing = match &loaded {
+                Ok(_) => match plugin_views::preview_text(registry.clone(), &paths, &path).await {
+                    Some(Ok(text)) => Some(nmc_preview::markdown::parse(&text)),
+                    Some(Err(e)) => Some(vec![
+                        nmc_preview::rich::Block::heading(1, "The previewer failed"),
+                        nmc_preview::rich::Block::paragraph(e),
+                    ]),
+                    None => crate::preview::archive_listing(&registry, &path, &facts).await,
+                },
+                Err(_) => None,
+            };
             let result = match loaded {
                 Ok((data, truncated)) => tokio::task::spawn_blocking(move || {
                     let data = Arc::new(data);
-                    let prepared = crate::preview::prepare(&name, &data, truncated, &facts)?;
+                    let prepared = match listing {
+                        Some(blocks) => crate::preview::Prepared::Rich(blocks),
+                        None => crate::preview::prepare(&name, &data, truncated, &facts)?,
+                    };
                     Ok((data, truncated, prepared))
                 })
                 .await

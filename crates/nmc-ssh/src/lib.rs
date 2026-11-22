@@ -54,6 +54,22 @@ impl Target {
         Ok(Target { user, host, port })
     }
 
+    /// Whether the target is this computer itself (`localhost`, a loopback
+    /// address), where commands run directly and no SSH server is needed.
+    /// A login name other than the current user's is a different account
+    /// and still needs SSH.
+    pub fn is_this_computer(&self) -> bool {
+        let loopback = matches!(self.host.as_str(), "localhost" | "127.0.0.1" | "::1")
+            || self.host.starts_with("127.");
+        let mine = match &self.user {
+            None => true,
+            Some(user) => std::env::var("USER")
+                .or_else(|_| std::env::var("LOGNAME"))
+                .is_ok_and(|me| &me == user),
+        };
+        loopback && mine && self.port.is_none()
+    }
+
     /// The `ssh` destination (`user@host`).
     pub fn destination(&self) -> String {
         match &self.user {

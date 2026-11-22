@@ -357,10 +357,18 @@ impl App {
     /// The user said yes: installs, showing every step as it happens, then
     /// says plainly whether it worked and offers to save the connection.
     pub(super) fn start_install(&mut self, text: &str) {
-        let options = match crate::install::parse(text, self.context.paths.tls_dir()) {
+        self.start_install_with(text, None);
+    }
+
+    /// [`start_install`](Self::start_install), with the `sudo` password of
+    /// the server to turn lingering on if the install finds it off.
+    pub(super) fn start_install_with(&mut self, text: &str, sudo: Option<String>) {
+        let mut options = match crate::install::parse(text, self.context.paths.tls_dir()) {
             Ok(options) => options,
             Err(e) => return self.set_error(e),
         };
+        options.sudo_password = sudo.map(nmc_agent::provision::SudoPassword);
+        let text = text.to_owned();
         let title = "Install nmc serve";
         let mut window = MessageDialog::new(title, vec![crate::install::summary(&options)]);
         window.busy = true;
@@ -373,7 +381,9 @@ impl App {
                     live.send(AppEvent::Progress { title: title.into(), line: line.to_owned() });
             })
             .await;
-            AppEvent::Show(Box::new(Overlay::Message(crate::install::finished(lines, result))))
+            AppEvent::Show(Box::new(Overlay::Message(crate::install::finished(
+                lines, result, &text,
+            ))))
         });
     }
 

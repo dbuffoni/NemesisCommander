@@ -3800,6 +3800,7 @@ dependencies = [
  "nmc-config",
  "nmc-hash",
  "nmc-index",
+ "nmc-mcp",
  "nmc-ops",
  "nmc-panel",
  "nmc-script",
@@ -3908,6 +3909,24 @@ dependencies = [
  "regex",
  "serde",
  "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "nmc-mcp"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "nmc-hash",
+ "nmc-index",
+ "nmc-ops",
+ "nmc-providers",
+ "nmc-script",
+ "nmc-vfs",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tokio-util",
 ]
