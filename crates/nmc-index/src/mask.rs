@@ -1,6 +1,10 @@
-//! Wildcard masks: `*.jpg;*.png`, `!*.bak`, `report-??.pdf`.
+//! Wildcard masks: `*.jpg;*.png`, `!*.bak`, `report-??.pdf`; or, starting
+//! with `re:`, a regular expression: `re:^report-\d{2}\.pdf$`.
 
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
+
+/// What starts a mask that is a regular expression.
+pub const REGEX_PREFIX: &str = "re:";
 
 /// Error for an unparsable mask.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -19,9 +23,14 @@ pub struct MaskError {
 /// excludes. A mask with only exclusions includes everything else. `*`
 /// matches any run of characters, `?` one character, `[abc]` a class.
 /// An empty mask matches everything.
+///
+/// A mask that starts with `re:` is a regular expression instead, found
+/// anywhere in the name (use `^` and `$` to anchor it), case-insensitively.
+/// `;` and `,` are then part of the expression.
 #[derive(Debug, Clone)]
 pub struct Mask {
     source: String,
+    regex: Option<regex::Regex>,
     include: Option<GlobSet>,
     exclude: Option<GlobSet>,
 }
@@ -36,6 +45,18 @@ impl Mask {
     /// assert!(!m.matches("notes.txt"));
     /// ```
     pub fn parse(source: &str) -> Result<Self, MaskError> {
+        if let Some(pattern) = source.trim_start().strip_prefix(REGEX_PREFIX) {
+            let regex = regex::RegexBuilder::new(pattern)
+                .case_insensitive(true)
+                .build()
+                .map_err(|e| MaskError { mask: source.to_owned(), reason: e.to_string() })?;
+            return Ok(Mask {
+                source: source.to_owned(),
+                regex: Some(regex),
+                include: None,
+                exclude: None,
+            });
+        }
         let mut include = GlobSetBuilder::new();
         let mut exclude = GlobSetBuilder::new();
         let (mut has_include, mut has_exclude) = (false, false);
@@ -66,6 +87,7 @@ impl Mask {
         };
         Ok(Mask {
             source: source.to_owned(),
+            regex: None,
             include: build(include, has_include)?,
             exclude: build(exclude, has_exclude)?,
         })
@@ -73,7 +95,7 @@ impl Mask {
 
     /// A mask matching everything.
     pub fn all() -> Self {
-        Mask { source: String::new(), include: None, exclude: None }
+        Mask { source: String::new(), regex: None, include: None, exclude: None }
     }
 
     /// The text the mask was parsed from.
@@ -83,11 +105,19 @@ impl Mask {
 
     /// `true` if the mask matches everything.
     pub fn is_all(&self) -> bool {
-        self.include.is_none() && self.exclude.is_none()
+        self.regex.is_none() && self.include.is_none() && self.exclude.is_none()
+    }
+
+    /// `true` if the mask is a regular expression (`re:…`).
+    pub fn is_regex(&self) -> bool {
+        self.regex.is_some()
     }
 
     /// Does `name` match?
     pub fn matches(&self, name: &str) -> bool {
+        if let Some(regex) = &self.regex {
+            return regex.is_match(name);
+        }
         let included = self.include.as_ref().is_none_or(|set| set.is_match(name));
         let excluded = self.exclude.as_ref().is_some_and(|set| set.is_match(name));
         included && !excluded
@@ -126,6 +156,18 @@ mod tests {
     fn star_does_not_cross_slashes() {
         // Masks match names; a slash can only appear in odd archive entries.
         assert!(!Mask::parse("*.txt").unwrap().matches("dir/a.txt"));
+    }
+
+    #[test]
+    fn regular_expression_masks() {
+        let m = Mask::parse(r"re:^report-\d{2}\.(pdf|txt)$").unwrap();
+        assert!(m.is_regex() && !m.is_all());
+        assert!(m.matches("report-07.PDF"));
+        assert!(!m.matches("report-7.pdf"));
+        assert!(!m.matches("old-report-07.pdf"));
+        // Not anchored: found anywhere in the name; `;` belongs to it.
+        assert!(Mask::parse("re:a;b").unwrap().matches("xa;by"));
+        assert!(Mask::parse("re:(").unwrap_err().reason.len() > 1);
     }
 
     #[test]

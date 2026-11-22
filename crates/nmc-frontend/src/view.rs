@@ -795,7 +795,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
                 .iter()
                 .map(|job| JobRow {
                     text: job_line(job, app),
-                    detail: format!("{}  ·  {}", job_route(job, app), job_transport(job, app)),
+                    detail: format!("{}\n{}", job_route(job, app), job_how(job, app)),
                     state: job_state(job.state).into(),
                 })
                 .collect(),
@@ -1152,15 +1152,26 @@ pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
         }
         if active.waiting {
             parts.push("waiting for the server".into());
-        } else if let Some(speed) = app.speed.speed(std::time::Instant::now()).filter(|s| *s >= 1.0)
-        {
-            parts.push(format!("{}/s", human_size(speed as u64)));
-            let left = active.total.saturating_sub(active.done);
-            if active.total > 0 {
-                parts.push(format!(
-                    "{} left",
-                    crate::speed::clock((left as f64 / speed).ceil() as u64)
-                ));
+        } else {
+            // The speed and the time left are worked out every three seconds
+            // only, so that they can be read.
+            let now = std::time::Instant::now();
+            let text = app.readouts.get("status", now, || {
+                let Some(speed) = app.speed.speed(now).filter(|s| *s >= 1.0) else {
+                    return String::new();
+                };
+                let mut text = format!("{}/s", human_size(speed as u64));
+                if active.total > 0 {
+                    let left = active.total.saturating_sub(active.done);
+                    let seconds = (left as f64 / speed).ceil() as u64;
+                    text.push_str(&format!(" · {} left", crate::speed::clock(seconds)));
+                }
+                text
+            });
+            if text.is_empty() {
+                app.readouts.forget("status");
+            } else {
+                parts.push(text);
             }
         }
         if active.running > 0 && active.at_once > 0 && active.total > 0 {
@@ -1209,39 +1220,96 @@ pub fn job_route(job: &JobInfo, app: &App) -> String {
     }
 }
 
-/// How the data of a job travels, in words: inside one place, between this
-/// computer and a server, through this computer between two servers, or
-/// server to server without passing through it.
+/// How the data of a job travels, in a few words: `Local`, `Upload`,
+/// `Download`, `On the server`, `Server to server (direct)`, `Server to
+/// server (via this computer)`. The queue window shows it next to the
+/// statistics.
 pub fn job_transport(job: &JobInfo, app: &App) -> String {
     use nmc_transfer::JobKind;
     let Some(to) = job.spec.destination.as_ref().filter(|_| job.spec.kind != JobKind::Delete)
     else {
-        return "on the place itself".into();
+        return "On the place itself".into();
     };
     let Some(from) = job.spec.sources.first() else { return String::new() };
     let remote = |p: &nmc_vfs::VfsPath| !matches!(p.scheme(), "file" | "archive");
     let same_place = from.scheme() == to.scheme() && from.authority() == to.authority();
     let servers = from.scheme() == "scs" && to.scheme() == "scs" && !same_place;
     if let Some(route) = app.job_routes.get(&job.id) {
-        return format!("server to server, {route}: the data does not pass through this computer");
+        return format!("Server to server ({route})");
     }
     if same_place && remote(from) {
-        return "inside one server: the data stays there when it can".into();
+        return "On the server".into();
     }
     if servers {
         return match job.state {
             nmc_transfer::JobState::Completed | nmc_transfer::JobState::Failed => {
-                "through this computer: the servers could not reach each other".into()
+                "Server to server (via this computer)".into()
             }
-            _ => "server to server if they can reach each other, else through this computer".into(),
+            _ => "Server to server (direct if possible)".into(),
         };
     }
     match (remote(from), remote(to)) {
-        (true, true) => "through this computer, from one server to another".into(),
-        (true, false) => "downloaded to this computer".into(),
-        (false, true) => "uploaded from this computer".into(),
-        (false, false) => "on this computer".into(),
+        (true, true) => "Server to server (via this computer)".into(),
+        (true, false) => "Download".into(),
+        (false, true) => "Upload".into(),
+        (false, false) => "Local".into(),
     }
+}
+
+/// How long a job has waited, run and moved data, from what this window saw.
+fn job_stats(job: &JobInfo, app: &App) -> String {
+    use std::time::Instant;
+    let Some(clock) = app.job_clock.get(&job.id) else {
+        return format!("{}/{} items", job.finished_steps, job.total_steps);
+    };
+    let now = Instant::now();
+    let moved = clock.moved;
+    let average = |seconds: f64| {
+        (seconds >= 1.0 && moved > 0)
+            .then(|| format!("avg {}/s", human_size((moved as f64 / seconds) as u64)))
+    };
+    let items = format!("{}/{} items", job.finished_steps, job.total_steps);
+    let mut parts = Vec::new();
+    match (job.state, clock.started, clock.ended) {
+        (JobState::Queued, _, _) => {
+            let waited = now.duration_since(clock.queued).as_secs();
+            parts.push(format!("waiting {}", crate::speed::clock(waited)));
+        }
+        (JobState::Running | JobState::Paused, Some(started), _) => {
+            // Worked out every three seconds, so that it can be read.
+            let text = app.readouts.get(&format!("job{}", job.id.0), now, || {
+                let seconds = now.duration_since(started).as_secs_f64();
+                let mut text =
+                    vec![items.clone(), format!("{} so far", crate::speed::clock(seconds as u64))];
+                text.extend(average(seconds));
+                if let Some(speed) = (seconds >= 1.0 && moved > 0).then(|| moved as f64 / seconds)
+                    && job.total_bytes > job.done_bytes.max(moved)
+                {
+                    let left = job.total_bytes - job.done_bytes.max(moved);
+                    text.push(format!(
+                        "{} left",
+                        crate::speed::clock((left as f64 / speed).ceil() as u64)
+                    ));
+                }
+                text.join(" · ")
+            });
+            return text;
+        }
+        (_, Some(started), Some(ended)) => {
+            let seconds = ended.duration_since(started).as_secs_f64();
+            parts.push(items);
+            parts.push(format!("took {}", crate::speed::clock(seconds.round() as u64)));
+            parts.extend(average(seconds));
+        }
+        _ => parts.push(items),
+    }
+    parts.join(" · ")
+}
+
+/// The second line of a job in the queue: how the data travels and the
+/// statistics.
+pub fn job_how(job: &JobInfo, app: &App) -> String {
+    format!("{}  ·  {}", job_transport(job, app), job_stats(job, app))
 }
 
 /// A job's state in words.

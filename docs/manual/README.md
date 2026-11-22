@@ -337,8 +337,14 @@ until you quit.
 ## Selecting files
 
 - **Insert** or **Space** selects the entry under the cursor and moves down.
+- **Shift+Up/Down**, **Shift+PgUp/PgDn** and **Shift+Home/End** select a
+  range as the cursor moves (Ctrl+Shift works too); moving back shrinks the
+  range, and what was selected before stays. With the quick view open these
+  keys scroll it instead.
 - **+** selects by mask (`*.jpg;*.png`), **-** unselects by mask,
-  **\*** inverts the selection, **Ctrl+A** selects everything.
+  **\*** inverts the selection, **Ctrl+A** selects everything. A mask that
+  starts with `re:` is a regular expression (`re:^img-\d+\.jpe?g$`); the
+  same works in the search, the quick filter and `nmc find --name`.
 
 Selected entries are tinted, bold and marked at the left edge, so they stay
 visible under the cursor. The panel footer counts the selected files,
@@ -440,7 +446,8 @@ panel.
 ## Searching and comparing
 
 **Shift+F7** searches below the current folder by name mask (`*.rs;*.toml`,
-with `!` to exclude) and, optionally, by text the files contain. Results
+with `!` to exclude) and, optionally, by text the files contain (start either with `re:` for a regular
+expression, e.g. `re:^report-\d{2}`). Results
 appear in a list as they are found; Enter jumps to the chosen file in the
 panel. On the command line, `nmc find` also searches by regular expression,
 size and age.

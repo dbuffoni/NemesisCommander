@@ -52,6 +52,15 @@ impl ContentQuery {
         }
     }
 
+    /// What is typed in a search dialog: text, or a regular expression
+    /// when it starts with `re:`.
+    pub fn parse(text: &str, case_sensitive: bool) -> std::result::Result<Self, regex::Error> {
+        match text.strip_prefix(crate::mask::REGEX_PREFIX) {
+            Some(pattern) => Self::regex(pattern, case_sensitive),
+            None => Ok(Self::text(text, case_sensitive)),
+        }
+    }
+
     /// Searches for a regular expression (matched line by line).
     pub fn regex(pattern: &str, case_sensitive: bool) -> std::result::Result<Self, regex::Error> {
         let regex = RegexBuilder::new(pattern)

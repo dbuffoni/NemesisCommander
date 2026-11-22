@@ -238,6 +238,25 @@ impl ConflictResolver for DialogResolver {
     }
 }
 
+/// When a job was first seen, started and ended, and the bytes it moved.
+#[derive(Debug, Clone)]
+pub struct JobClock {
+    /// First seen in the queue.
+    pub queued: std::time::Instant,
+    /// Started running or moving data.
+    pub started: Option<std::time::Instant>,
+    /// Reached a final state.
+    pub ended: Option<std::time::Instant>,
+    /// Bytes reported by progress events.
+    pub moved: u64,
+}
+
+impl JobClock {
+    fn new() -> Self {
+        Self { queued: std::time::Instant::now(), started: None, ended: None, moved: 0 }
+    }
+}
+
 /// The whole interactive application, without its drawing.
 ///
 /// The public fields are what a front end draws; it changes only `scroll`
@@ -270,6 +289,10 @@ pub struct App {
     pub job_routes: HashMap<JobId, String>,
     /// Transfer speed of the running jobs.
     pub speed: crate::speed::SpeedMeter,
+    /// Times and bytes of the jobs seen in this session, for the queue window.
+    pub job_clock: HashMap<JobId, JobClock>,
+    /// Readouts that change at most every three seconds.
+    pub readouts: crate::speed::Steady,
     /// The quick view (Ctrl+Q) and the file it shows.
     pub quick_view: Option<Option<Viewer>>,
     /// First visible row of each side's list, kept by the renderer.
@@ -552,6 +575,8 @@ impl App {
             sizes_refreshed: None,
             job_routes: HashMap::new(),
             speed: crate::speed::SpeedMeter::default(),
+            job_clock: HashMap::new(),
+            readouts: crate::speed::Steady::default(),
             git: [None, None],
             connection_lost: [false, false],
             undo: Vec::new(),
@@ -760,8 +785,12 @@ impl App {
             }
             Err(e) => self.set_error(format!("transfer queue: {e}")),
         }
+        for job in &self.jobs {
+            self.job_clock.entry(job.id).or_insert_with(JobClock::new);
+        }
         if crate::view::jobs_progress(&self.jobs, self).is_none() {
             self.speed.clear();
+            self.readouts.forget("status");
         }
     }
 
@@ -867,9 +896,20 @@ impl App {
                     self.refresh_jobs();
                 }
                 self.speed.record(std::time::Instant::now(), bytes);
+                let clock = self.job_clock.entry(id).or_insert_with(JobClock::new);
+                clock.started.get_or_insert(now);
+                clock.moved += bytes;
             }
             AppEvent::Job(JobEvent::StateChanged { id, state }) => {
                 self.live_bytes.remove(&id);
+                let clock = self.job_clock.entry(id).or_insert_with(JobClock::new);
+                if state == JobState::Running {
+                    clock.started.get_or_insert_with(std::time::Instant::now);
+                }
+                if state.is_final() {
+                    clock.ended.get_or_insert_with(std::time::Instant::now);
+                    self.readouts.forget(&format!("job{}", id.0));
+                }
                 self.refresh_jobs();
                 if state.is_final() {
                     let job = self.jobs.iter().find(|j| j.id == id);
@@ -1147,6 +1187,19 @@ impl App {
         }
         let page = self.page.max(1) as isize;
         let panel = self.workspace.active_mut();
+        // Shift+arrows (also with Ctrl) select as the cursor moves.
+        let chord = press.chord;
+        if chord.shift && !chord.alt {
+            match chord.key {
+                Key::Up => return panel.extend_selection(-1),
+                Key::Down => return panel.extend_selection(1),
+                Key::PageUp => return panel.extend_selection(-page),
+                Key::PageDown => return panel.extend_selection(page),
+                Key::Home => return panel.extend_selection(isize::MIN / 2),
+                Key::End => return panel.extend_selection(isize::MAX / 2),
+                _ => {}
+            }
+        }
         match press.plain() {
             Some(Key::Up) => return panel.move_cursor(-1),
             Some(Key::Down) => return panel.move_cursor(1),
@@ -1687,9 +1740,12 @@ impl App {
                 self.ask("Save search", "Name for this search:", "", InputPurpose::NameSearch)
             }
             Action::ToggleSelect => self.workspace.active_mut().toggle_current(),
-            Action::SelectMask => {
-                self.ask("Select", "Select files matching:", "*", InputPurpose::SelectMask)
-            }
+            Action::SelectMask => self.ask(
+                "Select",
+                "Select files matching (e.g. *.jpg, or re:REGEX):",
+                "*",
+                InputPurpose::SelectMask,
+            ),
             Action::UnselectMask => {
                 self.ask("Unselect", "Unselect files matching:", "*", InputPurpose::UnselectMask)
             }
@@ -1786,7 +1842,7 @@ impl App {
             }
             Action::Search => self.ask(
                 "Search",
-                "File names matching (e.g. *.rs;*.toml):",
+                "File names matching (e.g. *.rs;*.toml, or re:REGEX):",
                 "*",
                 InputPurpose::SearchName,
             ),
@@ -2106,7 +2162,7 @@ impl App {
                 let mask = if text.is_empty() { "*".to_owned() } else { text };
                 self.ask(
                     "Search",
-                    "Containing text (empty: any file):",
+                    "Containing text (re:REGEX for a regular expression; empty: any file):",
                     "",
                     InputPurpose::SearchContent { mask },
                 );

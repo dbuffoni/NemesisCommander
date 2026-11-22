@@ -100,6 +100,14 @@ pub struct SelectionSummary {
     pub bytes: u64,
 }
 
+/// State of a selection that Shift+arrows are extending.
+#[derive(Debug, Clone)]
+struct Extending {
+    anchor: usize,
+    before: HashSet<String>,
+    cursor: usize,
+}
+
 /// One directory view. See the crate documentation for the I/O model.
 #[derive(Debug, Clone)]
 pub struct Panel {
@@ -111,6 +119,9 @@ pub struct Panel {
     visible: Vec<Entry>,
     cursor: usize,
     selected: HashSet<String>,
+    /// A selection being extended with Shift+arrows: where it started, the
+    /// selection from before it, and where the cursor was left.
+    extending: Option<Extending>,
     sort: SortSpec,
     show_hidden: bool,
     filter: String,
@@ -146,6 +157,7 @@ impl Panel {
             visible: Vec::new(),
             cursor: 0,
             selected: HashSet::new(),
+            extending: None,
             sort,
             show_hidden,
             filter: String::new(),
@@ -255,6 +267,7 @@ impl Panel {
             Ok(entries) => {
                 if listing.path != self.location || listing.branch != self.branch {
                     self.selected.clear();
+                    self.extending = None;
                     self.filter.clear();
                     self.cursor = 0;
                 }
@@ -338,6 +351,34 @@ impl Panel {
         self.cursor = (self.cursor as isize + delta).clamp(0, last.max(0)) as usize;
     }
 
+    /// Moves the cursor by `delta` rows (clamped) and selects the rows from
+    /// where the movement started to the cursor, Shift+arrows style:
+    /// moving back unselects again, and what was selected before stays.
+    /// Any other selection command ends the range.
+    pub fn extend_selection(&mut self, delta: isize) {
+        if self.visible.is_empty() {
+            return;
+        }
+        let mut state = match self.extending.take() {
+            Some(s) if s.cursor == self.cursor => s,
+            _ => Extending {
+                anchor: self.cursor,
+                before: self.selected.clone(),
+                cursor: self.cursor,
+            },
+        };
+        self.move_cursor(delta);
+        state.cursor = self.cursor;
+        let last = self.visible.len() - 1;
+        let anchor = state.anchor.min(last);
+        let (from, to) = (anchor.min(self.cursor), anchor.max(self.cursor));
+        self.selected = state.before.clone();
+        self.selected.extend(
+            self.visible[from..=to].iter().filter(|e| e.name != PARENT).map(|e| e.name.clone()),
+        );
+        self.extending = Some(state);
+    }
+
     /// Puts the cursor on a row index (clamped).
     pub fn set_cursor(&mut self, index: usize) {
         self.cursor = index.min(self.visible.len().saturating_sub(1));
@@ -401,6 +442,7 @@ impl Panel {
     /// Toggles selection of the cursor row and moves down (`..` is never
     /// selectable).
     pub fn toggle_current(&mut self) {
+        self.extending = None;
         if let Some(entry) = self.current_entry().filter(|e| e.name != PARENT) {
             let name = entry.name.clone();
             if !self.selected.remove(&name) {
@@ -413,6 +455,7 @@ impl Panel {
     /// Selects or unselects the entry called `name` (ignored for `..` and
     /// names that are not listed).
     pub fn set_selected(&mut self, name: &str, select: bool) {
+        self.extending = None;
         if name == PARENT || !self.all.iter().any(|e| e.name == name) {
             return;
         }
@@ -426,6 +469,7 @@ impl Panel {
     /// Selects (or unselects) every visible entry matching `mask`.
     /// Directories are only matched when `include_dirs` is set.
     pub fn select_mask(&mut self, mask: &Mask, select: bool, include_dirs: bool) {
+        self.extending = None;
         for entry in &self.visible {
             if entry.name == PARENT
                 || (entry.is_dir() && !include_dirs)
@@ -443,6 +487,7 @@ impl Panel {
 
     /// Selects every visible entry.
     pub fn select_all(&mut self) {
+        self.extending = None;
         self.selected
             .extend(self.visible.iter().filter(|e| e.name != PARENT).map(|e| e.name.clone()));
     }
@@ -450,6 +495,7 @@ impl Panel {
     /// Inverts the selection of visible files (directories are left alone,
     /// as in classic commanders).
     pub fn invert_selection(&mut self) {
+        self.extending = None;
         for entry in self.visible.iter().filter(|e| e.name != PARENT && !e.is_dir()) {
             if !self.selected.remove(&entry.name) {
                 self.selected.insert(entry.name.clone());
@@ -459,6 +505,7 @@ impl Panel {
 
     /// Clears the selection.
     pub fn clear_selection(&mut self) {
+        self.extending = None;
         self.selected.clear();
     }
 
@@ -542,7 +589,7 @@ impl Panel {
 /// Turns quick-filter text into a mask: `rep` → `*rep*`, `*.rs` stays.
 fn quick_filter_mask(text: &str) -> String {
     let text = text.trim();
-    if text.is_empty() || text.contains(['*', '?', ';', '!', '[']) {
+    if text.is_empty() || text.starts_with("re:") || text.contains(['*', '?', ';', '!', '[']) {
         text.to_owned()
     } else {
         format!("*{text}*")
@@ -615,6 +662,32 @@ mod tests {
         panel.set_selected("a.txt", false);
         assert!(panel.targets().len() <= 1);
         assert!(!panel.is_selected("a.txt"));
+    }
+
+    #[tokio::test]
+    async fn shift_arrows_extend_and_shrink_the_selection() {
+        let (mut panel, _) = home().await;
+        // Rows: `..`, docs, a.txt, B.txt, file2.log, file10.log.
+        panel.set_cursor(0);
+        panel.set_selected("file10.log", true);
+        panel.extend_selection(1);
+        panel.extend_selection(1);
+        panel.extend_selection(1);
+        assert_eq!(panel.cursor(), 3);
+        // The anchor is `..`, which is never selected; the rest is.
+        assert!(panel.is_selected("docs") && panel.is_selected("a.txt"));
+        assert!(panel.is_selected("file10.log"), "earlier selection stays");
+        panel.extend_selection(-1);
+        assert!(panel.is_selected("a.txt") && panel.is_selected("docs"));
+        panel.extend_selection(-2);
+        assert!(!panel.is_selected("docs") && panel.is_selected("file10.log"));
+        // A move without Shift starts a new range from the new place.
+        panel.set_cursor(2);
+        panel.extend_selection(isize::MAX / 2);
+        assert!(panel.is_selected("file2.log") && panel.is_selected("a.txt"));
+        panel.clear_selection();
+        panel.extend_selection(-1);
+        assert_eq!(panel.selection_summary().files + panel.selection_summary().dirs, 2);
     }
 
     #[tokio::test]
