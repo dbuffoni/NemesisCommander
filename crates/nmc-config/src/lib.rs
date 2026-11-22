@@ -17,7 +17,7 @@ mod paths;
 
 pub use config::{
     Bookmark, Config, ConfigError, Connection, GeneralSettings, PanelSettings, SavedSearch,
-    TransferSettings, ViewerSettings,
+    TransferProfile, TransferSettings, ViewerSettings,
 };
 pub use export::{ExportBundle, ImportMode};
 pub use keymap::{Action, Category, Key, KeyChord, Keymap};

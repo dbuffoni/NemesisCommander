@@ -701,11 +701,37 @@ retry (`r`), cancel (`c`), change priority (`+`/`-`), change how many files
 are copied at once (`[`/`]`), switch the automatic choice of that number on or
 off for the job (`a`) and clear finished jobs (`x`).
 
+### How many files at once
+
+By default the number of files copied at the same time is automatic: a copy
+starts with two, adds files while they make it clearly faster, goes back when
+they do not help and uses fewer when the speed drops or the server returns
+errors. If a server keeps failing, the copy waits (6 s, then longer) and tries
+again by itself. Under **Settings → Transfers**: *Parallelism of transfers*
+(automatic or fixed) and *Automatic profile*: **balanced** (up to 8 files),
+**max speed** (up to 16) or **discreet** (up to 3, leaves room for other work).
+A server that refuses sessions gets a limit saved on its saved connection
+(`max_connections`, editable there). Each job in the queue says how many files
+it uses and why the number last changed. **F1** on the settings screen explains
+all of this.
+
+What works on each server (files at once, limit learned from errors) is kept in
+a small file, `connection-stats.json`, so a known server starts well. It cleans
+itself: connections you delete, rename or point elsewhere, and a new connection
+with the name of an old one, drop the old numbers; entries unused for months go.
+**Settings → Transfers → Remember what works for each server** turns it off
+(the file is deleted); *Forget what is remembered about servers* at the end of
+the settings screen empties it.
+
+The command **Generate random text files…** (Tools, F9) makes files of random
+words in the current folder, for trying transfers: name, how many (a counter is
+added to the name when there are several) and the size of each.
+
 Each job in the queue shows where it comes from and where it goes, with the
 system of each (`from Local: ~/docs  →  to nas: /backup`).
 
 While jobs run, a thin line above the status line shows their progress and,
-next to it, the numbers: `2 jobs · 40% · 12.4 MiB/s · 0:42 left · 3 queued`
+next to it, the numbers: `Copying 2 jobs · 1.2 GiB of 3.0 GiB (40%) · 12.4 MiB/s · 0:42 left · 4 files at once (auto) · 3 queued`
 (the speed is measured over the last few seconds, so the time left appears
 after the first one; the line goes when the jobs end). In the window, a click on
 the line opens the queue.

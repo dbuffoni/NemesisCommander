@@ -1061,24 +1061,56 @@ pub fn percent(done: u64, total: u64) -> Option<u64> {
 struct Active {
     running: usize,
     queued: usize,
+    paused: usize,
+    failed: usize,
     total: u64,
     done: u64,
+    /// What the running jobs do: "Copying", "Moving", "Deleting" or "Transfers".
+    verb: &'static str,
+    /// Files copied at once by the running jobs, and whether any waits for a server.
+    at_once: usize,
+    waiting: bool,
+    auto: bool,
 }
 
 fn active_jobs(jobs: &[JobInfo], app: &App) -> Option<Active> {
     let active: Vec<&JobInfo> =
         jobs.iter().filter(|j| matches!(j.state, JobState::Queued | JobState::Running)).collect();
-    if active.is_empty() {
+    let paused = jobs.iter().filter(|j| j.state == JobState::Paused).count();
+    let failed = jobs.iter().filter(|j| j.state == JobState::Failed).count();
+    if active.is_empty() && paused == 0 {
         return None;
     }
+    let running: Vec<&&JobInfo> = active.iter().filter(|j| j.state == JobState::Running).collect();
+    let mut kinds = active.iter().map(|j| j.spec.kind);
+    let verb = match kinds.next() {
+        Some(first) if kinds.all(|k| k == first) => match first {
+            JobKind::Copy => "Copying",
+            JobKind::Move => "Moving",
+            JobKind::Delete => "Deleting",
+        },
+        Some(_) => "Transfers",
+        None => "Paused",
+    };
+    let levels: Vec<usize> = running
+        .iter()
+        .filter(|j| j.spec.kind != JobKind::Delete)
+        .filter_map(|j| app.manager.job_parallelism(j.id).ok())
+        .collect();
     Some(Active {
-        running: active.iter().filter(|j| j.state == JobState::Running).count(),
-        queued: active.iter().filter(|j| j.state == JobState::Queued).count(),
+        running: running.len(),
+        queued: active.len() - running.len(),
+        paused,
+        failed,
         total: active.iter().map(|j| j.total_bytes).sum(),
         done: active
             .iter()
             .map(|j| j.done_bytes + app.live_bytes.get(&j.id).copied().unwrap_or(0))
             .sum(),
+        verb,
+        at_once: levels.iter().sum(),
+        waiting: !levels.is_empty() && levels.iter().all(|l| *l == 0),
+        auto: running.iter().any(|j| j.spec.options.auto_parallelism),
     })
 }
 
@@ -1086,6 +1118,9 @@ fn active_jobs(jobs: &[JobInfo], app: &App) -> Option<Active> {
 /// idle; 0 while the sizes are not known yet).
 pub fn jobs_progress(jobs: &[JobInfo], app: &App) -> Option<f64> {
     let active = active_jobs(jobs, app)?;
+    if active.running + active.queued == 0 {
+        return None;
+    }
     Some(if active.total == 0 {
         0.0
     } else {
@@ -1093,23 +1128,58 @@ pub fn jobs_progress(jobs: &[JobInfo], app: &App) -> Option<f64> {
     })
 }
 
-/// `2 jobs · 40% · 12.4 MiB/s · 0:42 left · 3 queued` for queued and
-/// running transfers.
+/// The status bar line for the transfers, for example
+/// `Copying 2 jobs · 1.2 GiB of 3.0 GiB (40%) · 12.4 MiB/s · 0:42 left · 4 files at once (auto) · 1 queued`.
+/// Pauses, waits for a server and failures are said in words.
 pub fn jobs_summary(jobs: &[JobInfo], app: &App) -> Option<String> {
     let active = active_jobs(jobs, app)?;
     let count = active.running + active.queued;
-    let mut parts = vec![format!("{count} job{}", if count == 1 { "" } else { "s" })];
-    parts.push(percent(active.done, active.total).map_or("…".into(), |p| format!("{p}%")));
-    if let Some(speed) = app.speed.speed(std::time::Instant::now()).filter(|s| *s >= 1.0) {
-        parts.push(format!("{}/s", human_size(speed as u64)));
-        let left = active.total.saturating_sub(active.done);
+    let mut parts = Vec::new();
+    if count > 0 {
+        parts.push(match count {
+            1 => active.verb.to_owned(),
+            n => format!("{} {n} jobs", active.verb),
+        });
         if active.total > 0 {
-            parts
-                .push(format!("{} left", crate::speed::clock((left as f64 / speed).ceil() as u64)));
+            parts.push(format!(
+                "{} of {} ({}%)",
+                human_size(active.done.min(active.total)),
+                human_size(active.total),
+                percent(active.done, active.total).unwrap_or(0)
+            ));
+        } else {
+            parts.push("preparing…".into());
+        }
+        if active.waiting {
+            parts.push("waiting for the server".into());
+        } else if let Some(speed) = app.speed.speed(std::time::Instant::now()).filter(|s| *s >= 1.0)
+        {
+            parts.push(format!("{}/s", human_size(speed as u64)));
+            let left = active.total.saturating_sub(active.done);
+            if active.total > 0 {
+                parts.push(format!(
+                    "{} left",
+                    crate::speed::clock((left as f64 / speed).ceil() as u64)
+                ));
+            }
+        }
+        if active.running > 0 && active.at_once > 0 && active.total > 0 {
+            let mode = if active.auto { " (auto)" } else { "" };
+            parts.push(format!(
+                "{} file{} at once{mode}",
+                active.at_once,
+                if active.at_once == 1 { "" } else { "s" }
+            ));
+        }
+        if active.queued > 0 && active.running > 0 {
+            parts.push(format!("{} queued", active.queued));
         }
     }
-    if active.queued > 0 && active.running > 0 {
-        parts.push(format!("{} queued", active.queued));
+    if active.paused > 0 {
+        parts.push(format!("{} paused", active.paused));
+    }
+    if active.failed > 0 && count > 0 {
+        parts.push(format!("{} failed", active.failed));
     }
     Some(parts.join(" · "))
 }
@@ -1200,7 +1270,20 @@ pub fn job_line(job: &JobInfo, app: &App) -> String {
         && let Ok(files) = app.manager.job_parallelism(job.id)
     {
         let mode = if job.spec.options.auto_parallelism { "auto" } else { "fixed" };
-        text.push_str(&format!("  [{files} at once, {mode}]"));
+        if job.state == JobState::Running && files == 0 {
+            text.push_str("  [waiting for the server]");
+        } else {
+            text.push_str(&format!(
+                "  [{files} file{} at once, {mode}]",
+                if files == 1 { "" } else { "s" }
+            ));
+        }
+        if job.state == JobState::Running
+            && job.spec.options.auto_parallelism
+            && let Some(reason) = app.manager.job_reason(job.id)
+        {
+            text.push_str(&format!("  {reason}"));
+        }
     }
     if let Some(error) = job.errors.first() {
         text.push_str(&format!("  ({error})"));

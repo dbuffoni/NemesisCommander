@@ -70,9 +70,12 @@ impl AppContext {
         let options = ManagerOptions {
             max_concurrent_jobs: self.config.transfers.parallel_jobs,
             global_bandwidth_limit: self.config.transfers.bandwidth_limit_kib * 1024,
+            profile: to_profile(self.config.transfers.profile),
         };
         let manager = TransferManager::new(self.registry.clone(), journal, options)?
             .with_server_copier(Arc::new(ServerCopies { tls_dir: self.paths.tls_dir() }));
+        manager.use_stats_file(self.paths.stats_file(), self.config.transfers.keep_stats);
+        apply_endpoint_limits(&manager, &self.config);
         Ok(match resolver {
             Some(resolver) => manager.with_resolver(resolver),
             None => manager,
@@ -105,6 +108,30 @@ impl AppContext {
             auto_parallelism: settings.auto_parallelism,
             retry: RetryPolicy { attempts: settings.retries, ..Default::default() },
             bandwidth_limit: settings.bandwidth_limit_kib * 1024,
+        }
+    }
+}
+
+/// The profile of the settings as the transfer queue knows it.
+pub fn to_profile(profile: nmc_config::TransferProfile) -> nmc_transfer::Profile {
+    use nmc_config::TransferProfile as P;
+    match profile {
+        P::Balanced => nmc_transfer::Profile::Balanced,
+        P::MaxSpeed => nmc_transfer::Profile::MaxSpeed,
+        P::Discreet => nmc_transfer::Profile::Discreet,
+    }
+}
+
+/// Gives the transfer queue the limits of simultaneous files that the saved
+/// connections carry (option `max_connections`).
+pub fn apply_endpoint_limits(manager: &TransferManager, config: &nmc_config::Config) {
+    let connections: Vec<(String, String)> =
+        config.connections.iter().map(|c| (c.name.clone(), c.uri.clone())).collect();
+    manager.sync_connections(&connections);
+    for connection in &config.connections {
+        let Ok(path) = nmc_vfs::VfsPath::parse(&connection.uri) else { continue };
+        if let Some(key) = nmc_transfer::endpoint_key(&path) {
+            manager.set_endpoint_limit(&key, connection.max_connections());
         }
     }
 }

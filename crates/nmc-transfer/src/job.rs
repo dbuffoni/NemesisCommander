@@ -229,6 +229,14 @@ pub enum JobEvent {
         /// Whether the automatic tuning is on.
         auto: bool,
     },
+    /// Repeated errors with several files at once suggest that a server
+    /// only takes this many; the controller keeps to it from now on.
+    EndpointLimit {
+        /// The server, as `scheme://authority`.
+        endpoint: String,
+        /// The number of files at once it seems to take.
+        limit: usize,
+    },
     /// Bytes were written by a job (live progress, not yet journaled).
     Progress {
         /// Which job.

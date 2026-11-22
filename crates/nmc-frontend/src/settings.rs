@@ -5,9 +5,41 @@
 //! The functions here only change a [`Config`]; the application saves it
 //! and applies it (key map, transfer manager) afterwards.
 
-use nmc_config::{Action, Config, KeyChord, Keymap};
+use nmc_config::{Action, Config, KeyChord, Keymap, TransferProfile};
 use nmc_index::SortKey;
 use nmc_ops::{ConflictPolicy, VerifyMode};
+
+/// The text of the help window (F1 on the settings screen).
+pub fn help_lines() -> Vec<String> {
+    [
+        "Up/Down move, Left/Right/Enter change, Del = default, type to filter.",
+        "Every change is saved and applied at once.",
+        "",
+        "Parallelism of transfers",
+        "  automatic  (default) starts with 2 files at a time, adds files while",
+        "             they make the copy clearly faster, goes back when they do",
+        "             not help, and lowers the number if the speed drops.",
+        "  fixed      always the number in \"Files at the same time\".",
+        "Automatic profile",
+        "  balanced   up to 8 files; fast without overloading the server.",
+        "  max speed  up to 16 files, tries more often, keeps small gains.",
+        "  discreet   up to 3 files, only for clear gains; leaves room.",
+        "On errors the automatic mode uses fewer files; if one file at a time",
+        "still fails it waits for the server (5 s, 10 s, 20 s ... 1.5 min) and",
+        "tries again. A server that keeps refusing sessions gets a limit saved",
+        "on its connection (max_connections); jobs on one server share it, and",
+        "the next copy there starts from the level that worked.",
+        "In the transfer queue (Ctrl+J): [ and ] set files by hand, a returns to",
+        "automatic, p pauses (never resumed by itself).",
+        "Bandwidth limit (KiB/s) caps all transfers together; 0 = no limit.",
+        "\"Remember what works for each server\" keeps a small file with the level",
+        "and limit that worked per server, so known servers start well. It drops",
+        "deleted or renamed connections and old servers itself; off deletes it.",
+    ]
+    .iter()
+    .map(|l| (*l).to_owned())
+    .collect()
+}
 
 /// One option of the settings file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,8 +66,12 @@ pub enum Field {
     ParallelJobs,
     /// Files copied at once within a job.
     ParallelFiles,
-    /// Tune the files copied at once from the speed.
+    /// Automatic or fixed number of files at once.
     AutoParallelism,
+    /// How boldly the automatic mode works.
+    Profile,
+    /// Remember what works for each server.
+    KeepStats,
     /// Check after copying.
     Verify,
     /// Content check on agent and `nmc serve` servers.
@@ -83,6 +119,11 @@ const SORTS: [(SortKey, &str); 4] = [
     (SortKey::Size, "size"),
     (SortKey::Modified, "date"),
 ];
+const PROFILES: [(TransferProfile, &str); 3] = [
+    (TransferProfile::Balanced, "balanced"),
+    (TransferProfile::MaxSpeed, "max speed"),
+    (TransferProfile::Discreet, "discreet"),
+];
 const VERIFY: [(VerifyMode, &str); 4] = [
     (VerifyMode::None, "no check"),
     (VerifyMode::Size, "same size"),
@@ -101,7 +142,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 24] = [
+    pub const ALL: [Field; 25] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -112,9 +153,10 @@ impl Field {
         Field::ArrowNavigation,
         Field::GitStatus,
         Field::Icons,
-        Field::ParallelJobs,
-        Field::ParallelFiles,
         Field::AutoParallelism,
+        Field::Profile,
+        Field::KeepStats,
+        Field::ParallelFiles,
         Field::Verify,
         Field::VerifyRemoteFast,
         Field::Conflict,
@@ -136,8 +178,8 @@ impl Field {
             ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
                 "Panels"
             }
-            ParallelJobs | ParallelFiles | AutoParallelism | Verify | VerifyRemoteFast
-            | Conflict | BandwidthLimit | Retries => "Transfers",
+            ParallelJobs | ParallelFiles | AutoParallelism | Profile | KeepStats | Verify
+            | VerifyRemoteFast | Conflict | BandwidthLimit | Retries => "Transfers",
             Wrap | TabWidth | HexAbove => "Viewer",
             FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
         }
@@ -158,8 +200,10 @@ impl Field {
             GitStatus => "Git marks and branch in repositories",
             Icons => "Icons for the kinds of files",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
-            ParallelFiles => "Files at the same time in a job (starting level)",
-            AutoParallelism => "Adjust files at the same time from the speed",
+            ParallelFiles => "Files at the same time when Parallelism is fixed",
+            AutoParallelism => "Parallelism of transfers",
+            Profile => "Automatic profile",
+            KeepStats => "Remember what works for each server (small file)",
             Verify => "Check after copying",
             VerifyRemoteFast => "Content check on agent / nmc serve servers",
             Conflict => "When a file exists",
@@ -179,8 +223,8 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Icons | Wrap | AutoParallelism | VerifyRemoteFast => FieldKind::Toggle,
-            Sort | Verify | Conflict => FieldKind::Choice,
+            | GitStatus | Icons | Wrap | VerifyRemoteFast | KeepStats => FieldKind::Toggle,
+            Sort | Verify | Conflict | AutoParallelism | Profile => FieldKind::Choice,
             Editor => FieldKind::Text,
             FontFamily | FixedFontFamily => FieldKind::Font,
             FontSize => FieldKind::Number(0, 48),
@@ -211,7 +255,9 @@ impl Field {
             Icons => on(p.icons),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
-            AutoParallelism => on(t.auto_parallelism),
+            AutoParallelism => if t.auto_parallelism { "automatic" } else { "fixed" }.to_owned(),
+            Profile => name_of(&PROFILES, t.profile),
+            KeepStats => on(t.keep_stats),
             Verify => name_of(&VERIFY, t.verify),
             VerifyRemoteFast => on(t.verify_remote_fast),
             Conflict => name_of(&CONFLICTS, t.conflict),
@@ -240,6 +286,8 @@ impl Field {
             ArrowNavigation => p.arrow_navigation ^= true,
             GitStatus => p.git_status ^= true,
             AutoParallelism => t.auto_parallelism ^= true,
+            KeepStats => t.keep_stats ^= true,
+            Profile => t.profile = cycle(&PROFILES, t.profile, delta),
             VerifyRemoteFast => t.verify_remote_fast ^= true,
             Icons => p.icons ^= true,
             Wrap => v.wrap ^= true,
@@ -328,14 +376,22 @@ pub enum Command {
     Export,
     /// Read settings from a file.
     Import,
+    /// Forget what is remembered about servers.
+    ResetStats,
     /// Open the settings file in the editor.
     EditFile,
 }
 
 impl Command {
     /// Every command, in screen order.
-    pub const ALL: [Command; 5] =
-        [Command::SendTo, Command::FetchFrom, Command::Export, Command::Import, Command::EditFile];
+    pub const ALL: [Command; 6] = [
+        Command::SendTo,
+        Command::FetchFrom,
+        Command::Export,
+        Command::Import,
+        Command::ResetStats,
+        Command::EditFile,
+    ];
 
     /// What it is called on screen.
     pub fn label(self) -> &'static str {
@@ -344,6 +400,7 @@ impl Command {
             Command::FetchFrom => "Get the settings of another machine…",
             Command::Export => "Export settings to a file…",
             Command::Import => "Import settings from a file…",
+            Command::ResetStats => "Forget what is remembered about servers",
             Command::EditFile => "Edit the settings file",
         }
     }
@@ -572,6 +629,7 @@ mod tests {
         assert!(Field::TabWidth.set(&mut config, "wide").is_err());
         Field::TabWidth.set(&mut config, "99").unwrap();
         assert_eq!(config.viewer.tab_width, 16, "clamped");
+        Field::ParallelJobs.reset(&mut config); // not on the screen any more
         for field in Field::ALL {
             field.reset(&mut config);
         }

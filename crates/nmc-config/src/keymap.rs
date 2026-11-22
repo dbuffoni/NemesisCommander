@@ -153,6 +153,7 @@ actions! {
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];
+    GenerateFiles = "tools.generate-files", Tools, false, "Generate random text files…", [];
     Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     [];
     DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", ["Alt+U"];
     Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    ["Alt+K"];
@@ -348,6 +349,9 @@ impl Action {
             }
             Action::About => {
                 "Shows the logo, the version and the commit this build was made from, the licence and where the source is."
+            }
+            Action::GenerateFiles => {
+                "Makes text files of random words in this folder, for trying transfers and speeds: asks the name, how many (a counter is added to the name when there are several) and the size of each (10k, 2.5M, 1G)."
             }
             Action::Quit => "Closes the application.",
         }

@@ -259,7 +259,8 @@ impl Executor {
             } else {
                 index + 1
             };
-            let mut pending = (index..end).filter(|&i| !tracker.is_some_and(|t| t.is_finished(i)));
+            let mut pending =
+                (index..end).filter(|&i| !tracker.is_some_and(|t| t.is_finished(i))).peekable();
             let mut running = FuturesUnordered::new();
             let mut batch = Vec::new();
             loop {
@@ -270,6 +271,14 @@ impl Executor {
                     }
                 }
                 if running.is_empty() {
+                    if pending.peek().is_some() && self.options.live_parallelism.is_some() {
+                        // The level is 0: waiting for a server. Look again soon.
+                        tokio::select! {
+                            _ = tokio::time::sleep(Duration::from_millis(250)) => {}
+                            _ = self.options.cancel.cancelled() => return Err(VfsError::Cancelled),
+                        }
+                        continue;
+                    }
                     break;
                 }
                 if self.options.live_parallelism.is_some() {
@@ -1046,6 +1055,32 @@ mod tests {
         let report = executor.run(&plan).await.unwrap();
         assert_eq!(report.done, plan.steps.len());
         assert_eq!(b.get_file("/f5").unwrap(), b"x");
+    }
+
+    #[tokio::test]
+    async fn level_zero_waits_and_then_continues() {
+        let (registry, a, b) = setup();
+        for i in 0..3 {
+            a.put_file(&format!("/f{i}"), "x");
+        }
+        let sources: Vec<_> = (0..3).map(|i| p("a", &format!("/f{i}"))).collect();
+        let plan =
+            plan_copy(&registry, &sources, &p("b", "/"), PlanOptions::default()).await.unwrap();
+        let live = Arc::new(AtomicUsize::new(0)); // waiting for a server
+        let options = ExecuteOptions {
+            conflict: ConflictPolicy::Fail,
+            live_parallelism: Some(live.clone()),
+            ..Default::default()
+        };
+        let executor = Executor::new(registry, options);
+        let raise = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            live.store(2, Ordering::Relaxed);
+        });
+        let report = executor.run(&plan).await.unwrap();
+        raise.await.unwrap();
+        assert_eq!(report.done, plan.steps.len());
+        assert_eq!(b.get_file("/f2").unwrap(), b"x");
     }
 
     struct Recorder(Mutex<Vec<(usize, StepOutcome)>>, usize);
