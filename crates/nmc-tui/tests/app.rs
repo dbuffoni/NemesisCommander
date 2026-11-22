@@ -3215,3 +3215,15 @@ async fn generates_random_text_files_with_a_counter() {
     h.settle().await;
     assert_eq!(fs::metadata(h.path("left/one.txt")).unwrap().len(), 2048);
 }
+
+#[tokio::test]
+async fn a_refused_serve_connection_offers_the_install() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::GoTo);
+    h.type_text("scs://127.0.0.1:1/");
+    h.key("Enter");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Confirm(_)))).await;
+    let Some(Overlay::Confirm(dialog)) = h.app.overlay() else { panic!("offer") };
+    assert_eq!(dialog.title, "Install nmc serve?");
+    assert!(dialog.lines[0].starts_with("127.0.0.1"), "{:?}", dialog.lines);
+}

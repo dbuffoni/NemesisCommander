@@ -207,7 +207,9 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Label {
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
+                    // An error keeps its beginning and its end (the host and
+                    // the reason); the rest of the line is cut in the middle.
+                    elide: Text.ElideMiddle
                     text: window.screen ? window.screen.status.text : ""
                     color: window.screen && window.screen.status.error ? window.errorColor
                                                                        : palette.windowText
