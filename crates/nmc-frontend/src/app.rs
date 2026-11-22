@@ -699,8 +699,7 @@ impl App {
     /// The active panel could not open an `scs://` server that is not
     /// there (nothing answers, or no certificates yet): offers to install
     /// `nmc serve` instead of leaving the user with a bare error.
-    fn offer_install_for(&mut self, error: &str) {
-        let location = self.workspace.active().location().clone();
+    fn offer_install_for(&mut self, location: &VfsPath, error: &str) {
         if location.scheme() != "scs" || self.overlay.is_some() {
             return;
         }
@@ -803,6 +802,7 @@ impl App {
             }
             AppEvent::Listing(listing) => {
                 let listed = listing.path.clone();
+                let failed = listing.result.as_ref().err().map(|e| e.to_string());
                 if self.workspace.apply(listing) {
                     for side in [SideId::Left, SideId::Right] {
                         let panel = self.workspace.side(side).panel();
@@ -830,8 +830,12 @@ impl App {
                                 "Connection lost: {error} (it is opened again on the next try)"
                             );
                         }
-                        self.set_error(error.clone());
-                        self.offer_install_for(&error);
+                        self.set_error(error);
+                    }
+                    // The panel stays where it was when a folder cannot be
+                    // opened, so the place that failed is the listing's.
+                    if let Some(error) = failed {
+                        self.offer_install_for(&listed, &error);
                     }
                     self.update_quick_view();
                 }

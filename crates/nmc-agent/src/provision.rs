@@ -374,6 +374,7 @@ pub async fn install_serve(
     progress("Connecting to the new server");
     let config = identity.client_config().map_err(|e| e.to_string())?;
     let mut last = String::new();
+    let mut answered = false;
     for attempt in 1..=CONNECT_ATTEMPTS {
         tokio::time::sleep(Duration::from_secs(1)).await;
         progress(&format!(
@@ -383,10 +384,43 @@ pub async fn install_serve(
             crate::serve::CONNECT_TIMEOUT.as_secs()
         ));
         match crate::serve::connect(config.clone(), &name, options.port, None).await {
-            Ok(_) => return Ok(location(&name, options.port)),
+            Ok(_) => {
+                progress("    it answers");
+                answered = true;
+                break;
+            }
             Err(e) => {
                 progress(&format!("    no answer: {e}"));
                 last = e;
+            }
+        }
+    }
+    if answered {
+        // The install was done through SSH sessions that are over now: a
+        // user service without lingering is stopped with the last session,
+        // so a first answer proves little. Check lingering, wait, ask again.
+        progress("Checking that the service survives the end of the SSH sessions");
+        let linger = run(
+            &target,
+            "loginctl show-user \"$(id -un)\" -p Linger --value 2>&1 || echo unknown",
+            None,
+            &mut progress,
+        )
+        .await
+        .unwrap_or_default();
+        if linger.trim() == "no" {
+            progress("    lingering is OFF: the service stops when the last login ends");
+        }
+        tokio::time::sleep(Duration::from_secs(6)).await;
+        progress(&format!("Contacting {name}:{} again, after the sessions closed", options.port));
+        match crate::serve::connect(config.clone(), &name, options.port, None).await {
+            Ok(_) => {
+                progress("    still answering: it stays up");
+                return Ok(location(&name, options.port));
+            }
+            Err(e) => {
+                progress(&format!("    no answer now: {e}"));
+                last = format!("it answered right after the install, then stopped: {e}");
             }
         }
     }
@@ -416,7 +450,8 @@ pub async fn install_serve(
     } else {
         format!(
             "the service does not listen on port {port}: read its log above, or run \
-             `journalctl --user -u nmc-serve` on the server"
+             `journalctl --user -u nmc-serve` on the server; if lingering is off, run \
+             `sudo loginctl enable-linger $USER` there so the service survives logout"
         )
     };
     Err(format!("installed, but {name}:{port} does not answer ({last}); {advice}"))
