@@ -551,12 +551,28 @@ fn draw_box_fixed(frame: &mut Frame, title: &str, lines: Vec<Line>, rows: Option
     area
 }
 
+/// The first two shortcuts of `a / b / c`: the help shows the main ones,
+/// the F9 list has all of them.
+fn first_keys(keys: &str) -> String {
+    keys.split(" / ").take(2).collect::<Vec<_>>().join(" / ")
+}
+
 fn draw_help(frame: &mut Frame, app: &App) {
     let groups = app.context().keymap.help();
-    // Narrow screens give the keys less room and the labels more.
-    let key_width = if frame.area().width < 90 { 11 } else { 16 };
-    let label_width = (frame.area().width.min(84) as usize).saturating_sub(4) / 2 - key_width - 4;
+    let screen = frame.area();
+    // As wide as the screen allows (up to 100), so labels are seldom cut.
+    let width = screen.width.clamp(20, 100);
+    let column_width = (width as usize).saturating_sub(4) / 2;
     let column = |groups: &[(Category, Vec<(String, &'static str)>)]| -> Vec<Line<'static>> {
+        // The keys column is as wide as its longest keys, within a share
+        // of the column, so a short column does not waste room.
+        let longest = groups
+            .iter()
+            .flat_map(|(_, rows)| rows)
+            .map(|(k, _)| first_keys(k).chars().count())
+            .max();
+        let key_width = longest.unwrap_or(0).min(column_width / 2).max(4);
+        let label_width = column_width.saturating_sub(key_width + 5);
         let mut lines = Vec::new();
         for (category, rows) in groups {
             if !lines.is_empty() {
@@ -565,7 +581,11 @@ fn draw_help(frame: &mut Frame, app: &App) {
             lines.push(Line::styled(category.title().to_owned(), bold().fg(Color::Cyan)));
             for (keys, label) in rows {
                 let label = fit(label, label_width);
-                lines.push(Line::raw(format!("  {} {}", fit(keys, key_width), label.trim_end())));
+                lines.push(Line::raw(format!(
+                    "  {} {}",
+                    fit(&first_keys(keys), key_width),
+                    label.trim_end()
+                )));
             }
         }
         lines
@@ -582,14 +602,27 @@ fn draw_help(frame: &mut Frame, app: &App) {
         split = i + 1;
     }
     let (first, second) = groups.split_at(split);
-    let left = column(first);
-    let right = column(second);
+    let mut left = column(first);
+    let mut right = column(second);
+    // On a short screen the lists end in "…" instead of running over the
+    // border; every command stays reachable in the F9 list.
+    let room = screen.height.saturating_sub(4) as usize;
+    for lines in [&mut left, &mut right] {
+        if lines.len() > room && room > 0 {
+            lines.truncate(room - 1);
+            lines.push(Line::styled("  …", dim()));
+        }
+    }
     let height = left.len().max(right.len()) as u16 + 4;
-    let area = centered(frame.area(), 84, height);
+    let area = centered(screen, width, height);
     frame.render_widget(Clear, area);
+    let hint = shrink_hint(
+        "Any key closes  F9: every command in the menu",
+        area.width.saturating_sub(4) as usize,
+    );
     let block = Block::bordered()
         .title(Line::styled(" Main shortcuts ", bold()))
-        .title_bottom(Line::styled(" Any key closes · F9: every command in the menu ", dim()));
+        .title_bottom(Line::styled(format!(" {hint} "), dim()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let [a, b] = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])

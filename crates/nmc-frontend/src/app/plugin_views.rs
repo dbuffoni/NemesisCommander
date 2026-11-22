@@ -9,7 +9,9 @@ use std::collections::HashMap;
 
 use nmc_vfs::VfsPath;
 
-use super::{App, AppEvent};
+use super::App;
+#[cfg(feature = "scripting")]
+use super::AppEvent;
 use nmc_panel::SideId;
 
 use crate::app::side_index;

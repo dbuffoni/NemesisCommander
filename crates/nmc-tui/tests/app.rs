@@ -3352,3 +3352,31 @@ if (command === "column:chars") {
     let screen = h.screen();
     assert!(screen.contains("Shouted") && screen.contains("ALPHA"), "{screen}");
 }
+
+/// SC-131: the F1 help keeps inside its border and leaves a gap between its
+/// two columns on every screen size, down to a small terminal.
+#[tokio::test]
+async fn the_help_fits_every_screen_size() {
+    let mut h = Harness::new().await;
+    h.key("F1");
+    for (w, rows) in [(80u16, 24u16), (60, 20), (100, 30), (140, 50), (40, 12)] {
+        let mut terminal = Terminal::new(TestBackend::new(w, rows)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let lines: Vec<String> = (0..rows)
+            .map(|y| (0..w).map(|x| buffer[(x, y)].symbol().to_owned()).collect())
+            .collect();
+        let screen = lines.join("\n");
+        let top = lines.iter().position(|l| l.contains("Main shortcuts")).expect(&screen);
+        let bottom = lines.iter().position(|l| l.contains("Any key")).expect(&screen);
+        assert!(bottom > top, "{w}x{rows}:\n{screen}");
+        let first = lines[top].chars().position(|c| c == '┌').unwrap();
+        for line in &lines[top + 1..bottom] {
+            let chars: Vec<char> = line.chars().collect();
+            assert_eq!(chars[first], '│', "{w}x{rows} left border:\n{screen}");
+            assert!(chars[first + 1..].contains(&'│'), "{w}x{rows} right border:\n{screen}");
+        }
+        // No label touches the next column: keys and labels are cut with …
+        assert!(!screen.contains("Delete (to…Nemesis"), "{w}x{rows}:\n{screen}");
+    }
+}
