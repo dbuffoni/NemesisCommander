@@ -77,6 +77,14 @@ pub enum AppEvent {
     },
     /// A background task wants to show a window.
     Show(Box<Overlay>),
+    /// A line for the log window titled `title`, which is still open while
+    /// its work goes on.
+    Progress {
+        /// The title of the window.
+        title: String,
+        /// The line, as it happened.
+        line: String,
+    },
     /// A task changed files in a way Ctrl+Z can take back; the event is the
     /// task's own result.
     Undoable(UndoStep, Box<AppEvent>),
@@ -183,6 +191,34 @@ pub struct External {
     pub rename: Option<(PathBuf, Vec<VfsPath>)>,
 }
 
+/// What identifies a question of a series: a window and what it asks.
+/// `None` for windows that are not steps (viewer, lists of commands...).
+fn step_of(overlay: &Overlay) -> Option<(u8, String, String)> {
+    match overlay {
+        Overlay::Input(d) if d.purpose.settings_screen().is_none() => {
+            Some((0, d.title.clone(), d.prompt.clone()))
+        }
+        Overlay::Choose(d) => Some((1, d.title.clone(), String::new())),
+        Overlay::Confirm(d) => {
+            Some((2, d.title.clone(), d.lines.first().cloned().unwrap_or_default()))
+        }
+        Overlay::Message(d) if !d.busy => Some((3, d.title.clone(), String::new())),
+        _ => None,
+    }
+}
+
+/// A copy of a window that is a step, to come back to.
+fn snapshot(overlay: &Overlay) -> Option<Overlay> {
+    step_of(overlay)?;
+    Some(match overlay {
+        Overlay::Input(d) => Overlay::Input(d.clone()),
+        Overlay::Choose(d) => Overlay::Choose(d.clone()),
+        Overlay::Confirm(d) => Overlay::Confirm(d.clone()),
+        Overlay::Message(d) => Overlay::Message(d.clone()),
+        _ => return None,
+    })
+}
+
 /// Asks the user about copy conflicts through the event channel.
 struct DialogResolver {
     events: mpsc::UnboundedSender<AppEvent>,
@@ -216,12 +252,19 @@ pub struct App {
     pub overlay: Option<Overlay>,
     /// Copy conflicts waiting for an answer, oldest first.
     pub conflicts: VecDeque<PendingConflict>,
+    /// Servers the install of `nmc serve` was already offered for.
+    install_offered: HashSet<String>,
+    /// The questions that led to the one on screen, for going back.
+    history: Vec<Overlay>,
     /// The message of the status line.
     pub status: Option<Status>,
     /// The jobs of the transfer queue, as last reported.
     pub jobs: Vec<JobInfo>,
     /// Bytes done of running jobs, updated more often than `jobs`.
     pub live_bytes: HashMap<JobId, u64>,
+    /// How the data of each job travelled between two servers, once known
+    /// (`direct` or `reverse`).
+    pub job_routes: HashMap<JobId, String>,
     /// Transfer speed of the running jobs.
     pub speed: crate::speed::SpeedMeter,
     /// The quick view (Ctrl+Q) and the file it shows.
@@ -498,9 +541,12 @@ impl App {
             manager,
             overlay: None,
             conflicts: VecDeque::new(),
+            install_offered: HashSet::new(),
+            history: Vec::new(),
             status,
             jobs: Vec::new(),
             live_bytes: HashMap::new(),
+            job_routes: HashMap::new(),
             speed: crate::speed::SpeedMeter::default(),
             git: [None, None],
             connection_lost: [false, false],
@@ -646,6 +692,26 @@ impl App {
         }
     }
 
+    /// The active panel could not open an `scs://` server that is not
+    /// there (nothing answers, or no certificates yet): offers to install
+    /// `nmc serve` instead of leaving the user with a bare error.
+    fn offer_install_for(&mut self, error: &str) {
+        let location = self.workspace.active().location().clone();
+        if location.scheme() != "scs" || self.overlay.is_some() {
+            return;
+        }
+        let lower = error.to_lowercase();
+        let missing =
+            ["refused", "no answer", "timed out", "no certificates", "handshake", "certificate"]
+                .iter()
+                .any(|word| lower.contains(word));
+        let Ok((host, _)) = nmc_agent::serve::host_and_port(location.authority()) else { return };
+        if !missing || !self.install_offered.insert(host.clone()) {
+            return;
+        }
+        self.offer_install(&host, error);
+    }
+
     /// Runs `work` in the background; its result event ends the task.
     fn spawn_task(&mut self, work: impl Future<Output = AppEvent> + Send + 'static) {
         self.tasks += 1;
@@ -683,7 +749,11 @@ impl App {
 
     fn refresh_jobs(&mut self) {
         match self.manager.jobs() {
-            Ok(jobs) => self.jobs = jobs,
+            // Newest first: what was just started is on top.
+            Ok(mut jobs) => {
+                jobs.sort_by_key(|j| std::cmp::Reverse(j.id.0));
+                self.jobs = jobs;
+            }
             Err(e) => self.set_error(format!("transfer queue: {e}")),
         }
         if crate::view::jobs_progress(&self.jobs, self).is_none() {
@@ -756,7 +826,8 @@ impl App {
                                 "Connection lost: {error} (it is opened again on the next try)"
                             );
                         }
-                        self.set_error(error);
+                        self.set_error(error.clone());
+                        self.offer_install_for(&error);
                     }
                     self.update_quick_view();
                 }
@@ -771,7 +842,8 @@ impl App {
                 self.set_status(format!("Retrying {title} ({attempt}/{attempts}): {message}…"));
             }
             AppEvent::Job(JobEvent::ParallelismChanged { .. }) => self.refresh_jobs(),
-            AppEvent::Job(JobEvent::Route { route, .. }) => {
+            AppEvent::Job(JobEvent::Route { id, route }) => {
+                self.job_routes.insert(id, route.clone());
                 self.set_status(format!("Copying {route} between the servers (not through here)"));
             }
             AppEvent::Job(JobEvent::Progress { id, bytes }) => {
@@ -834,6 +906,14 @@ impl App {
                 // The question comes from `ask_archive_password`.
             }
             AppEvent::Undoable(..) => {}
+            AppEvent::Progress { title, line } => {
+                if let Some(Overlay::Message(window)) = &mut self.overlay
+                    && window.busy
+                    && window.title == title
+                {
+                    window.lines.push(line);
+                }
+            }
             AppEvent::Show(overlay) => {
                 // "Measuring…" and the like are over once the window is there.
                 if self.status.as_ref().is_some_and(|s| !s.error && s.text.ends_with('…')) {
@@ -908,6 +988,7 @@ impl App {
                             then: None,
                             then_choose: None,
                             logo: false,
+                            busy: false,
                         }));
                     }
                 }
@@ -953,16 +1034,59 @@ impl App {
         }
         self.status = None;
         match self.overlay.take() {
-            None => self.normal_key(press),
+            None => {
+                self.history.clear();
+                self.normal_key(press)
+            }
             Some(overlay) => {
+                // Alt+Left goes back to the question before this one.
+                if press.chord.alt
+                    && press.chord.key == Key::Left
+                    && step_of(&overlay).is_some()
+                    && let Some(previous) = self.history.pop()
+                {
+                    self.overlay = Some(previous);
+                    self.update_quick_view();
+                    return;
+                }
+                let before = snapshot(&overlay);
                 let keep = self.overlay_key(overlay, press);
                 // An action may have opened another window; it wins.
                 if self.overlay.is_none() {
                     self.overlay = keep;
                 }
+                self.remember_step(before);
             }
         }
         self.update_quick_view();
+    }
+
+    /// After a key: when the window on screen is the next question of a
+    /// series, the one before it is kept for Alt+Left; when the series
+    /// is over, it is forgotten.
+    fn remember_step(&mut self, before: Option<Overlay>) {
+        let now = self.overlay.as_ref().and_then(step_of);
+        match (before, now) {
+            (Some(before), Some(now)) if step_of(&before).as_ref() != Some(&now) => {
+                self.history.push(before);
+            }
+            (_, Some(_)) => {}
+            (_, None) => self.history.clear(),
+        }
+    }
+
+    /// Whether Alt+Left would go back to an earlier question.
+    pub fn can_go_back(&self) -> bool {
+        !self.history.is_empty()
+    }
+
+    /// `hint` with the key for going back added, when there is one.
+    pub fn with_back(&self, hint: String) -> String {
+        match (self.can_go_back(), hint.is_empty()) {
+            (false, _) => hint,
+            (true, true) => "Alt+←: back".into(),
+            (true, false) => format!("{hint}    Alt+←: back"),
+        }
     }
 
     /// Text pasted from the system clipboard (Ctrl+V in the window, the
@@ -1345,6 +1469,7 @@ impl App {
                 then: back,
                 then_choose: choose,
                 logo: false,
+                busy: false,
             })))
         });
     }
@@ -2065,6 +2190,7 @@ impl App {
                     then: None,
                     then_choose: None,
                     logo: false,
+                    busy: false,
                 })));
             }
             lines.push(format!("Rename {changed} items?"));
@@ -2101,6 +2227,17 @@ impl App {
                 });
             }
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
+            ConfirmPurpose::InstallServe(text) => self.start_install(&text),
+            ConfirmPurpose::OfferInstall(host) => {
+                let mut dialog = InputDialog::new(
+                    "Install nmc serve",
+                    crate::install::prompt(),
+                    &host,
+                    InputPurpose::InstallServe,
+                );
+                dialog.preview = crate::install::hints(&host);
+                self.overlay = Some(Overlay::Input(dialog));
+            }
             ConfirmPurpose::MultiRename { paths, names } => {
                 self.workspace.active_mut().clear_selection();
                 self.spawn_task(async move {
@@ -2270,10 +2407,17 @@ impl App {
         };
         self.spawn_task(async move {
             let loaded = viewer::load(&registry, &path, limit).await.map_err(|e| e.to_string());
+            let facts = match registry.provider_for(&path).await {
+                Ok(provider) => {
+                    provider.stat(&path).await.ok().map(|e| crate::preview::Facts::of(&e))
+                }
+                Err(_) => None,
+            }
+            .unwrap_or_default();
             let result = match loaded {
                 Ok((data, truncated)) => tokio::task::spawn_blocking(move || {
                     let data = Arc::new(data);
-                    let prepared = crate::preview::prepare(&name, &data, truncated)?;
+                    let prepared = crate::preview::prepare(&name, &data, truncated, &facts)?;
                     Ok((data, truncated, prepared))
                 })
                 .await
@@ -2544,6 +2688,7 @@ impl App {
             then,
             then_choose: None,
             logo: false,
+            busy: false,
         }));
     }
 
@@ -2575,6 +2720,7 @@ impl App {
                     then: None,
                     then_choose: None,
                     logo: false,
+                    busy: false,
                 }))),
                 Err(e) => done(Err(e), None),
             }

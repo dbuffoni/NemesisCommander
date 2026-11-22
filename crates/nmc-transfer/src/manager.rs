@@ -50,6 +50,13 @@ pub trait ServerCopier: Send + Sync {
         conflict: ConflictPolicy,
         progress: &(dyn Fn(u64, u64) + Send + Sync),
     ) -> Option<Result<ServerCopyReport, String>>;
+
+    /// Whether `copy` would try to copy these between servers (so a
+    /// question about existing files must be asked before, once, since
+    /// nobody can answer while the servers copy). Default: no.
+    fn between_servers(&self, _sources: &[VfsPath], _destination: &VfsPath) -> bool {
+        false
+    }
 }
 
 /// The outcome of a copy between servers.
@@ -355,6 +362,51 @@ impl Inner {
         }
     }
 
+    /// Servers copy by themselves and cannot ask anything while they do:
+    /// when something is already there, the user is asked once, here, and
+    /// the answer is used for the whole copy. Without a way to ask, or
+    /// when nothing is in the way, existing files are kept (skipped).
+    async fn ask_before_server_copy(
+        &self,
+        copier: &dyn ServerCopier,
+        sources: &[VfsPath],
+        destination: &VfsPath,
+    ) -> Result<ConflictPolicy, JobError> {
+        use nmc_ops::{Conflict, ConflictAction};
+        let Some(resolver) = &self.resolver else { return Ok(ConflictPolicy::Skip) };
+        if !copier.between_servers(sources, destination) {
+            return Ok(ConflictPolicy::Skip);
+        }
+        let (Ok(to), Some(_)) = (self.registry.provider_for(destination).await, sources.first())
+        else {
+            return Ok(ConflictPolicy::Skip);
+        };
+        for source in sources {
+            let Some(name) = source.file_name() else { continue };
+            let target = destination.join(name);
+            let Ok(existing) = to.stat(&target).await else { continue };
+            let Ok(from) = self.registry.provider_for(source).await else { continue };
+            let Ok(incoming) = from.stat(source).await else { continue };
+            let conflict = Conflict {
+                source: source.clone(),
+                source_entry: incoming,
+                destination: target,
+                destination_entry: existing,
+            };
+            let answer = resolver.resolve(&conflict).await;
+            return match answer.action {
+                ConflictAction::Overwrite => Ok(ConflictPolicy::Overwrite),
+                ConflictAction::Skip => Ok(ConflictPolicy::Skip),
+                ConflictAction::RenameTo(_) => Ok(ConflictPolicy::KeepBoth),
+                ConflictAction::Abort => Err(JobError::Failed(format!(
+                    "{} already exists and the copy was stopped",
+                    conflict.destination
+                ))),
+            };
+        }
+        Ok(ConflictPolicy::Skip)
+    }
+
     /// Plans (if needed) and runs the job. `Ok(true)` if no step failed.
     async fn execute(
         self: &Arc<Self>,
@@ -367,7 +419,9 @@ impl Inner {
                 (&self.server_copier, &spec.destination, self.journal.load_plan(id)?)
         {
             let conflict = match spec.options.conflict {
-                ConflictPolicy::Ask => ConflictPolicy::Skip,
+                ConflictPolicy::Ask => {
+                    self.ask_before_server_copy(copier.as_ref(), &spec.sources, destination).await?
+                }
                 other => other,
             };
             let shown = AtomicU64::new(0);

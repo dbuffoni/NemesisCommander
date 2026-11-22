@@ -18,7 +18,8 @@ use nmc_frontend::icons::icon_for;
 use nmc_frontend::preview::Zoom;
 use nmc_frontend::view::{
     column_headers, commands_view, describe, entry_details, git_mark, git_of, job_line, job_route,
-    jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset, size_text, tab_title,
+    job_transport, jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset,
+    size_text, tab_title,
 };
 use nmc_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -81,23 +82,29 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         match overlay {
             Overlay::Help => draw_help(frame, app),
             Overlay::Commands(palette) => draw_commands(frame, app, palette),
-            Overlay::Input(dialog) => draw_input(frame, dialog),
+            Overlay::Input(dialog) => draw_input(frame, dialog, &app.with_back(dialog.hint())),
             Overlay::Confirm(dialog) => {
                 let mut lines: Vec<Line> =
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
                 lines.push(Line::raw(""));
-                lines.push(Line::styled("Enter / y: yes    Esc / n: no", dim()));
+                lines.push(Line::styled(
+                    app.with_back("Enter / y: yes    Esc / n: no".into()),
+                    dim(),
+                ));
                 draw_box(frame, &dialog.title, lines);
             }
             Overlay::Choose(dialog) => {
-                let page = draw_choose(frame, dialog);
+                let page = draw_choose(frame, dialog, &app.with_back(dialog.footer.clone()));
                 app.page = page;
             }
             Overlay::Message(dialog) => {
                 let mut lines: Vec<Line> =
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
                 lines.push(Line::raw(""));
-                lines.push(Line::styled(dialog.hint(), dim()));
+                lines.push(Line::styled(app.with_back(dialog.hint()), dim()));
+                // A log keeps one size while lines are added to it.
+                let log_rows = (dialog.busy || dialog.lines.len() > 10)
+                    .then(|| frame.area().height.saturating_sub(6).min(22) as usize);
                 if dialog.logo {
                     // The logo takes the first rows of the box.
                     let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
@@ -111,7 +118,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                     );
                     draw_image(frame, about::logo(), Zoom::default(), top);
                 } else {
-                    draw_box(frame, &dialog.title, lines);
+                    draw_box_fixed(frame, &dialog.title, lines, log_rows);
                 }
             }
             Overlay::Viewer(viewer) => {
@@ -150,7 +157,7 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             " [{}] {}{}{} ",
             drive_label(&app.context().config, panel.location()),
             git.as_ref().map(|g| format!("⎇ {}  ", g.summary())).unwrap_or_default(),
-            display_location(panel.location()),
+            nmc_frontend::drives::panel_location(&app.context().config, panel.location()),
             if panel.is_branch() { "  (flat)" } else { "" }
         ),
         bold(),
@@ -413,17 +420,70 @@ pub fn centered(area: Rect, width: u16, height: u16) -> Rect {
     }
 }
 
+/// The width of a message or question: most of the screen, so a long path
+/// or log line fits and the window does not change size with its text.
+fn box_width(screen: Rect) -> u16 {
+    let wide = screen.width.saturating_sub(2);
+    (screen.width * 9 / 10).clamp(60.min(wide), 120.min(wide))
+}
+
+/// `text` cut into rows of at most `width` characters, at any character
+/// (paths have no spaces to break at). A continued row is indented.
+pub fn hard_wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(8);
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= width {
+        return vec![text.to_owned()];
+    }
+    let indent = chars.iter().take_while(|c| **c == ' ').count().min(width / 2);
+    let mut rows = Vec::new();
+    let mut at = 0;
+    while at < chars.len() {
+        let room = if rows.is_empty() { width } else { width - indent - 2 };
+        let end = (at + room).min(chars.len());
+        let part: String = chars[at..end].iter().collect();
+        rows.push(if rows.is_empty() { part } else { format!("{}{part}", " ".repeat(indent + 2)) });
+        at = end;
+    }
+    rows
+}
+
+/// A window with `lines` (wrapped to its width) and a key line under them.
+/// With too many lines for the screen, the last ones are shown (what a
+/// running log has just said). Returns the area.
 fn draw_box(frame: &mut Frame, title: &str, lines: Vec<Line>) -> Rect {
-    let content_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
-    let width = (content_width + 4).max(title.chars().count() as u16 + 6).max(30);
-    let area = centered(
-        frame.area(),
-        width.min(frame.area().width.saturating_sub(2)),
-        lines.len() as u16 + 2,
-    );
+    draw_box_fixed(frame, title, lines, None)
+}
+
+/// [`draw_box`] with the height of the content always `rows` (blank rows
+/// below it), so the window does not change size while its content does.
+fn draw_box_fixed(frame: &mut Frame, title: &str, lines: Vec<Line>, rows: Option<usize>) -> Rect {
+    let screen = frame.area();
+    let width = box_width(screen);
+    let inner_width = width.saturating_sub(4) as usize;
+    let mut wrapped: Vec<Line> = Vec::new();
+    for line in lines {
+        let style = line.spans.first().map(|s| s.style).unwrap_or_default();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        for part in hard_wrap(&text, inner_width) {
+            wrapped.push(Line::styled(part, style));
+        }
+    }
+    let room = screen.height.saturating_sub(4) as usize;
+    let height = rows.unwrap_or(wrapped.len()).min(room);
+    if wrapped.len() > height {
+        // The last rows matter (the verdict, the key line).
+        let cut = wrapped.len() - height + 1;
+        wrapped.drain(..cut);
+        wrapped.insert(0, Line::styled(format!("… ({cut} earlier lines)"), dim()));
+    }
+    while wrapped.len() < height {
+        wrapped.push(Line::raw(""));
+    }
+    let area = centered(screen, width, height as u16 + 2);
     frame.render_widget(Clear, area);
     let block = Block::bordered().title(Line::styled(format!(" {title} "), bold()));
-    frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    frame.render_widget(Paragraph::new(wrapped).block(block), area);
     area
 }
 
@@ -586,31 +646,56 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-fn draw_input(frame: &mut Frame, dialog: &InputDialog) {
-    let width = 72.min(frame.area().width.saturating_sub(2));
-    // The prompt may need several lines; the preview (multi-rename, the
-    // address of a connection) adds a blank line and its own lines.
-    let prompt = wrap(&dialog.prompt, width.saturating_sub(2) as usize);
-    let preview_rows = if dialog.preview.is_empty() { 0 } else { dialog.preview.len() + 1 };
-    let height = (5 + prompt.len() + preview_rows) as u16;
-    let height = height.min(frame.area().height.saturating_sub(2));
-    let area = centered(frame.area(), width, height);
+fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str) {
+    let screen = frame.area();
+    let width = box_width(screen);
+    let inner_width = width.saturating_sub(2) as usize;
+    // The prompt may need several lines. The lines under the field have a
+    // reserved room, so the window keeps its size while they change.
+    let prompt: Vec<String> =
+        wrap(&dialog.prompt, inner_width).iter().flat_map(|l| hard_wrap(l, inner_width)).collect();
+    let reserved = dialog.purpose.preview_rows();
+    let preview: Vec<String> = dialog
+        .preview
+        .iter()
+        .flat_map(|l| hard_wrap(l, inner_width))
+        .take(reserved.max(1))
+        .collect();
+    // A path longer than the field is shown whole below it.
+    let field_width = inner_width.saturating_sub(2);
+    let overflow = dialog.shown().text().chars().count() > field_width;
+    let full: Vec<String> = if overflow {
+        hard_wrap(dialog.shown().text(), inner_width.saturating_sub(2))
+    } else {
+        Vec::new()
+    };
+    let full_rows = if dialog.purpose.is_path() { full.len().max(1) } else { 0 };
+    let preview_rows = reserved + 1;
+    let height = (5 + prompt.len() + full_rows + preview_rows) as u16;
+    let height = height.min(screen.height.saturating_sub(2));
+    let area = centered(screen, width, height);
     frame.render_widget(Clear, area);
     let block = Block::bordered().title(Line::styled(format!(" {} ", dialog.title), bold()));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let field_width = inner.width.saturating_sub(2) as usize;
     let (visible, column) = field_window(&dialog.shown(), field_width);
-    let mut lines: Vec<Line> =
-        prompt.iter().map(|l| Line::raw(fit(l, inner.width as usize))).collect();
+    let mut lines: Vec<Line> = prompt.iter().map(|l| Line::raw(l.clone())).collect();
     lines
         .push(Line::styled(format!(" {visible:<field_width$} "), Style::new().bg(Color::DarkGray)));
-    if !dialog.preview.is_empty() {
-        lines.push(Line::raw(""));
-        lines.extend(dialog.preview.iter().map(|l| Line::raw(fit(l, inner.width as usize))));
+    if full_rows > 0 {
+        for i in 0..full_rows {
+            let row = full.get(i).cloned().unwrap_or_default();
+            lines.push(Line::styled(format!(" {row}"), dim()));
+        }
     }
     lines.push(Line::raw(""));
-    lines.push(Line::styled(dialog.hint(), dim()));
+    for i in 0..reserved {
+        lines.push(Line::raw(preview.get(i).cloned().unwrap_or_default()));
+    }
+    lines.push(Line::raw(""));
+    for row in hard_wrap(hint, inner_width) {
+        lines.push(Line::styled(row, dim()));
+    }
     frame.render_widget(Paragraph::new(lines), inner);
     frame.set_cursor_position(Position {
         x: inner.x + 1 + column as u16,
@@ -619,19 +704,33 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog) {
 }
 
 /// Draws a list dialog; returns its page height.
-fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog) -> usize {
+fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog, footer: &str) -> usize {
     let area = frame.area();
-    let width = (dialog.items.iter().map(|i| i.chars().count()).max().unwrap_or(20) + 4)
-        .max(dialog.title.chars().count() + 6)
-        .max(dialog.footer.chars().count() + 4)
-        .max(40)
-        .min(area.width.saturating_sub(2) as usize) as u16;
-    let height = (dialog.items.len() as u16 + 3).clamp(5, area.height.saturating_sub(2));
+    let longest = dialog.items.iter().map(|i| i.chars().count()).max().unwrap_or(20);
+    let filtering = dialog.keeps_size();
+    // A list that is filtered while typing keeps one size whatever is left
+    // in it; others fit their rows, but never less than half the screen.
+    let width = if filtering {
+        box_width(area) as usize
+    } else {
+        (longest + 4)
+            .max(dialog.title.chars().count() + 6)
+            .max(footer.chars().count() + 4)
+            .max(40)
+            .max(area.width as usize / 2)
+    }
+    .min(area.width.saturating_sub(2) as usize) as u16;
+    let room = area.height.saturating_sub(2);
+    let height = if filtering {
+        (area.height * 7 / 10).max(8).min(room)
+    } else {
+        (dialog.items.len() as u16 + 3).clamp(5, room)
+    };
     let rect = centered(area, width, height);
     frame.render_widget(Clear, rect);
     let block = Block::bordered()
         .title(Line::styled(format!(" {} ", dialog.title), bold()))
-        .title_bottom(Line::styled(format!(" {} ", dialog.footer), dim()));
+        .title_bottom(Line::styled(format!(" {footer} "), dim()));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     let rows = inner.height as usize;
@@ -854,21 +953,27 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
         vec![Line::styled("No transfers", dim())]
     } else {
         let mut lines = Vec::new();
-        for (i, job) in app.jobs.iter().enumerate() {
+        // Three rows a job; the highlighted one stays in sight.
+        let visible = (inner.height as usize / 3).max(1);
+        let offset = (cursor + 1).saturating_sub(visible);
+        for (i, job) in app.jobs.iter().enumerate().skip(offset) {
             let text = fit(&job_line(job, app), inner.width as usize);
-            let route = fit(&format!("      {}", job_route(job, app)), inner.width as usize);
+            let width = inner.width as usize;
+            let route = fit(&format!("      {}", job_route(job, app)), width);
+            let how = fit(&format!("      {}", job_transport(job, app)), width);
             let style = match job.state {
                 JobState::Failed => Style::new().fg(Color::Red),
                 JobState::Completed | JobState::Cancelled => dim(),
                 _ => Style::new(),
             };
-            if i == cursor {
-                lines.push(Line::styled(text, style.add_modifier(Modifier::REVERSED)));
-                lines.push(Line::styled(route, style.add_modifier(Modifier::REVERSED)));
+            let (first, rest) = if i == cursor {
+                (style.add_modifier(Modifier::REVERSED), style.add_modifier(Modifier::REVERSED))
             } else {
-                lines.push(Line::styled(text, style));
-                lines.push(Line::styled(route, dim()));
-            }
+                (style, dim())
+            };
+            lines.push(Line::styled(text, first));
+            lines.push(Line::styled(route, rest));
+            lines.push(Line::styled(how, rest));
         }
         lines
     };

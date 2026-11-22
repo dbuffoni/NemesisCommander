@@ -27,6 +27,8 @@ use crate::launch::{agent_binary, ssh_run};
 const REMOTE_BINARY: &str = ".local/bin/nmc";
 /// Where the server's certificate bundle goes.
 const REMOTE_TLS_DIR: &str = ".config/nmc/serve-tls";
+/// How many times the new server is contacted before giving up.
+const CONNECT_ATTEMPTS: u32 = 4;
 /// The name of the systemd unit.
 const UNIT_NAME: &str = "nmc-serve.service";
 
@@ -104,20 +106,62 @@ pub fn location(name: &str, port: u16) -> String {
     format!("scs://{name}:{port}/")
 }
 
+/// The command as one short line for the log: `$ ssh me@nas  uname -sm; …`.
+fn command_line(target: &Target, script: &str, input: &Option<PathBuf>) -> String {
+    let flat: String = script.split_whitespace().collect::<Vec<_>>().join(" ");
+    let short = if flat.chars().count() > 110 {
+        format!("{}…", flat.chars().take(110).collect::<String>())
+    } else {
+        flat
+    };
+    let feeding = match input {
+        Some(file) => format!("  < {}", file.display()),
+        None => String::new(),
+    };
+    format!("$ ssh {}  {short}{feeding}", target.host)
+}
+
 /// Runs `script` on the server, optionally feeding it the contents of `input`.
-async fn run(target: &Target, script: &str, input: Option<PathBuf>) -> Result<String, String> {
-    ssh_run(target, script, input).await
+/// The command line and what came of it are told to `log`, so a failure can
+/// be followed step by step.
+async fn run(
+    target: &Target,
+    script: &str,
+    input: Option<PathBuf>,
+    log: &mut (dyn FnMut(&str) + Send),
+) -> Result<String, String> {
+    log(&command_line(target, script, &input));
+    let result = ssh_run(target, script, input).await;
+    match &result {
+        Ok(out) => {
+            for line in out.lines().filter(|l| !l.trim().is_empty()).take(6) {
+                log(&format!("    {line}"));
+            }
+        }
+        Err(e) => {
+            for line in e.lines().filter(|l| !l.trim().is_empty()).take(6) {
+                log(&format!("    ! {line}"));
+            }
+        }
+    }
+    result
 }
 
 /// Copies the local file `from` to `~/<relative>` on the server, with the
 /// permission `mode` (octal text), through `.part` and a rename.
-async fn upload(target: &Target, from: &Path, relative: &str, mode: &str) -> Result<(), String> {
+async fn upload(
+    target: &Target,
+    from: &Path,
+    relative: &str,
+    mode: &str,
+    log: &mut (dyn FnMut(&str) + Send),
+) -> Result<(), String> {
     let (dir, name) = relative.rsplit_once('/').unwrap_or((".", relative));
     let script = format!(
         "d=\"$HOME/{dir}\"; mkdir -p \"$d\" && cat > \"$d/{name}.part\" && \
          chmod {mode} \"$d/{name}.part\" && mv \"$d/{name}.part\" \"$d/{name}\""
     );
-    run(target, &script, Some(from.to_owned())).await.map(drop)
+    run(target, &script, Some(from.to_owned()), log).await.map(drop)
 }
 
 /// Checks that `nmc serve` could be installed on the server, without
@@ -126,7 +170,7 @@ async fn upload(target: &Target, from: &Path, relative: &str, mode: &str) -> Res
 /// on this computer. `found` is told what each check found.
 pub async fn check_serve(
     options: &InstallOptions,
-    mut found: impl FnMut(&str),
+    mut found: impl FnMut(&str) + Send,
 ) -> Result<(), String> {
     let target = Target::parse(&options.authority)?;
     found(&format!("Connecting to {} over SSH…", target.host));
@@ -135,6 +179,7 @@ pub async fn check_serve(
         "uname -sm; command -v systemctl >/dev/null && echo systemd || echo no-systemd; \
          test -w \"$HOME\" && echo home-ok || echo home-readonly",
         None,
+        &mut found,
     )
     .await
     .map_err(|e| {
@@ -183,6 +228,7 @@ pub async fn check_serve(
             port = options.port
         ),
         None,
+        &mut found,
     )
     .await?;
     let state: Vec<&str> = state.lines().collect();
@@ -216,7 +262,7 @@ pub async fn check_serve(
 /// is being done. Returns the `scs://` location to open afterwards.
 pub async fn install_serve(
     options: &InstallOptions,
-    mut progress: impl FnMut(&str),
+    mut progress: impl FnMut(&str) + Send,
 ) -> Result<String, String> {
     let target = Target::parse(&options.authority)?;
     let name = options.name.clone().unwrap_or_else(|| target.host.clone());
@@ -231,8 +277,13 @@ pub async fn install_serve(
     .map_err(|e| e.to_string())?;
 
     progress("Checking the server");
-    let system =
-        run(&target, "uname -sm; command -v systemctl >/dev/null && echo systemd", None).await?;
+    let system = run(
+        &target,
+        "uname -sm; command -v systemctl >/dev/null && echo systemd",
+        None,
+        &mut progress,
+    )
+    .await?;
     let mut lines = system.lines();
     let platform = lines.next().unwrap_or_default();
     if !platform.starts_with("Linux") {
@@ -253,12 +304,13 @@ pub async fn install_serve(
     let result = async {
         std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;
         progress("Copying nmc");
-        upload(&target, &binary, REMOTE_BINARY, "755").await?;
+        upload(&target, &binary, REMOTE_BINARY, "755", &mut progress).await?;
 
         let has_certificate = run(
             &target,
             &format!("test -f \"$HOME/{REMOTE_TLS_DIR}/server.pem\" && echo yes || echo no"),
             None,
+            &mut progress,
         )
         .await?
             == "yes";
@@ -270,7 +322,13 @@ pub async fn install_serve(
             identity
                 .issue_server(std::slice::from_ref(&name), &bundle)
                 .map_err(|e| e.to_string())?;
-            run(&target, &format!("umask 077; mkdir -p \"$HOME/{REMOTE_TLS_DIR}\""), None).await?;
+            run(
+                &target,
+                &format!("umask 077; mkdir -p \"$HOME/{REMOTE_TLS_DIR}\""),
+                None,
+                &mut progress,
+            )
+            .await?;
             for file in [
                 "ca.pem",
                 "controller.pem",
@@ -280,15 +338,22 @@ pub async fn install_serve(
                 "controller-token.pub",
             ] {
                 let mode = if file == "server.key" { "600" } else { "644" };
-                upload(&target, &bundle.join(file), &format!("{REMOTE_TLS_DIR}/{file}"), mode)
-                    .await?;
+                upload(
+                    &target,
+                    &bundle.join(file),
+                    &format!("{REMOTE_TLS_DIR}/{file}"),
+                    mode,
+                    &mut progress,
+                )
+                .await?;
             }
         }
 
         progress("Starting the service");
         let unit = scratch.join(UNIT_NAME);
         std::fs::write(&unit, systemd_unit(options)).map_err(|e| e.to_string())?;
-        upload(&target, &unit, &format!(".config/systemd/user/{UNIT_NAME}"), "644").await?;
+        upload(&target, &unit, &format!(".config/systemd/user/{UNIT_NAME}"), "644", &mut progress)
+            .await?;
         run(
             &target,
             &format!(
@@ -297,6 +362,7 @@ pub async fn install_serve(
                  {{ loginctl enable-linger \"$(id -un)\" || true; }}"
             ),
             None,
+            &mut progress,
         )
         .await?;
         Ok::<_, String>(())
@@ -308,25 +374,59 @@ pub async fn install_serve(
     progress("Connecting to the new server");
     let config = identity.client_config().map_err(|e| e.to_string())?;
     let mut last = String::new();
-    for _ in 0..8 {
+    for attempt in 1..=CONNECT_ATTEMPTS {
         tokio::time::sleep(Duration::from_secs(1)).await;
+        progress(&format!(
+            "Contacting {name}:{} with TLS (attempt {attempt} of {CONNECT_ATTEMPTS}, \
+             {} s at most)",
+            options.port,
+            crate::serve::CONNECT_TIMEOUT.as_secs()
+        ));
         match crate::serve::connect(config.clone(), &name, options.port, None).await {
             Ok(_) => return Ok(location(&name, options.port)),
-            Err(e) => last = e,
+            Err(e) => {
+                progress(&format!("    no answer: {e}"));
+                last = e;
+            }
         }
     }
-    Err(format!(
-        "installed, but {name}:{} does not answer ({last}); is the port open in the firewall? \
-         See `journalctl --user -u nmc-serve` on the server",
-        options.port
-    ))
+    // Nothing answers: ask the server itself what it sees.
+    progress("Asking the server why (service state, listening ports, its log)");
+    let port = options.port;
+    let report = run(
+        &target,
+        &format!(
+            "echo \"service: $(systemctl --user is-active {UNIT_NAME} 2>&1)\"; \
+             {{ ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null; }} | grep \":{port}[[:space:]]\" \
+               || echo \"nothing listens on port {port}\"; \
+             journalctl --user -u nmc-serve -n 12 --no-pager 2>&1 | tail -n 12"
+        ),
+        None,
+        &mut progress,
+    )
+    .await
+    .unwrap_or_default();
+    let listening =
+        report.lines().any(|l| l.contains(&format!(":{port}")) && !l.contains("nothing"));
+    let advice = if listening {
+        format!(
+            "the service listens on port {port}, but this computer cannot reach it: open TCP \
+             port {port} in the firewall of the server (or of the network in between)"
+        )
+    } else {
+        format!(
+            "the service does not listen on port {port}: read its log above, or run \
+             `journalctl --user -u nmc-serve` on the server"
+        )
+    };
+    Err(format!("installed, but {name}:{port} does not answer ({last}); {advice}"))
 }
 
 /// Stops and removes `nmc serve` (the unit and the certificates; the
 /// program stays) on the server.
 pub async fn uninstall_serve(
     authority: &str,
-    mut progress: impl FnMut(&str),
+    mut progress: impl FnMut(&str) + Send,
 ) -> Result<(), String> {
     let target = Target::parse(authority)?;
     progress("Stopping the service");
@@ -338,6 +438,7 @@ pub async fn uninstall_serve(
              systemctl --user daemon-reload; rm -rf \"$HOME/{REMOTE_TLS_DIR}\"; true"
         ),
         None,
+        &mut progress,
     )
     .await
     .map(drop)

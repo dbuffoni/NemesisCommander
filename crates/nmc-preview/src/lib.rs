@@ -19,6 +19,7 @@
 //! a terminal or a window draws with one fixed-width font. Everything here
 //! is plain data in, plain data out: no interface, no files, no threads.
 
+pub mod binary;
 pub mod ebook;
 pub mod markdown;
 pub mod media;

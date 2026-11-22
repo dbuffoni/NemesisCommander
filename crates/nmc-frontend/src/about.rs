@@ -94,6 +94,7 @@ pub fn dialog() -> MessageDialog {
         then: None,
         then_choose: None,
         logo: true,
+        busy: false,
     }
 }
 

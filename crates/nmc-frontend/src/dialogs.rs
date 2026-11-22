@@ -271,6 +271,37 @@ impl InputPurpose {
             )
     }
 
+    /// How many rows under the field the question reserves for what is
+    /// written there while typing (examples, what was understood, the new
+    /// names): the window keeps its size whatever is shown. At least one,
+    /// for the error that may come after Enter.
+    pub fn preview_rows(&self) -> usize {
+        match self {
+            InputPurpose::InstallServe => 10,
+            purpose if purpose.is_address() => 8,
+            InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 12,
+            _ => 1,
+        }
+    }
+
+    /// Whether the answer is a place (a path or an address), shown whole
+    /// under the field when it does not fit in it.
+    pub fn is_path(&self) -> bool {
+        matches!(
+            self,
+            InputPurpose::CopyTo(_)
+                | InputPurpose::MoveTo(_)
+                | InputPurpose::GoTo
+                | InputPurpose::PackInto(_)
+                | InputPurpose::PackAdvanced { .. }
+                | InputPurpose::ExportTo { .. }
+                | InputPurpose::ExportSettings
+                | InputPurpose::ImportSettings
+                | InputPurpose::NewConnection
+                | InputPurpose::EditConnection { .. }
+        )
+    }
+
     /// The settings screen a dialog opened from, to go back to.
     pub fn settings_screen(&self) -> Option<&SettingsScreen> {
         match self {
@@ -360,6 +391,11 @@ pub enum ConfirmPurpose {
     },
     /// Run a plugin command or a script (allowing it first).
     RunPlugin(crate::app::PluginChoice),
+    /// Install `nmc serve` as typed in the question (server and options).
+    InstallServe(String),
+    /// A server of a saved `scs://` location does not answer: offer to
+    /// install `nmc serve` there (its host).
+    OfferInstall(String),
 }
 
 /// A yes/no question.
@@ -498,6 +534,12 @@ impl ChooseDialog {
         }
     }
 
+    /// Whether the rows change while the list is open (filtered while typing,
+    /// search results arriving): the window then keeps one size.
+    pub fn keeps_size(&self) -> bool {
+        self.query.is_some() || matches!(self.purpose, ChoosePurpose::SearchResults(_))
+    }
+
     /// Moves the cursor by `delta`, clamped to the list.
     pub fn move_cursor(&mut self, delta: isize) {
         let last = self.items.len().saturating_sub(1);
@@ -518,11 +560,28 @@ pub struct MessageDialog {
     pub then_choose: Option<Box<ChooseDialog>>,
     /// The logo is shown above the text (About).
     pub logo: bool,
+    /// The work behind it is still going: lines are added as it goes.
+    pub busy: bool,
 }
 
 impl MessageDialog {
+    /// A plain message.
+    pub fn new(title: &str, lines: Vec<String>) -> Self {
+        MessageDialog {
+            title: title.to_owned(),
+            lines,
+            then: None,
+            then_choose: None,
+            logo: false,
+            busy: false,
+        }
+    }
+
     /// The hint below the text: `Enter: <next dialog>   Esc: close`.
     pub fn hint(&self) -> String {
+        if self.busy {
+            return "Working…   Esc: close this window (the work goes on)".into();
+        }
         match (&self.then, &self.then_choose) {
             (Some(next), _) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),
             (None, Some(next)) => format!("Enter: {}   Esc: close", next.title.to_lowercase()),

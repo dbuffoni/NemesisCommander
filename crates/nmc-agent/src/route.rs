@@ -89,6 +89,14 @@ pub enum Outcome {
     UseController(Vec<String>),
 }
 
+/// What a failed server-to-server copy says: which server did the work, by
+/// which route, and what it answered (never only a bare code).
+fn describe(worker: (&str, u16), route: Route, status: &tonic::Status) -> String {
+    let said = status.message().trim();
+    let said = if said.is_empty() { "no details given" } else { said };
+    format!("{} copy by {}:{} failed ({:?}): {said}", route, worker.0, worker.1, status.code())
+}
+
 /// Tries `routes` in order (only [`Route::Direct`] and [`Route::Reverse`]
 /// are attempted here), calling `progress` with each progress message.
 ///
@@ -157,10 +165,10 @@ pub async fn copy_between_servers(
                 unreachable.push(format!("{route}: {}", status.message()));
                 continue;
             }
-            Err(status) => return Err(status.message().to_owned()),
+            Err(status) => return Err(describe(worker, route, &status)),
         };
         while let Some(message) = stream.next().await {
-            let message = message.map_err(|status| status.message().to_owned())?;
+            let message = message.map_err(|status| describe(worker, route, &status))?;
             progress(&message);
             if message.finished {
                 return Ok(Outcome::Copied(route, message));
