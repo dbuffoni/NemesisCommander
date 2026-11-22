@@ -50,6 +50,8 @@ pub enum Field {
     UseTrash,
     /// Editor command for F4.
     Editor,
+    /// Command that opens a terminal in the folder.
+    Terminal,
     /// Show hidden files.
     ShowHidden,
     /// Initial sort column.
@@ -142,10 +144,11 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 25] = [
+    pub const ALL: [Field; 26] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
+        Field::Terminal,
         Field::ShowHidden,
         Field::Sort,
         Field::Descending,
@@ -174,7 +177,7 @@ impl Field {
     pub fn section(self) -> &'static str {
         use Field::*;
         match self {
-            ConfirmDelete | UseTrash | Editor => "General",
+            ConfirmDelete | UseTrash | Editor | Terminal => "General",
             ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
                 "Panels"
             }
@@ -192,6 +195,7 @@ impl Field {
             ConfirmDelete => "Ask before deleting",
             UseTrash => "Delete to the recycle bin",
             Editor => "Editor (empty: $EDITOR or the system's)",
+            Terminal => "Terminal command, {dir} is the folder (empty: the system's)",
             ShowHidden => "Show hidden files",
             Sort => "Sort by",
             Descending => "Largest, latest or last first",
@@ -225,7 +229,7 @@ impl Field {
             ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
             | GitStatus | Icons | Wrap | VerifyRemoteFast | KeepStats => FieldKind::Toggle,
             Sort | Verify | Conflict | AutoParallelism | Profile => FieldKind::Choice,
-            Editor => FieldKind::Text,
+            Editor | Terminal => FieldKind::Text,
             FontFamily | FixedFontFamily => FieldKind::Font,
             FontSize => FieldKind::Number(0, 48),
             ParallelJobs => FieldKind::Number(1, 64),
@@ -246,6 +250,7 @@ impl Field {
             ConfirmDelete => on(g.confirm_delete),
             UseTrash => on(g.use_trash),
             Editor => g.editor.clone(),
+            Terminal => g.terminal.clone(),
             ShowHidden => on(p.show_hidden),
             Sort => name_of(&SORTS, p.sort),
             Descending => on(p.descending),
@@ -294,7 +299,7 @@ impl Field {
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),
             Conflict => t.conflict = cycle(&CONFLICTS, t.conflict, delta),
-            Editor | FontFamily | FixedFontFamily => {}
+            Editor | Terminal | FontFamily | FixedFontFamily => {}
             _ => {
                 let current: u64 = self.value(config).parse().unwrap_or(0);
                 let next = current.saturating_add_signed(delta);
@@ -326,6 +331,7 @@ impl Field {
         }
         match self {
             Field::Editor => config.general.editor = text.to_owned(),
+            Field::Terminal => config.general.terminal = text.to_owned(),
             Field::FontFamily => config.appearance.font_family = text.to_owned(),
             Field::FixedFontFamily => config.appearance.fixed_font_family = text.to_owned(),
             _ => {}
@@ -676,7 +682,7 @@ mod tests {
         assert_eq!(screen.current(), Row::Option(Field::ConfirmDelete));
         screen.move_cursor(-1);
         assert_eq!(screen.current(), Row::Option(Field::ConfirmDelete), "stays on the first");
-        screen.move_cursor(3);
+        screen.move_cursor(4);
         assert_eq!(screen.current(), Row::Option(Field::ShowHidden), "over the Panels title");
         screen.move_cursor(1000);
         assert_eq!(screen.current(), Row::Command(Command::EditFile));

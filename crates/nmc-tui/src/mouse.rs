@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use nmc_config::Action;
-use nmc_frontend::App;
+use nmc_frontend::{App, side_index};
 use nmc_panel::SideId;
 use ratatui::layout::{Constraint, Layout, Rect};
 
@@ -52,6 +52,8 @@ impl Pointer {
             self.pressed = None;
             return;
         };
+        // The text of nmc_folder.md pushes the rows down.
+        let row = row.and_then(|row| row.checked_sub(app.note_rows[side_index(side)]));
         match event.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 let Some(row) = row else {

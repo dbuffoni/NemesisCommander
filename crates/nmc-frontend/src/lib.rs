@@ -39,12 +39,14 @@ pub mod settings;
 pub mod similar;
 pub mod speed;
 pub mod syncplan;
+pub mod terminal;
 pub mod usage;
 pub mod view;
 pub mod viewer;
 
 pub use app::{
-    App, AppEvent, External, PickMode, Status, display_location, resolve_location, side_index,
+    App, AppEvent, ColumnCells, ColumnHead, External, PickMode, Status, display_location,
+    resolve_location, side_index,
 };
 pub use dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,

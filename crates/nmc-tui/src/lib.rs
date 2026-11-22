@@ -20,7 +20,8 @@ use std::io;
 
 use crossterm::event::{
     DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, Event,
-    EventStream, KeyCode, KeyEventKind, KeyModifiers,
+    EventStream, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use futures::StreamExt;
 use nmc_app::AppContext;
@@ -42,8 +43,9 @@ pub async fn run(
     context: AppContext,
     left: Option<VfsPath>,
     right: Option<VfsPath>,
+    cwd_file: Option<std::path::PathBuf>,
 ) -> io::Result<()> {
-    run_app(context, left, right, None).await.map(|_| ())
+    run_app(context, left, right, None, cwd_file).await.map(|_| ())
 }
 
 /// Runs the terminal interface as a chooser (`nmc pick`) and returns what
@@ -56,14 +58,28 @@ pub async fn pick(
     start: Option<VfsPath>,
     mode: PickMode,
 ) -> io::Result<Option<Vec<VfsPath>>> {
-    run_app(context, start, None, Some(mode)).await
+    run_app(context, start, None, Some(mode), None).await
 }
+
+/// What the keyboard protocol is asked to report: key releases, so that
+/// holding and letting go of Shift or Ctrl is seen, the modifier keys on
+/// their own, and the shifted character of a key.
+/// Whether the keyboard protocol was switched on (and is to be switched off).
+static PROTOCOL_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+const KEYBOARD_FLAGS: KeyboardEnhancementFlags =
+    KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+        .union(KeyboardEnhancementFlags::REPORT_EVENT_TYPES)
+        .union(KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS)
+        .union(KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES);
 
 /// Where the interface is drawn: standard output, or standard error in pick
 /// mode. Switches the terminal to the alternate screen in raw mode.
 struct Screen {
     terminal: ratatui::Terminal<ratatui::backend::CrosstermBackend<Box<dyn io::Write>>>,
     to_stderr: bool,
+    /// The terminal reports modifier keys on their own.
+    enhanced: bool,
 }
 
 impl Screen {
@@ -87,14 +103,25 @@ impl Screen {
             EnableMouseCapture,
             EnableBracketedPaste
         )?;
+        // Ask a terminal with the keyboard protocol (kitty, WezTerm, foot,
+        // Warp, recent Windows Terminal...) to report Ctrl, Alt and Shift
+        // on their own, so the function key bar can follow them. Others
+        // only report them together with another key and keep working as
+        // before.
+        let enhanced = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false)
+            && crossterm::execute!(writer, PushKeyboardEnhancementFlags(KEYBOARD_FLAGS)).is_ok();
+        PROTOCOL_ON.store(enhanced, std::sync::atomic::Ordering::Relaxed);
         let backend = ratatui::backend::CrosstermBackend::new(writer);
         let terminal = ratatui::Terminal::new(backend)?;
-        Ok(Screen { terminal, to_stderr })
+        Ok(Screen { terminal, to_stderr, enhanced })
     }
 
     fn restore(to_stderr: bool) {
         use crossterm::terminal::{LeaveAlternateScreen, disable_raw_mode};
         let mut writer = Self::writer(to_stderr);
+        if PROTOCOL_ON.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            let _ = crossterm::execute!(writer, PopKeyboardEnhancementFlags);
+        }
         let _ = crossterm::execute!(
             writer,
             DisableBracketedPaste,
@@ -117,6 +144,7 @@ async fn run_app(
     left: Option<VfsPath>,
     right: Option<VfsPath>,
     pick: Option<PickMode>,
+    cwd_file: Option<std::path::PathBuf>,
 ) -> io::Result<Option<Vec<VfsPath>>> {
     use std::io::IsTerminal;
     // A chooser draws on standard error, so only that has to be a terminal.
@@ -135,6 +163,7 @@ async fn run_app(
     if let Some(mode) = pick {
         app.set_picker(mode);
     }
+    app.set_cwd_file(cwd_file);
 
     let mut screen = Screen::open(drawn_on_stderr)?;
     let mut pointer = Pointer::default();
@@ -162,7 +191,14 @@ async fn run_app(
                         );
                     } else if let Some(press) = key_press(&event) {
                         app.handle_key(press);
-                        app.set_modifiers(false, false, false);
+                        // With the protocol the keys still held stay shown;
+                        // without it, only a key pressed together is known.
+                        let held = event.modifiers;
+                        app.set_modifiers(
+                            screen.enhanced && held.contains(KeyModifiers::CONTROL),
+                            screen.enhanced && held.contains(KeyModifiers::ALT),
+                            screen.enhanced && held.contains(KeyModifiers::SHIFT),
+                        );
                     }
                 }
                 Some(Ok(Event::Mouse(event))) => {
@@ -194,6 +230,10 @@ async fn run_app(
         }
     };
     drop(screen);
+    // The shell function of `nmc shell-init` moves to this folder.
+    if let Some((file, dir)) = app.cwd_to_write() {
+        let _ = std::fs::write(file, dir);
+    }
     result.map(|()| app.picked().map(<[VfsPath]>::to_vec))
 }
 

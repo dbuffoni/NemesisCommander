@@ -32,6 +32,21 @@ const CONNECT_ATTEMPTS: u32 = 4;
 /// The name of the systemd unit.
 const UNIT_NAME: &str = "nmc-serve.service";
 
+/// What an install error says when the service stopped because lingering
+/// is off on the server (the front end then offers to turn it on).
+pub const LINGER_OFF: &str = "lingering is off on the server";
+
+/// The password of `sudo` on the server, used once to turn lingering on. It
+/// is never printed, logged or saved.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SudoPassword(pub String);
+
+impl std::fmt::Debug for SudoPassword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SudoPassword(***)")
+    }
+}
+
 /// What to install and how.
 #[derive(Debug, Clone)]
 pub struct InstallOptions {
@@ -50,6 +65,9 @@ pub struct InstallOptions {
     pub renew: bool,
     /// The controller's certificate folder (`paths.tls_dir()`).
     pub tls_dir: PathBuf,
+    /// The `sudo` password of the server's user, to enable lingering when
+    /// the install finds it off (asked after the first attempt).
+    pub sudo_password: Option<SudoPassword>,
 }
 
 impl InstallOptions {
@@ -63,6 +81,7 @@ impl InstallOptions {
             read_only: false,
             renew: false,
             tls_dir,
+            sudo_password: None,
         }
     }
 }
@@ -375,6 +394,7 @@ pub async fn install_serve(
     let config = identity.client_config().map_err(|e| e.to_string())?;
     let mut last = String::new();
     let mut answered = false;
+    let mut linger_off = false;
     for attempt in 1..=CONNECT_ATTEMPTS {
         tokio::time::sleep(Duration::from_secs(1)).await;
         progress(&format!(
@@ -408,9 +428,18 @@ pub async fn install_serve(
         )
         .await
         .unwrap_or_default();
-        if linger.trim() == "no" {
+        let mut linger = linger.trim().to_owned();
+        if linger == "no" {
             progress("    lingering is OFF: the service stops when the last login ends");
+            if let Some(password) = &options.sudo_password {
+                progress("Turning lingering on with sudo");
+                match enable_linger(&target, &password.0, &mut progress).await {
+                    Ok(()) => linger = "yes".into(),
+                    Err(e) => progress(&format!("    sudo failed: {e}")),
+                }
+            }
         }
+        linger_off = linger == "no";
         tokio::time::sleep(Duration::from_secs(6)).await;
         progress(&format!("Contacting {name}:{} again, after the sessions closed", options.port));
         match crate::serve::connect(config.clone(), &name, options.port, None).await {
@@ -442,7 +471,12 @@ pub async fn install_serve(
     .unwrap_or_default();
     let listening =
         report.lines().any(|l| l.contains(&format!(":{port}")) && !l.contains("nothing"));
-    let advice = if listening {
+    let advice = if linger_off {
+        format!(
+            "{LINGER_OFF}: the service stops with the last login. Give the sudo password to turn \
+             it on, or run `sudo loginctl enable-linger $USER` there"
+        )
+    } else if listening {
         format!(
             "the service listens on port {port}, but this computer cannot reach it: open TCP \
              port {port} in the firewall of the server (or of the network in between)"
@@ -455,6 +489,48 @@ pub async fn install_serve(
         )
     };
     Err(format!("installed, but {name}:{port} does not answer ({last}); {advice}"))
+}
+
+/// Turns lingering on for the user of `target` with `sudo`, reading the
+/// password from a file only this user can read, which is deleted at once.
+/// The password is not part of the command line nor of the log.
+pub async fn enable_linger(
+    target: &Target,
+    password: &str,
+    log: &mut (dyn FnMut(&str) + Send),
+) -> Result<(), String> {
+    let file = std::env::temp_dir().join(format!("nmc-sudo-{}", std::process::id()));
+    {
+        use std::io::Write;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut handle = options.open(&file).map_err(|e| e.to_string())?;
+        writeln!(handle, "{password}").map_err(|e| e.to_string())?;
+    }
+    let result = run(
+        target,
+        "sudo -S -p \"\" loginctl enable-linger \"$(id -un)\" 2>&1; \
+         echo \"lingering: $(loginctl show-user \"$(id -un)\" -p Linger --value 2>&1)\"",
+        Some(file.clone()),
+        log,
+    )
+    .await;
+    let _ = std::fs::remove_file(&file);
+    let out = result?;
+    if out.lines().any(|l| l.trim() == "lingering: yes") {
+        Ok(())
+    } else {
+        Err(out
+            .lines()
+            .find(|l| !l.starts_with("lingering:"))
+            .unwrap_or("sudo did not accept the password")
+            .to_owned())
+    }
 }
 
 /// Stops and removes `nmc serve` (the unit and the certificates; the

@@ -1,0 +1,28 @@
+[package]
+name = "nmc-mcp"
+description = "NemesisCommander as an MCP server (`nmc mcp`): file operations on every location for AI assistants, limited by folder grants."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+nmc-vfs.workspace = true
+nmc-ops.workspace = true
+nmc-hash.workspace = true
+nmc-index.workspace = true
+nmc-script.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "io-std", "fs"] }
+tokio-util.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+nmc-providers.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

@@ -4,12 +4,15 @@ mod ai;
 mod archive;
 mod files;
 mod find;
+#[cfg(feature = "mcp")]
+mod mcp;
 mod pick;
 mod rename;
 mod script;
 mod script_test;
 mod serve;
 mod settings;
+mod shell;
 mod transfer;
 
 use std::process::ExitCode;
@@ -28,7 +31,7 @@ pub async fn run(cli: Cli) -> CmdResult {
         eprintln!("nmc: settings: {warning}");
     }
     let Some(command) = cli.command else {
-        return start_interface(context, &cli.locations).await;
+        return start_interface(context, &cli.locations, cli.cwd_file).await;
     };
     match command {
         Command::Ls(args) => files::ls(&context, args).await,
@@ -45,6 +48,11 @@ pub async fn run(cli: Cli) -> CmdResult {
         Command::Rename(args) => rename::rename(&context, args).await,
         Command::Config(args) => settings::config(context, args).await,
         Command::Keys => settings::keys(&context),
+        Command::ShellInit { shell } => shell::shell_init(shell),
+        #[cfg(feature = "mcp")]
+        Command::Mcp(args) => mcp::mcp(&context, args).await,
+        #[cfg(not(feature = "mcp"))]
+        Command::Mcp(_) => Err("this build has no MCP server (build with --features mcp)".into()),
         Command::Agent(args) => agent(context, args).await,
         Command::Serve(args) => serve::serve(&context, args).await,
         Command::Tls(args) => serve::tls(&context, args),
@@ -58,14 +66,22 @@ pub async fn run(cli: Cli) -> CmdResult {
 }
 
 #[cfg(feature = "tui")]
-async fn start_interface(context: AppContext, locations: &[String]) -> CmdResult {
+async fn start_interface(
+    context: AppContext,
+    locations: &[String],
+    cwd_file: Option<std::path::PathBuf>,
+) -> CmdResult {
     let mut panels = crate::location::parse_all(locations)?.into_iter();
-    nmc_tui::run(context, panels.next(), panels.next()).await?;
+    nmc_tui::run(context, panels.next(), panels.next(), cwd_file).await?;
     Ok(ExitCode::SUCCESS)
 }
 
 #[cfg(not(feature = "tui"))]
-async fn start_interface(_context: AppContext, _locations: &[String]) -> CmdResult {
+async fn start_interface(
+    _context: AppContext,
+    _locations: &[String],
+    _cwd_file: Option<std::path::PathBuf>,
+) -> CmdResult {
     Err("the terminal UI is not part of this build; see `nmc --help` for commands".into())
 }
 

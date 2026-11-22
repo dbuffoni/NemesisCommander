@@ -254,7 +254,11 @@ pub async fn run_install(
 
 /// The window that ends an install: says plainly whether it worked and, if
 /// so, Enter saves the connection.
-pub fn finished(lines: Vec<String>, result: Result<String, String>) -> MessageDialog {
+pub fn finished(
+    lines: Vec<String>,
+    result: Result<String, String>,
+    install_text: &str,
+) -> MessageDialog {
     match result {
         Ok(location) => {
             let mut all = vec![
@@ -277,13 +281,31 @@ pub fn finished(lines: Vec<String>, result: Result<String, String>) -> MessageDi
             ));
             window
         }
-        Err(_) => {
+        Err(error) => {
             let mut all = vec![
                 "✗ The install did not finish. Read the steps below.".to_owned(),
                 String::new(),
             ];
             all.extend(lines);
-            MessageDialog::new("Install nmc serve: failed", all)
+            let mut window = MessageDialog::new("Install nmc serve: failed", all);
+            // Lingering off: the service stops with the last login. Offer to
+            // turn it on with the sudo password of the server (asked, used
+            // once, never kept) and to run the install again.
+            if error.contains(provision::LINGER_OFF) {
+                let who = install_text.split_whitespace().next().unwrap_or("the server");
+                let mut ask = InputDialog::new(
+                    "Turn lingering on",
+                    &format!(
+                        "sudo password on {who} (used once, not saved). Lingering keeps the \
+                         service running after you log out:"
+                    ),
+                    "",
+                    InputPurpose::InstallLinger(install_text.to_owned()),
+                );
+                ask.secret = true;
+                window.then = Some(ask);
+            }
+            window
         }
     }
 }

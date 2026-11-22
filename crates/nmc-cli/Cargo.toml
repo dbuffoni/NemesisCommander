@@ -26,6 +26,7 @@ nmc-tui = { workspace = true, optional = true }
 nmc-agent.workspace = true
 nmc-tls.workspace = true
 nmc-script = { workspace = true, optional = true, features = ["engine"] }
+nmc-mcp = { workspace = true, optional = true }
 async-trait.workspace = true
 clap.workspace = true
 serde.workspace = true
@@ -38,7 +39,7 @@ reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no
 rustls = { version = "0.23.4", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
 
 [features]
-default = ["desktop", "remote", "tui", "scripting", "ai"]
+default = ["desktop", "remote", "tui", "scripting", "ai", "mcp"]
 # Desktop build: recycle bin support.
 desktop = ["nmc-app/desktop"]
 # SFTP, WebDAV, S3 and SMB locations. Agent-only server builds leave
@@ -53,6 +54,9 @@ scripting = ["dep:nmc-script", "dep:tempfile", "nmc-tui?/scripting"]
 # `nmc ai`: scripts written by Claude with the user's API key, tested with
 # `nmc test`. Agent-only server builds leave it out.
 ai = ["scripting", "dep:reqwest", "dep:rustls"]
+# `nmc mcp`: file tools for AI assistants over the MCP protocol. Agent-only
+# server builds leave it out.
+mcp = ["dep:nmc-mcp", "dep:nmc-script"]
 rar = ["nmc-app/rar"]
 
 [dev-dependencies]

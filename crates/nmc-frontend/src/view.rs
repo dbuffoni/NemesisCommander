@@ -629,6 +629,27 @@ pub fn git_of(app: &App, side: SideId) -> Option<std::sync::Arc<crate::git::GitS
     }
 }
 
+/// The text of the folder's `nmc_folder.md` laid out for `width` columns,
+/// at most `max_rows` rows (a rule closes it); empty when the folder has none.
+pub fn folder_text_lines(
+    app: &App,
+    side: SideId,
+    width: usize,
+    max_rows: usize,
+) -> Vec<nmc_preview::rich::Line> {
+    let panel = app.workspace.side(side).panel();
+    let Some((path, blocks)) = &app.folder_text[side_index(side)] else { return Vec::new() };
+    if path != panel.location() || max_rows < 2 {
+        return Vec::new();
+    }
+    let mut lines = nmc_preview::rich::layout(blocks, width);
+    while lines.last().is_some_and(|l| nmc_preview::rich::line_text(l).trim().is_empty()) {
+        lines.pop();
+    }
+    lines.truncate(max_rows - 1);
+    lines
+}
+
 /// The mark of `name`: one character, or empty.
 pub fn git_mark(git: Option<&crate::git::GitStatus>, name: &str) -> String {
     let name = name.trim_end_matches('/');

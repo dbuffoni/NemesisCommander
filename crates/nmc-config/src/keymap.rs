@@ -112,6 +112,7 @@ actions! {
     Export        = "files.export",         Files, false, "Export listing…",          [];
     Link          = "files.link",           Files, false, "Create symlink or hard link…", ["Alt+L"];
     BulkRename    = "files.bulk-rename",    Files, false, "Rename in the editor…",    [];
+    OpenTerminal  = "files.open-terminal",  Files, false, "Open terminal here",       [];
     BasketAdd     = "files.basket-add",     Files, false, "Add to basket",            ["Alt+B"];
     // Select
     ToggleSelect  = "select.toggle",        Select, true, "Select / unselect",        ["Insert", "Space"];
@@ -230,6 +231,9 @@ impl Action {
             }
             Action::Link => {
                 "Creates a symbolic or hard link to the item under the cursor in the other panel's folder."
+            }
+            Action::OpenTerminal => {
+                "Opens a terminal in the folder of the active panel (the command is set in Settings). In the terminal interface it quits and leaves the shell in the folder, once `nmc shell-init` is set up; on a server it opens an SSH session in that folder."
             }
             Action::BulkRename => {
                 "Opens the names of the selected items in your editor; save and close it to rename them."

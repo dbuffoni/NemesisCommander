@@ -31,6 +31,76 @@ pub fn read_limit(name: &str) -> Option<u64> {
     }
 }
 
+/// How many entries of an archive the preview lists.
+pub const ARCHIVE_ROWS: usize = 5000;
+
+/// What the viewer shows for an archive (SC-105): its files, not the bytes
+/// of the archive. `None` when `path` is not an archive or cannot be listed
+/// (an encrypted one, a damaged one): the viewer then falls back to the
+/// description of the file.
+pub async fn archive_listing(
+    registry: &nmc_vfs::ProviderRegistry,
+    path: &nmc_vfs::VfsPath,
+    facts: &Facts,
+) -> Option<Vec<Block>> {
+    use futures::StreamExt;
+    use nmc_preview::rich::BlockKind;
+    // Documents that are zip files inside (docx, epub...) have their own preview.
+    if kind_of(path.file_name()?).is_some() {
+        return None;
+    }
+    let root = nmc_archive::archive_root(path)?;
+    let provider = registry.provider_for(&root).await.ok()?;
+    let mut rows = vec![vec!["Size".to_owned(), "Modified".to_owned(), "Name".to_owned()]];
+    let (mut files, mut folders, mut bytes) = (0u64, 0u64, 0u64);
+    let mut cut = false;
+    let mut items = nmc_vfs::walk(provider.as_ref(), &root, None);
+    while let Some(item) = items.next().await {
+        let item = item.ok()?;
+        let is_dir = item.entry.is_dir();
+        if is_dir {
+            folders += 1;
+        } else {
+            files += 1;
+            bytes += item.entry.size;
+        }
+        if rows.len() > ARCHIVE_ROWS {
+            cut = true;
+            continue;
+        }
+        let name = item.path.relative_to(&root).unwrap_or(item.entry.name.clone());
+        rows.push(vec![
+            if is_dir { String::new() } else { nmc_panel::format::human_size(item.entry.size) },
+            item.entry.modified.map(nmc_panel::format::local_time).unwrap_or_default(),
+            if is_dir { format!("{name}/") } else { name },
+        ]);
+    }
+    let file_name = path.file_name().unwrap_or_default();
+    let mut blocks = vec![Block::heading(1, file_name.to_owned())];
+    let mut summary = vec![
+        vec!["Files".to_owned(), files.to_string()],
+        vec!["Folders".to_owned(), folders.to_string()],
+        vec!["Unpacked size".to_owned(), nmc_panel::format::human_size(bytes)],
+    ];
+    if let Some(size) = facts.size {
+        summary.push(vec!["Archive size".to_owned(), nmc_panel::format::human_size(size)]);
+    }
+    blocks.push(Block::new(BlockKind::Table { rows: summary, header: false }, Vec::new()));
+    blocks.push(Block::heading(2, "Contents".to_owned()));
+    if rows.len() == 1 {
+        blocks.push(Block::paragraph("The archive is empty."));
+    } else {
+        blocks.push(Block::new(BlockKind::Table { rows, header: true }, Vec::new()));
+    }
+    if cut {
+        blocks.push(Block::paragraph(format!(
+            "Only the first {ARCHIVE_ROWS} entries are listed; {} files in all.",
+            files + folders
+        )));
+    }
+    Some(blocks)
+}
+
 /// Pictures of pages and models are rendered to fit this box in the
 /// viewer, and a smaller one in the quick view.
 pub const RENDER_SIZE: (u32, u32) = (1600, 1600);

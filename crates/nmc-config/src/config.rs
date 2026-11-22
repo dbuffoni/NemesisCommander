@@ -42,11 +42,19 @@ pub struct GeneralSettings {
     pub use_trash: bool,
     /// External editor command for "Edit" (`$EDITOR` when empty).
     pub editor: String,
+    /// Command that opens a terminal in a folder ("Open terminal here");
+    /// `{dir}` is the folder. Empty: the terminal of the system.
+    pub terminal: String,
 }
 
 impl Default for GeneralSettings {
     fn default() -> Self {
-        GeneralSettings { confirm_delete: true, use_trash: true, editor: String::new() }
+        GeneralSettings {
+            confirm_delete: true,
+            use_trash: true,
+            editor: String::new(),
+            terminal: String::new(),
+        }
     }
 }
 

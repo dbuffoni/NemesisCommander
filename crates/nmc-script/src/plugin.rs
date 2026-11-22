@@ -97,7 +97,14 @@ pub struct Manifest {
     #[serde(default = "default_main")]
     pub main: String,
     /// The commands the plugin adds.
+    #[serde(default)]
     pub commands: Vec<CommandSpec>,
+    /// Panel columns the plugin fills (EXIF date, page count...).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<ColumnSpec>,
+    /// Viewers the plugin adds for kinds of files.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub previewers: Vec<PreviewerSpec>,
     /// What the plugin may touch.
     #[serde(default)]
     pub permissions: Requested,
@@ -123,6 +130,62 @@ pub struct CommandSpec {
     /// name puts the command under `Plugins`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+}
+
+/// A panel column a plugin fills (SC-30).
+///
+/// The plugin's script runs as the command `column:ID` with
+/// `nmc.context.selection` holding the files of the folder that match
+/// `match` (at most [`COLUMN_FILES`] at a time) and prints one line per
+/// file, in that order: the text of the column (empty for none).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ColumnSpec {
+    /// Passed to the script as `column:ID`; unique among the columns.
+    pub id: String,
+    /// The column heading.
+    pub title: String,
+    /// File name masks the column is for (`*.jpg`); `*` for every file.
+    #[serde(rename = "match")]
+    pub patterns: Vec<String>,
+    /// Width in characters (default 12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u16>,
+}
+
+/// A viewer a plugin adds for some kinds of files (SC-30).
+///
+/// The plugin's script runs as the command `preview:ID` with the file in
+/// `nmc.context.selection` and prints Markdown, which the viewer and the
+/// quick view show instead of the bytes of the file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PreviewerSpec {
+    /// Passed to the script as `preview:ID`; unique among the previewers.
+    pub id: String,
+    /// What the viewer is called.
+    pub title: String,
+    /// File name masks the previewer is for (`*.csv`).
+    #[serde(rename = "match")]
+    pub patterns: Vec<String>,
+}
+
+/// How many files one run of a column gets.
+pub const COLUMN_FILES: usize = 300;
+
+/// Whether `name` fits one of `patterns` (`*.jpg`, `README*`, `*`), ignoring
+/// case. Only `*` and `?` are wildcards.
+pub fn name_matches(patterns: &[String], name: &str) -> bool {
+    fn fits(pattern: &[char], name: &[char]) -> bool {
+        match pattern.split_first() {
+            None => name.is_empty(),
+            Some(('*', rest)) => (0..=name.len()).any(|skip| fits(rest, &name[skip..])),
+            Some(('?', rest)) => !name.is_empty() && fits(rest, &name[1..]),
+            Some((c, rest)) => name.first() == Some(c) && fits(rest, &name[1..]),
+        }
+    }
+    let name: Vec<char> = name.to_lowercase().chars().collect();
+    patterns.iter().any(|p| fits(&p.to_lowercase().chars().collect::<Vec<_>>(), &name))
 }
 
 /// Permissions a manifest asks for. Network and process access do not
@@ -220,6 +283,28 @@ impl Plugin {
         self.manifest.commands.iter().find(|command| command.id == id)
     }
 
+    /// The column `id`, if the plugin has it.
+    pub fn column(&self, id: &str) -> Option<&ColumnSpec> {
+        self.manifest.columns.iter().find(|column| column.id == id)
+    }
+
+    /// The previewer `id`, if the plugin has it.
+    pub fn previewer(&self, id: &str) -> Option<&PreviewerSpec> {
+        self.manifest.previewers.iter().find(|previewer| previewer.id == id)
+    }
+
+    /// Whether the plugin can run `command`: one of its commands, or
+    /// `column:ID` / `preview:ID` of a column or previewer it declares.
+    pub fn provides(&self, command: &str) -> bool {
+        if let Some(id) = command.strip_prefix("column:") {
+            return self.column(id).is_some();
+        }
+        if let Some(id) = command.strip_prefix("preview:") {
+            return self.previewer(id).is_some();
+        }
+        self.command(command).is_some()
+    }
+
     /// The permissions of one run: placeholders filled in from `context`.
     /// A placeholder with nothing to fill in (no selection, say) grants
     /// nothing.
@@ -279,7 +364,7 @@ impl Plugin {
         output: crate::Output,
     ) -> Result<(), PluginError> {
         let failed = |error| PluginError::Script { plugin: self.name().to_owned(), error };
-        if self.command(command).is_none() {
+        if !self.provides(command) {
             return Err(PluginError::NotFound(format!(
                 "plugin {} has no command {command:?}",
                 self.name()
@@ -338,8 +423,27 @@ fn validate(manifest: &Manifest) -> Result<(), String> {
     if main.is_absolute() || main.components().any(|c| c == std::path::Component::ParentDir) {
         return Err(format!("main {:?} must be inside the plugin folder", manifest.main));
     }
-    if manifest.commands.is_empty() {
-        return Err("a plugin needs at least one command".into());
+    if manifest.commands.is_empty() && manifest.columns.is_empty() && manifest.previewers.is_empty()
+    {
+        return Err("a plugin needs at least one command, column or previewer".into());
+    }
+    for (kind, ids) in [
+        ("column", manifest.columns.iter().map(|c| (&c.id, &c.patterns)).collect::<Vec<_>>()),
+        ("previewer", manifest.previewers.iter().map(|p| (&p.id, &p.patterns)).collect()),
+    ] {
+        let mut seen: Vec<&String> = Vec::new();
+        for (id, patterns) in ids {
+            if id.is_empty() {
+                return Err(format!("a {kind} needs an id"));
+            }
+            if seen.contains(&id) {
+                return Err(format!("{kind} {id:?} appears twice"));
+            }
+            seen.push(id);
+            if patterns.is_empty() {
+                return Err(format!("{kind} {id:?} needs \"match\" masks such as [\"*.jpg\"]"));
+            }
+        }
     }
     let mut ids: Vec<&str> = manifest.commands.iter().map(|c| c.id.as_str()).collect();
     ids.sort_unstable();
@@ -549,5 +653,48 @@ mod tests {
             ..plugin
         };
         assert!(relative.permissions(&context).is_err());
+    }
+
+    #[test]
+    fn columns_and_previewers_are_declared_in_the_manifest() {
+        let m = manifest(
+            r#"{"name":"x","version":"1",
+                "columns":[{"id":"pages","title":"Pages","match":["*.pdf"],"width":6}],
+                "previewers":[{"id":"csv","title":"CSV table","match":["*.csv","*.tsv"]}]}"#,
+        )
+        .unwrap();
+        assert!(m.commands.is_empty(), "a plugin may only add columns and previewers");
+        let plugin = Plugin { dir: PathBuf::from("/plugins/x"), manifest: m };
+        assert!(plugin.provides("column:pages") && plugin.provides("preview:csv"));
+        assert!(!plugin.provides("column:csv") && !plugin.provides("pages"));
+        assert_eq!(plugin.column("pages").unwrap().width, Some(6));
+        for (json, expected) in [
+            (
+                r#"{"name":"x","version":"1","columns":[{"id":"a","title":"A","match":[]}]}"#,
+                "match",
+            ),
+            (
+                r#"{"name":"x","version":"1","columns":[{"id":"a","title":"A","match":["*"]},{"id":"a","title":"B","match":["*"]}]}"#,
+                "twice",
+            ),
+            (
+                r#"{"name":"x","version":"1","previewers":[{"id":"","title":"A","match":["*"]}]}"#,
+                "id",
+            ),
+        ] {
+            let error = manifest(json).unwrap_err();
+            assert!(error.contains(expected), "{json}: {error}");
+        }
+    }
+
+    #[test]
+    fn names_are_matched_by_mask_ignoring_case() {
+        let masks = |m: &[&str]| m.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert!(name_matches(&masks(&["*.jpg", "*.png"]), "Holiday.JPG"));
+        assert!(name_matches(&masks(&["README*"]), "readme.md"));
+        assert!(name_matches(&masks(&["*"]), "anything"));
+        assert!(name_matches(&masks(&["a?c"]), "abc"));
+        assert!(!name_matches(&masks(&["*.jpg"]), "jpg"));
+        assert!(!name_matches(&masks(&["a?c"]), "ac"));
     }
 }

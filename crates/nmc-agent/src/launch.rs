@@ -137,12 +137,18 @@ pub(crate) async fn ssh_run(
     script: &str,
     input: Option<PathBuf>,
 ) -> std::result::Result<String, String> {
-    let mut command = Command::new("ssh");
-    command
-        .envs(nmc_ssh::target_env(target))
-        .args(ssh_args(target, Remote::Script(script))?)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // On this computer itself the script runs directly: installing on
+    // `localhost` must not need an SSH server (SC-129).
+    let mut command = if target.is_this_computer() {
+        let mut command = Command::new("sh");
+        command.args(["-c", script]);
+        command
+    } else {
+        let mut command = Command::new("ssh");
+        command.envs(nmc_ssh::target_env(target)).args(ssh_args(target, Remote::Script(script))?);
+        command
+    };
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
     command.stdin(match &input {
         Some(file) => Stdio::from(std::fs::File::open(file).map_err(|e| e.to_string())?),
         None => Stdio::null(),
@@ -224,5 +230,20 @@ mod tests {
         assert!(script.contains("$HOME/.cache/nmc/nmc-1.2.3"));
         assert!(script.contains("\"nmc 1.2.3\""));
         assert!(!script.contains('\''), "the script is wrapped in single quotes");
+    }
+
+    #[tokio::test]
+    async fn localhost_needs_no_ssh_server() {
+        // No `ssh` is started for this computer itself (SC-129).
+        let target = Target::parse("localhost").unwrap();
+        assert!(target.is_this_computer());
+        assert_eq!(ssh_run(&target, "echo $((40 + 2))", None).await.unwrap(), "42");
+        assert!(
+            ssh_run(&target, "echo oops >&2; exit 3", None).await.unwrap_err().contains("oops")
+        );
+        // Another port or another account is not this computer.
+        assert!(!Target::parse("localhost:2222").unwrap().is_this_computer());
+        assert!(!Target::parse("someone-else-123@localhost").unwrap().is_this_computer());
+        assert!(!Target::parse("nas.lan").unwrap().is_this_computer());
     }
 }
