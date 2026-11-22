@@ -5,9 +5,7 @@ ADR 0029; records 0001 to 0028 keep the old names.
 
 Each file records one decision: the context, what was decided, and its
 consequences. Records are immutable once accepted; a later record can
-supersede an earlier one. The reference design is the document
-"NemesisCommander — Architettura v0.1"; these records cover the decisions
-taken while implementing it.
+supersede an earlier one. These records cover the decisions taken while building the program.
 
 | #    | Title                                                        | Status   |
 |------|--------------------------------------------------------------|----------|
@@ -36,6 +34,9 @@ taken while implementing it.
 | 0023 | [Bookmarks with target folders for the other panel](0023-bookmark-targets.md) | Accepted |
 | 0024 | [Multi-rename always previews, and refuses names that exist](0024-multi-rename-preview.md) | Accepted |
 | 0025 | [Saved connections can log in with their own private key file](0025-connection-private-key.md) | Accepted |
+| 0026 | [Choices made for the 0.1.0 features](0026-release-0-1-0-features.md) | Accepted |
+| 0027 | [Choices made for the second batch of 0.1.0 features](0027-release-0-1-0-second-batch.md) | Accepted |
+| 0028 | [Choices made for the third batch of 0.1.0 features](0028-release-0-1-0-third-batch.md) | Accepted |
 | 0029 | [The product is renamed NemesisCommander, the program `nmc`](0029-rename-to-nemesiscommander.md) | Accepted |
 | 0030 | [Remote connections are probed and reopened; jobs tune their parallelism; `nmc serve install`](0030-remote-resilience-and-parallelism.md) | Accepted |
 | 0031 | [Server-to-server copies in the queue, S3 upload resume, content checks on servers](0031-remote-followups.md) | Accepted |
@@ -45,6 +46,8 @@ taken while implementing it.
 | 0035 | [Release 0.1.0, sixth batch: paste, connection editing and testing, advanced pack](0035-card-batch-f.md) | Accepted |
 | 0036 | [Logins of connections: warn, ask every time or keep in ~/.netrc](0036-connection-logins.md) | Accepted |
 | 0037 | [A template plugin, and `nmc.writeBytes` for binary files](0037-first-plugin-template.md) | Accepted |
+| 0038 | [Plugins from Git, the logo redrawn, password hint in Pack](0038-card-batch-i.md) | Accepted |
+| 0039 | [New logo (blue band) and blue selection](0039-new-logo-and-blue-selection.md) | Accepted |
 | 0040 | [Saved logins go to the system keyring, not ~/.netrc](0040-keyring-logins.md) | Accepted |
 | 0041 | [Window size remembered, bookmark list can add the folder, dialogs wrap their key row](0041-card-batch-j.md) | Accepted |
 | 0042 | [Card batch K: tolerant filters, e-book/audio/video viewers, launcher icon, install dialog](0042-card-batch-k.md) | Accepted |

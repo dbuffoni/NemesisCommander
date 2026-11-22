@@ -5,7 +5,7 @@
 
 ## Context
 
-Daniele added ten more cards to release 0.1.0 (SC-74 to SC-77, SC-90, SC-94
+The maintainer added ten more cards to release 0.1.0 (SC-74 to SC-77, SC-90, SC-94
 to SC-98). Each is small; the choices that were not obvious are below.
 
 ## Decision

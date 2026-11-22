@@ -5,7 +5,7 @@
 
 ## Context
 
-Daniele asked whether AI could write and test scripts and plugins. Nothing
+The maintainer asked whether AI could write and test scripts and plugins. Nothing
 was planned. Two ways: an AI built into SuperCommander (a model, a key, a
 network client, a chat), or making the existing tools easy for the AI
 coding assistants people already use (Claude Code and others). The first

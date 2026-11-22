@@ -11,7 +11,10 @@ use nmc_vfs::VfsPath;
 /// passwords). The same list serves the "secrets check" of other features.
 pub fn is_secret_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    const EXACT: [&str; 14] = [
+    const EXACT: [&str; 17] = [
+        "application_default_credentials.json",
+        "kubeconfig",
+        ".dockercfg",
         ".env",
         ".netrc",
         "_netrc",
@@ -32,6 +35,17 @@ pub fn is_secret_name(name: &str) -> bool {
     EXACT.contains(&lower.as_str())
         || lower.starts_with(".env.")
         || SUFFIXES.iter().any(|s| lower.ends_with(s))
+}
+
+/// Whether the file at `path` may hold secrets: by its own name, or by the
+/// name of the file a symbolic link leads to.
+pub fn is_secret_path(path: &VfsPath) -> bool {
+    path.file_name().is_some_and(is_secret_name)
+        || path
+            .to_local_path()
+            .and_then(|p| std::fs::canonicalize(p).ok())
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .is_some_and(|n| is_secret_name(&n))
 }
 
 /// Locations allowed for reading and for writing.
@@ -112,6 +126,20 @@ fn resolve_local(path: &VfsPath) -> Option<VfsPath> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_secret_is_a_secret() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("id_rsa");
+        std::fs::write(&key, "x").unwrap();
+        let link = dir.path().join("notes.txt");
+        std::os::unix::fs::symlink(&key, &link).unwrap();
+        assert!(is_secret_path(&VfsPath::from_local(&link).unwrap()));
+        let plain = dir.path().join("plain.txt");
+        std::fs::write(&plain, "x").unwrap();
+        assert!(!is_secret_path(&VfsPath::from_local(&plain).unwrap()));
+    }
 
     #[test]
     fn secrets_are_recognised_by_name() {

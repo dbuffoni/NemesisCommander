@@ -1,4 +1,4 @@
-//! "Open terminal here" (SC-36): the command lines that open a terminal
+//! "Open terminal here": the command lines that open a terminal
 //! window in a folder, on this computer or in an SSH session on a server.
 //!
 //! Everything here is a pure function of its inputs, so each platform can

@@ -9,7 +9,7 @@ Remote locations were already opened like folders (ADR 0003: every place is
 a `VfsPath`, and every command works on any provider), but they were reached
 through a separate "Connect" list (Ctrl+N) that showed only the saved
 connections, while there was no list of the computer's own drives at all.
-Daniele asked that, in the window and in the terminal, local drives and
+The maintainer asked that, in the window and in the terminal, local drives and
 configured external sources (SFTP, S3, ...) be chosen from one list and
 navigated the same way, with a category to tell them apart. Saving a new
 connection meant editing the settings file.

@@ -5,7 +5,7 @@
 
 ## Context
 
-Daniele asked whether SFTP supports `.pem` keys. Through OpenSSH it did,
+The maintainer asked whether SFTP supports `.pem` keys. Through OpenSSH it did,
 but only with `IdentityFile` in `~/.ssh/config` or `ssh-add`: the
 `identity_file` field of a saved connection existed in the settings and
 nothing read it, and no screen could set it.

@@ -196,7 +196,7 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
         .saturating_sub(SIZE_WIDTH + 1 + mark_width + icon_width)
         .saturating_sub(if show_date { DATE_WIDTH + 1 } else { 0 });
     // The flat view gives a third of the name column to the folder.
-    // Columns of plugins (SC-30) come out of the name column, which keeps
+    // Columns of plugins come out of the name column, which keeps
     // at least 16 characters; the ones that do not fit are left out.
     let mut plugin_heads: Vec<nmc_frontend::ColumnHead> = Vec::new();
     for head in app.plugin_columns(side) {
@@ -640,7 +640,7 @@ fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
     let view = commands_view(app, palette);
     let area = frame.area();
     let width = 96.min(area.width.saturating_sub(4)).max(20);
-    // A fixed height (SC-69): the window must not grow and shrink as the
+    // A fixed height: the window must not grow and shrink as the
     // typed filter narrows the list.
     let height = COMMANDS_HEIGHT.min(area.height.saturating_sub(2)).max(8);
     let rect = Rect { y: area.y + 1, ..centered(area, width, height) };
@@ -1049,7 +1049,7 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
             format!(
                 " {} ",
                 shrink_hint(
-                    "p: pause  r: resume  c: cancel  +/-: priority  [/]: files at once  a: auto  x: clear  Esc: close",
+                    "p: pause  r: resume/retry  c: cancel  +/-: priority  [/]: files at once  a: auto  x: remove finished  Esc: close",
                     rect.width.saturating_sub(6) as usize
                 )
             ),

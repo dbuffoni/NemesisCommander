@@ -1,5 +1,5 @@
 //! `nmc shell-init`: the shell function that leaves the shell in the folder
-//! the terminal interface ended in (SC-2).
+//! the terminal interface ended in.
 
 use std::process::ExitCode;
 

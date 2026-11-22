@@ -65,7 +65,7 @@ shot drives-new 1280x800 "Shift+F1 $(printf 'Down %.0s' {1..20})Enter" "$left" "
 shot pack-advanced 1280x800 "Down Shift+F5 Ctrl+O Enter Enter s e c r e t" "$left" "$right"
 shot bookmarks 1280x800 "Ctrl+Shift+D Ctrl+D" "$left" "$right"
 shot jobs 1280x800 "Ctrl+J" "$left" "$right"
-shot properties 1280x800 "Down Alt+Enter" "$left" "$right"
+shot properties 1280x800 "Down Ctrl+E" "$left" "$right"
 shot archive 1280x800 "" "zip://$demo/home/Downloads/site-backup.zip!/" "$right"
 docs="$demo/home/Documents"
 models="$demo/home/Projects/models"
@@ -91,13 +91,13 @@ shot settings-find 1280x800 "Ctrl+, f o n t" "$left" "$right"
 # Synchronize: the plan of a mirror, before anything is run.
 shot sync 1280x800 "F9 s y n c Enter Enter" "$left" "$right"
 # The basket with two items from the left panel.
-shot basket 1280x800 "Down Insert Down Insert Alt+B Ctrl+B" "$left" "$right"
+shot basket 1280x800 "Down Insert Down Insert Ctrl+G Ctrl+B" "$left" "$right"
 # Copy path: the forms offered.
-shot copy-path 1280x800 "Down Alt+P" "$left" "$right"
+shot copy-path 1280x800 "Down Ctrl+P" "$left" "$right"
 # Folder sizes counted in the panel, then the disk usage list.
 shot folder-sizes 1280x800 "Alt+S" "$demo/home" "$right"
-shot disk-usage 1280x800 "Alt+U" "$demo/home" "$right"
+shot disk-usage 1280x800 "Ctrl+F7" "$demo/home" "$right"
 # Disks and partitions of the machine the pictures are taken on.
-shot disks 1280x800 "Alt+K" "$left" "$right"
+shot disks 1280x800 "Ctrl+F8" "$left" "$right"
 # Bookmarks with the recent folders under them, filtered by typing.
 shot bookmarks-filter 1280x800 "Ctrl+Shift+D Down Enter Backspace Ctrl+D w e b" "$left" "$right"

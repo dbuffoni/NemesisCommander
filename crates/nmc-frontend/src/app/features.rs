@@ -1,4 +1,4 @@
-//! Commands of release 0.1.0 that work on lists of paths: copy a path,
+//! Commands that work on lists of paths: copy a path,
 //! export a listing, links, renaming in the editor, the bookmark list with recent
 //! folders, saved searches, the basket, similar pictures, comparing by
 //! content and synchronizing folders.

@@ -5,7 +5,7 @@
 
 ## Context
 
-Daniele renamed the product from SuperCommander to NemesisCommander (Notion
+The maintainer renamed the product from SuperCommander to NemesisCommander (Notion
 card SC-88). He asked for a clean rename: no backward compatibility and no
 migration of existing installs. `sc` also collided with `sc.exe` (Windows
 Service Control). He chose the short name `nmc` and accepted the trademark risk

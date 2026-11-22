@@ -374,7 +374,7 @@ pub struct App {
 }
 
 /// How the application behaves when it is started as a chooser, to give
-/// paths to another program (`nmc pick`, SC-3).
+/// paths to another program (`nmc pick`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PickMode {
     /// Choose a folder (the one shown) instead of files.
@@ -394,9 +394,9 @@ pub enum UndoStep {
     Moved(Vec<(VfsPath, VfsPath)>),
 }
 
-/// The file whose Markdown text is shown at the top of a panel (SC-57):
-/// `nmc_folder.md`, or `sc_folder.md` as the card named it.
-pub const FOLDER_TEXT_NAMES: [&str; 2] = ["nmc_folder.md", "sc_folder.md"];
+/// The file whose Markdown text is shown at the top of a panel:
+/// `nmc_folder.md`.
+pub const FOLDER_TEXT_NAMES: [&str; 1] = ["nmc_folder.md"];
 
 /// The largest folder text read.
 const FOLDER_TEXT_LIMIT: u64 = 64 * 1024;
@@ -680,14 +680,14 @@ impl App {
         self.running
     }
 
-    /// Turns the application into a chooser: Enter on a file (or Alt+Y)
+    /// Turns the application into a chooser: Enter on a file (or Ctrl+F10)
     /// ends it, and what was chosen is in [`picked`](Self::picked).
     pub fn set_picker(&mut self, mode: PickMode) {
         self.picker = Some(mode);
         self.set_status(if mode.folder {
-            "Choose a folder: Alt+Y picks this one, Esc cancels"
+            "Choose a folder: Ctrl+F10 picks this one, Esc cancels"
         } else {
-            "Choose a file: Enter picks it, Alt+Y picks a folder too, Esc cancels"
+            "Choose a file: Enter picks it, Ctrl+F10 picks a folder too, Esc cancels"
         });
     }
 
@@ -705,7 +705,7 @@ impl App {
         }
     }
 
-    /// The items Alt+Y chooses: the current folder in folder mode, else the
+    /// The items Ctrl+F10 chooses: the current folder in folder mode, else the
     /// marked items (several allowed) or the one under the cursor.
     fn choose_now(&mut self) {
         let Some(mode) = self.picker else {
@@ -1185,9 +1185,11 @@ impl App {
                 self.normal_key(press)
             }
             Some(overlay) => {
-                // Alt+Left goes back to the question before this one.
-                if press.chord.alt
-                    && press.chord.key == Key::Left
+                // Shift+Tab goes back to the question before this one.
+                if press.chord.shift
+                    && !press.chord.ctrl
+                    && !press.chord.alt
+                    && press.chord.key == Key::Tab
                     && step_of(&overlay).is_some()
                     && let Some(previous) = self.history.pop()
                 {
@@ -1208,7 +1210,7 @@ impl App {
     }
 
     /// After a key: when the window on screen is the next question of a
-    /// series, the one before it is kept for Alt+Left; when the series
+    /// series, the one before it is kept for Shift+Tab; when the series
     /// is over, it is forgotten.
     fn remember_step(&mut self, before: Option<Overlay>) {
         let now = self.overlay.as_ref().and_then(step_of);
@@ -1221,7 +1223,7 @@ impl App {
         }
     }
 
-    /// Whether Alt+Left would go back to an earlier question.
+    /// Whether Shift+Tab would go back to an earlier question.
     pub fn can_go_back(&self) -> bool {
         !self.history.is_empty()
     }
@@ -1230,8 +1232,8 @@ impl App {
     pub fn with_back(&self, hint: String) -> String {
         match (self.can_go_back(), hint.is_empty()) {
             (false, _) => hint,
-            (true, true) => "Alt+←: back".into(),
-            (true, false) => format!("{hint}    Alt+←: back"),
+            (true, true) => "Shift+Tab: back".into(),
+            (true, false) => format!("{hint}    Shift+Tab: back"),
         }
     }
 
@@ -2006,7 +2008,7 @@ impl App {
     fn choose_file(&mut self) {
         let Some(mode) = self.picker else { return };
         if mode.folder {
-            return self.set_status("Choose a folder: Alt+Y picks the one shown");
+            return self.set_status("Choose a folder: Ctrl+F10 picks the one shown");
         }
         let panel = self.workspace.active();
         let items = if mode.multiple {
@@ -2721,7 +2723,7 @@ impl App {
                     rename: None,
                 });
             }
-            None => self.set_error("Only local files can be edited for now; use F3 to view"),
+            None => self.set_error("Only local files can be edited; use F3 to view"),
         }
     }
 
@@ -2945,10 +2947,7 @@ impl App {
         let a = self.workspace.active();
         let b = self.workspace.inactive();
         let file = |panel: &Panel| {
-            panel
-                .current_entry()
-                .filter(|e| !e.is_dir() && panel.current_path().is_some())
-                .map(|_| panel.current_path().unwrap())
+            panel.current_entry().filter(|e| !e.is_dir()).and_then(|_| panel.current_path())
         };
         if let (Some(left), Some(right)) = (file(a), file(b)) {
             let registry = self.context.registry.clone();

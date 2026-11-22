@@ -6,7 +6,7 @@
 ## Context
 
 Six cards of release 0.1.0 (SC-3, SC-22, SC-32, SC-69, SC-91, SC-100) were
-analysed with Daniele and implemented in one pull request. The choices that
+analysed with the maintainer and implemented in one pull request. The choices that
 were not obvious are below.
 
 ## Decision

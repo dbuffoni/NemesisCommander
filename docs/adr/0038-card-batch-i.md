@@ -31,7 +31,7 @@ not protected when asked). Also: CI takes too long on macOS and Windows.
   end to end), but only the advanced Pack asked for a password, and its key
   was not obvious. The key row of the Pack question now says
   "Ctrl+O: more options (format, level, password)" and the manual says so.
-  Needs Daniele's check: if the reported flow was another one, the card must
+  Needs the maintainer's check: if the reported flow was another one, the card must
   be reopened with the steps.
 - **CI.** The macOS and Windows jobs (`test`, `gui-other`) run only when the
   repository variable `CI_ALL_OS` is `true`; set it to turn them back on.

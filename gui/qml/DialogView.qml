@@ -178,7 +178,7 @@ Item {
             ListView {
                 id: rows
                 Layout.fillWidth: true
-                // A fixed height (SC-69): the window keeps its size whatever
+                // A fixed height: the window keeps its size whatever
                 // the filter leaves in the list.
                 Layout.preferredHeight: Math.min(16 * dialogs.theme.rowHeight, dialogs.height * 0.6)
                 implicitWidth: 600

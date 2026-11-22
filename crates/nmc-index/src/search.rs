@@ -133,7 +133,7 @@ const MAX_ARCHIVE_DEPTH: usize = 3;
 const ARCHIVE_PARALLELISM: usize = 4;
 
 /// Tells a search how to look inside archive files, which this crate cannot
-/// do itself (SC-32).
+/// do itself.
 pub trait ArchiveOpener: Send + Sync {
     /// The root inside `file` if its name says it is an archive.
     fn root_of(&self, file: &VfsPath) -> Option<VfsPath>;

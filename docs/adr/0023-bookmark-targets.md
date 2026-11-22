@@ -5,7 +5,7 @@
 
 ## Context
 
-A bookmark only opened one folder in the active panel. Daniele asked that a
+A bookmark only opened one folder in the active panel. The maintainer asked that a
 bookmark can also remember the folder (or folders) the other panel should
 show, and that a quick picker asks which one when there are several, in the
 window and in the terminal, for local and remote places alike.

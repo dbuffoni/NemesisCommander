@@ -1,4 +1,4 @@
-//! `nmc pick`: the terminal UI as a file chooser (SC-3).
+//! `nmc pick`: the terminal UI as a file chooser.
 //!
 //! The interface is drawn on standard error; the chosen paths are printed
 //! on standard output, one per line (or NUL-terminated with `-0`), after the

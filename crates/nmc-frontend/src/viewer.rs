@@ -213,7 +213,7 @@ pub struct Viewer {
     pub tinted: Vec<Line>,
     /// The language `tinted` is coloured as.
     pub language: Option<Language>,
-    /// This viewer shows the comparison of two files (Alt+C).
+    /// This viewer shows the comparison of two files (Shift+F3).
     pub diff: Option<Box<crate::diff::Diff>>,
     /// A title to show instead of the path.
     pub title: Option<String>,

@@ -303,11 +303,13 @@ impl Builder {
         let mut items = walk(provider, source, None);
         while let Some(item) = items.next().await {
             match item {
-                Ok(item) => {
-                    let relative =
-                        item.path.relative_to(source).expect("walk stays below its root");
-                    self.add_entry(item.path, target.join(&relative), &item.entry);
-                }
+                Ok(item) => match item.path.relative_to(source) {
+                    Some(relative) => {
+                        self.add_entry(item.path, target.join(&relative), &item.entry);
+                    }
+                    // A provider listed a name that leaves the folder (`..`).
+                    None => self.plan.warnings.push(format!("skipped {}", item.path)),
+                },
                 Err(e) => self.plan.warnings.push(e.to_string()),
             }
         }

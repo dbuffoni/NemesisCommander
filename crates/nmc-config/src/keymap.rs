@@ -97,23 +97,23 @@ actions! {
     Copy          = "files.copy",           Files, true,  "Copy",                     ["F5"];
     Move          = "files.move",           Files, true,  "Move",                     ["F6"];
     Rename        = "files.rename",         Files, true,  "Rename",                   ["Shift+F6", "F2"];
-    MultiRename   = "files.multi-rename",   Files, false, "Multi-rename…",            ["Ctrl+M"];
+    MultiRename   = "files.multi-rename",   Files, false, "Multi-rename…",            ["Shift+F2"];
     AiRename      = "files.ai-rename",      Files, false, "Multi-rename with AI…",    [];
     MakeDir       = "files.mkdir",          Files, true,  "New folder",               ["F7"];
     Delete        = "files.delete",         Files, true,  "Delete (to trash)",        ["F8", "Delete"];
     DeleteForever = "files.delete-forever", Files, false, "Delete permanently",       ["Shift+F8", "Shift+Delete"];
     Pack          = "files.pack",           Files, true,  "Pack into archive…",       ["Shift+F5"];
     Unpack        = "files.unpack",         Files, false, "Unpack archive…",          ["Shift+F9"];
-    Properties    = "files.properties",     Files, false, "Properties and permissions", ["Alt+Enter"];
+    Properties    = "files.properties",     Files, false, "Properties and permissions", ["Ctrl+E"];
     Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", ["Ctrl+Z"];
     Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", [];
     Checksum      = "files.checksum",       Files, false, "Checksum",                 ["Ctrl+K"];
-    CopyPath      = "files.copy-path",      Files, false, "Copy path to clipboard…",  ["Alt+P"];
+    CopyPath      = "files.copy-path",      Files, false, "Copy path to clipboard…",  ["Ctrl+P"];
     Export        = "files.export",         Files, false, "Export listing…",          [];
-    Link          = "files.link",           Files, false, "Create symlink or hard link…", ["Alt+L"];
+    Link          = "files.link",           Files, false, "Create symlink or hard link…", ["Shift+F4"];
     BulkRename    = "files.bulk-rename",    Files, false, "Rename in the editor…",    [];
     OpenTerminal  = "files.open-terminal",  Files, false, "Open terminal here",       [];
-    BasketAdd     = "files.basket-add",     Files, false, "Add to basket",            ["Alt+B"];
+    BasketAdd     = "files.basket-add",     Files, false, "Add to basket",            ["Ctrl+G"];
     // Select
     ToggleSelect  = "select.toggle",        Select, true, "Select / unselect",        ["Insert", "Space"];
     SelectMask    = "select.mask",          Select, true, "Select by mask…",          ["+"];
@@ -125,25 +125,25 @@ actions! {
     Parent        = "nav.parent",           Navigate, false, "Parent folder",         ["Backspace"];
     SwitchPanel   = "nav.switch-panel",     Navigate, true,  "Other panel",           ["Tab"];
     GoTo          = "nav.goto",             Navigate, true,  "Go to location…",       ["Ctrl+L"];
-    Back          = "nav.back",             Navigate, false, "Back",                  ["Alt+Left"];
-    Forward       = "nav.forward",          Navigate, false, "Forward",               ["Alt+Right"];
+    Back          = "nav.back",             Navigate, false, "Back",                  ["Ctrl+O"];
+    Forward       = "nav.forward",          Navigate, false, "Forward",               ["Ctrl+Y"];
     Drives        = "nav.drives",           Navigate, true,  "Drives and connections…", ["Shift+F1", "Ctrl+N", "d"];
     Bookmarks     = "nav.bookmarks",        Navigate, true,  "Bookmarks…",            ["Ctrl+D"];
     AddBookmark   = "nav.add-bookmark",     Navigate, false, "Bookmark this folder",  ["Ctrl+Shift+D"];
-    AddBookmarkTarget = "nav.add-bookmark-target", Navigate, false, "Bookmark this folder with the other panel's", ["Ctrl+Alt+D"];
+    AddBookmarkTarget = "nav.add-bookmark-target", Navigate, false, "Bookmark this folder with the other panel's", ["Ctrl+Shift+B"];
     NewTab        = "nav.new-tab",          Navigate, false, "New tab",               ["Ctrl+T"];
     CloseTab      = "nav.close-tab",        Navigate, false, "Close tab",             ["Ctrl+W"];
     NextTab       = "nav.next-tab",         Navigate, false, "Next tab",              ["Ctrl+Tab", "Ctrl+PageDown"];
     PrevTab       = "nav.prev-tab",         Navigate, false, "Previous tab",          ["Ctrl+Shift+Tab", "Ctrl+PageUp"];
-    SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Ctrl+Up", "Alt+O"];
+    SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", ["Ctrl+Up"];
     OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", ["Ctrl+Left"];
     OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", ["Ctrl+Right"];
-    FlatView      = "nav.flat-view",        Navigate, false, "Flat (branch) view",    ["Alt+V"];
+    FlatView      = "nav.flat-view",        Navigate, false, "Flat (branch) view",    ["Ctrl+F6"];
     Basket        = "nav.basket",           Navigate, false, "Basket…",               ["Ctrl+B"];
     SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           ["Ctrl+Down", "Ctrl+U"];
     // View
     Refresh       = "view.refresh",         View, false, "Refresh",                   ["Ctrl+R"];
-    ToggleHidden  = "view.hidden",          View, false, "Show hidden files",         ["Ctrl+H"];
+    ToggleHidden  = "view.hidden",          View, false, "Show hidden files",         ["Ctrl+F2"];
     QuickFilter   = "view.filter",          View, true,  "Quick filter…",             ["Ctrl+S"];
     SortName      = "view.sort-name",       View, false, "Sort by name",              ["Ctrl+F3"];
     SortExtension = "view.sort-ext",        View, false, "Sort by extension",         ["Ctrl+F4"];
@@ -151,27 +151,27 @@ actions! {
     QuickView     = "view.quick-view",      View, false, "Quick view in other panel", ["Ctrl+Q"];
     // Tools
     Search        = "tools.search",         Tools, true,  "Search…",                  ["Shift+F7"];
-    Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Alt+C"];
+    Compare       = "tools.compare",        Tools, false, "Compare files / folders",  ["Shift+F3"];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     [];
     GenerateFiles = "tools.generate-files", Tools, false, "Generate random text files…", [];
     Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     [];
-    DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", ["Alt+U"];
-    Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    ["Alt+K"];
+    DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", ["Ctrl+F7"];
+    Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    ["Ctrl+F8"];
     SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          [];
     SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    [];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           ["Ctrl+J"];
-    RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Alt+X"];
+    RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     ["Ctrl+X"];
     AiScript      = "tools.ai-script",      Tools, false, "Write a script with AI…",  [];
     InstallServe  = "tools.install-serve",  Tools, false, "Install nmc serve on a server…", [];
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        ["F1"];
     Menu          = "app.commands",         App, true,  "Commands",                   ["F9"];
-    Settings      = "app.settings",         App, true,  "Settings…",                  ["Ctrl+,"];
+    Settings      = "app.settings",         App, true,  "Settings…",                  ["Ctrl+,", "Ctrl+F1"];
     ExportConfig  = "app.export-config",    App, false, "Export settings to file…",   [];
     ImportConfig  = "app.import-config",    App, false, "Import settings from file…", [];
-    Choose        = "app.choose",           App, false, "Choose and exit (nmc pick)", ["Alt+Y"];
+    Choose        = "app.choose",           App, false, "Choose and exit (nmc pick)", ["Ctrl+F10"];
     About         = "app.about",            App, false, "About NemesisCommander", [];
     Quit          = "app.quit",             App, true,  "Quit",                       ["F10"];
 }
@@ -731,6 +731,20 @@ mod tests {
         assert_eq!(keymap.command_for(&"Alt+B".parse().unwrap()).unwrap(), "script.backup");
         assert_eq!(keymap.keys_text("plugin.tidy.run"), "Ctrl+K");
         assert_eq!(keymap.keys_text("files.copy"), "F5");
+    }
+
+    #[test]
+    fn no_default_key_uses_alt_or_is_shared() {
+        let mut seen = std::collections::HashMap::new();
+        for action in Action::ALL {
+            for text in action.default_keys() {
+                let key: KeyChord = text.parse().unwrap();
+                assert!(!key.alt, "{text} of {} uses Alt", action.id());
+                if let Some(other) = seen.insert(key, action.id()) {
+                    panic!("{text} is bound to {other} and {}", action.id());
+                }
+            }
+        }
     }
 
     #[test]

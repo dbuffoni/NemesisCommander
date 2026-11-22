@@ -7,7 +7,7 @@
 ## Context
 
 ADR 0036 let a connection's password be asked every time or saved to
-`~/.netrc` (mode 600). Daniele, on Fedora, asked for the GNOME keyring
+`~/.netrc` (mode 600). The maintainer, on Fedora, asked for the GNOME keyring
 instead: a plain-text file is a weak place for a password when the desktop
 already has a locked, encrypted store.
 

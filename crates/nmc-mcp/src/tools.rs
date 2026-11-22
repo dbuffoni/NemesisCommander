@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
-use crate::grants::{Grants, is_secret_name};
+use crate::grants::{Grants, is_secret_path};
 
 /// The most `read` returns in one call.
 pub const READ_LIMIT: u64 = 1024 * 1024;
@@ -244,7 +244,7 @@ pub async fn call(
         }
         "read" => {
             let path = locate(grants, &text(arguments, "path")?, Access::Read)?;
-            if path.file_name().is_some_and(is_secret_name) {
+            if is_secret_path(&path) {
                 return Err(format!(
                     "{path}: this file may hold secrets (keys, passwords); it is not given to assistants"
                 ));
@@ -312,7 +312,7 @@ pub async fn call(
                     cancel.cancel();
                     break;
                 }
-                let secret = hit.path.file_name().is_some_and(is_secret_name);
+                let secret = is_secret_path(&hit.path);
                 let mut item = describe(&hit.entry, &hit.path);
                 if let Some((line, line_text)) = hit.first_match.filter(|_| !secret) {
                     item["line"] = json!(line);

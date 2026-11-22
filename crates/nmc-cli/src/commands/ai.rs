@@ -317,7 +317,7 @@ mod engine {
             nmc_script::plugin::install(target, &context.paths.plugins_dir())
                 .map_err(|e| e.to_string())?;
             return Ok(format!(
-                "and installed plugin {} (F9, or Alt+X; it asks for its permissions at first use)",
+                "and installed plugin {} (F9, or Ctrl+X; it asks for its permissions at first use)",
                 plugin.name()
             ));
         }

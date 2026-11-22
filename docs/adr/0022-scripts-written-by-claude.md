@@ -5,7 +5,7 @@
 
 ## Context
 
-After ADR 0021 Daniele asked for the second step: SuperCommander itself
+After ADR 0021 the maintainer asked for the second step: SuperCommander itself
 writes scripts and plugins with AI, and tests them.
 
 ## Decision
@@ -47,7 +47,7 @@ writes scripts and plugins with AI, and tests them.
 
 ## Addendum (2026-11-16): rename rules
 
-Daniele asked for AI in the multi-rename too. `sc ai rename "description"
+The maintainer asked for AI in the multi-rename too. `sc ai rename "description"
 FILES...` asks for a `RenameRule` (structured output with the rule's
 fields), checks it with `preview_renames` on the files and sends the error
 back (3 tries), then prints the rule (as `sc rename` options, or `--json`)

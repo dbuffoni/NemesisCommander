@@ -89,11 +89,11 @@ fn every_dialog_draws_cleanly() {
         ("F9 Right Ctrl+K", "commands"),
         ("F7", "input"),
         // Multi-rename shows the new names below the template.
-        ("Down Ctrl+M", "input"),
+        ("Down Shift+F2", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
         // A bookmark with two targets asks which one the other panel shows.
-        ("Ctrl+Alt+D Alt+O Ctrl+Alt+D Ctrl+D Enter", "choose"),
+        ("Ctrl+Shift+B Ctrl+Up Ctrl+Shift+B Ctrl+D Enter", "choose"),
         ("Shift+F1", "choose"),
         ("Ctrl+N", "choose"),
         // Advanced pack: format, level, then the password as dots.
@@ -265,9 +265,9 @@ fn settings_with_a_key_file_still_load_and_f4_edits_the_address() {
 #[test]
 fn ctrl_v_pastes_the_clipboard_into_a_question() {
     let home = home();
-    // Alt+P puts the path of the file under the cursor in the clipboard;
+    // Ctrl+P puts the path of the file under the cursor in the clipboard;
     // Ctrl+V types it into the next question.
-    let run = run(home.path(), "Down Alt+P Enter F7 Ctrl+V", None);
+    let run = run(home.path(), "Down Ctrl+P Enter F7 Ctrl+V", None);
     assert_no_qml_warnings(&run);
     let overlay = &run.screen["overlay"];
     assert_eq!(overlay["kind"], "input", "{overlay}");

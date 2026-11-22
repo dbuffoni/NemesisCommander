@@ -98,5 +98,5 @@ A folder with `plugin.json` and the script (`main`, default `main.ts`):
 - The script reads `nmc.context`: `command` (the id), `panel`, `other`
   (folders) and `selection` (selected entries). `nmc.args` is empty.
 
-Install and use: `nmc plugin install FOLDER`, then Alt+X or F9 in the
+Install and use: `nmc plugin install FOLDER`, then Ctrl+X or F9 in the
 interface, or `nmc plugin run NAME COMMAND --panel DIR FILES...`.

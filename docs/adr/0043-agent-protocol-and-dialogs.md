@@ -5,7 +5,7 @@
 
 ## Context
 
-Daniele found eleven problems while using the agent (`nmc serve`) and the
+The maintainer found eleven problems while using the agent (`nmc serve`) and the
 dialogs.
 
 ## Decision

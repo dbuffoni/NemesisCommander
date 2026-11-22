@@ -90,7 +90,7 @@ are commands of the `Scripts` category, with shortcuts stored as
 `"script.FILE" = [...]`. They run like a script from a panel: they may change
 the active panel's folder and read the other one.
 
-In the terminal UI and the window, **Alt+X** (Tools, "Plugins and
+In the terminal UI and the window, **Ctrl+X** (Tools, "Plugins and
 scripts…") lists the plugin commands, and offers to run the `.ts` or `.js`
 file under the cursor (it may change the folder it is in, after a
 confirmation). The first time a plugin runs you are asked to allow what its

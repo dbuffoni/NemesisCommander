@@ -158,7 +158,7 @@ async fn enter_and_backspace_navigate() {
     h.key("Backspace");
     h.settle().await;
     assert_eq!(h.current(), "docs", "cursor returns to the folder we left");
-    h.key("Alt+Left");
+    h.key("Ctrl+O");
     h.settle().await;
     assert_eq!(h.names(SideId::Left), ["..", "readme.md"], "history goes back");
 }
@@ -255,7 +255,7 @@ async fn multi_rename_previews_then_renames() {
     h.key("+");
     h.type_text("*.txt");
     h.key("Enter");
-    h.key("Ctrl+M");
+    h.key("Shift+F2");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("template dialog") };
     assert_eq!(dialog.preview, ["  (no name changes)"]);
     h.key("Ctrl+U");
@@ -277,7 +277,7 @@ async fn multi_rename_previews_then_renames() {
 async fn multi_rename_shows_names_that_exist_and_renames_nothing() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("Ctrl+M");
+    h.key("Shift+F2");
     h.key("Ctrl+U");
     // "docs" is a folder next to the file.
     h.type_text("docs");
@@ -375,7 +375,7 @@ fn command_list_height(screen: &str) -> usize {
 
 #[tokio::test]
 async fn the_command_list_keeps_its_height() {
-    // SC-69: the window must not change size as the filter narrows the list.
+    // the window must not change size as the filter narrows the list.
     let mut h = Harness::new().await;
     h.key("F9");
     let full = command_list_height(&h.screen());
@@ -546,7 +546,8 @@ async fn about_shows_the_logo_and_the_version() {
     terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
     let buffer = terminal.backend().buffer();
     let text: String = buffer.content().iter().map(|c| c.symbol()).collect();
-    assert!(text.contains("NemesisCommander 0.1.0"), "version");
+    let title = format!("NemesisCommander {}", env!("CARGO_PKG_VERSION"));
+    assert!(text.contains(&title), "version");
     assert!(text.contains("MIT"), "license");
     assert!(text.contains("github.com/dbuffoni/NemesisCommander"), "source");
     // The logo is drawn with half blocks, some of them the blue band.
@@ -781,7 +782,7 @@ async fn bookmark_with_one_target_opens_both_panels() {
     h.key("Enter");
     h.settle().await;
     h.key("Tab");
-    h.key("Ctrl+Alt+D");
+    h.key("Ctrl+Shift+B");
     assert!(h.status().starts_with("Bookmarked"), "{}", h.status());
     let targets = &h.app.context().config.bookmarks[0].targets;
     assert!(targets.len() == 1 && targets[0].starts_with("zip://"), "{targets:?}");
@@ -806,12 +807,12 @@ async fn bookmark_with_one_target_opens_both_panels() {
 #[tokio::test]
 async fn bookmark_with_several_targets_asks_which() {
     let mut h = Harness::new().await;
-    h.key("Ctrl+Alt+D"); // target: right/
-    h.key("Alt+O"); // the other panel shows left/ too
+    h.key("Ctrl+Shift+B"); // target: right/
+    h.key("Ctrl+Up"); // the other panel shows left/ too
     h.settle().await;
-    h.key("Ctrl+Alt+D"); // second target: left/
+    h.key("Ctrl+Shift+B"); // second target: left/
     assert!(h.status().contains("2 targets"), "{}", h.status());
-    h.key("Ctrl+Alt+D");
+    h.key("Ctrl+Shift+B");
     assert!(h.status().contains("already has target"), "{}", h.status());
     assert_eq!(h.app.context().config.bookmarks.len(), 1);
 
@@ -885,7 +886,7 @@ async fn compare_selects_differences() {
     filetime_copy(&h.path("left/a.txt"), &h.path("right/a.txt"));
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Alt+C");
+    h.key("Shift+F3");
     let left = h.app.workspace().side(SideId::Left).panel();
     assert!(left.is_selected("notes.txt") && left.is_selected("docs"));
     assert!(!left.is_selected("a.txt"), "identical files are not marked");
@@ -908,7 +909,7 @@ async fn compare_two_files() {
     h.focus("a.txt");
     h.key("Tab");
     h.focus("a.txt");
-    h.key("Alt+C");
+    h.key("Shift+F3");
     h.settle().await;
     assert_eq!(h.status(), "Files are identical");
 }
@@ -1020,7 +1021,7 @@ async fn checksums_and_properties() {
     let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("checksums") };
     assert!(message.lines.iter().any(|l| l.starts_with("BLAKE3")));
     h.key("Esc");
-    h.key("Alt+Enter");
+    h.key("Ctrl+E");
     let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("properties") };
     assert!(message.lines.iter().any(|l| l.contains("6 bytes")));
 }
@@ -1031,7 +1032,7 @@ async fn permissions_can_be_changed() {
     use std::os::unix::fs::PermissionsExt;
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("Alt+Enter");
+    h.key("Ctrl+E");
     h.key("Enter");
     h.type_text("mode=600");
     h.key("Enter");
@@ -1136,7 +1137,7 @@ async fn the_script_under_the_cursor_runs_after_a_confirmation() {
     h.key("Ctrl+R");
     h.settle().await;
     h.focus("list.ts");
-    h.key("Alt+X");
+    h.key("Ctrl+X");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
     assert_eq!(dialog.items[0], "Run script list.ts");
     h.key("Enter");
@@ -1181,7 +1182,7 @@ async fn plugin_commands_ask_once_then_run_on_the_selection() {
     fs::write(plugin.join("main.ts"), main).unwrap();
 
     h.focus("a.txt");
-    h.key("Alt+X");
+    h.key("Ctrl+X");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
     assert_eq!(dialog.items, ["upper: Uppercase copy to the other panel"]);
     h.key("Enter");
@@ -1194,7 +1195,7 @@ async fn plugin_commands_ask_once_then_run_on_the_selection() {
 
     // Allowed now: the second run asks nothing.
     h.focus("notes.txt");
-    h.key("Alt+X");
+    h.key("Ctrl+X");
     h.key("Enter");
     assert!(h.app.overlay().is_none(), "no second question");
     h.settle().await;
@@ -1205,7 +1206,7 @@ async fn plugin_commands_ask_once_then_run_on_the_selection() {
 async fn without_plugins_alt_x_says_how_to_add_one() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("Alt+X");
+    h.key("Ctrl+X");
     assert!(h.app.overlay().is_none());
     assert!(h.status().contains("plugin") || h.status().contains("Plugins"), "{}", h.status());
 }
@@ -1309,7 +1310,7 @@ async fn esc_clears_what_compare_selected() {
     fs::write(h.path("right/only-there.txt"), "x").unwrap();
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Alt+C");
+    h.key("Shift+F3");
     assert!(h.status().contains("Esc clears"), "{}", h.status());
     let marked = |h: &Harness| h.app.workspace.active().selection_summary().files;
     assert!(marked(&h) > 0);
@@ -1747,7 +1748,7 @@ async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
     h.focus("a.txt");
     h.key("Tab");
     h.focus("a.txt");
-    h.key("Alt+C");
+    h.key("Shift+F3");
     h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(_)))).await;
     let screen = h.screen();
     assert!(screen.contains("a.txt ↔ a.txt"), "{screen}");
@@ -1824,7 +1825,7 @@ fn results(h: &Harness) -> Vec<String> {
 async fn copy_path_puts_the_chosen_form_in_the_clipboard() {
     let mut h = Harness::new().await;
     h.focus("notes.txt");
-    h.key("Alt+P");
+    h.key("Ctrl+P");
     assert_eq!(results(&h).len(), 4);
     h.key("Enter"); // the first row: the full path
     let text = h.app.take_clipboard().expect("something was copied");
@@ -1833,7 +1834,7 @@ async fn copy_path_puts_the_chosen_form_in_the_clipboard() {
     assert!(same(&text, &h.path("left/notes.txt").display().to_string()), "{text}");
     assert!(h.app.take_clipboard().is_none(), "handed over once");
 
-    h.key("Alt+P");
+    h.key("Ctrl+P");
     h.key("Down"); // name
     h.key("Enter");
     assert_eq!(h.app.take_clipboard().unwrap(), "notes.txt");
@@ -1842,7 +1843,7 @@ async fn copy_path_puts_the_chosen_form_in_the_clipboard() {
     h.key("Insert");
     h.focus("notes.txt");
     h.key("Insert");
-    h.key("Alt+P");
+    h.key("Ctrl+P");
     h.key("Down");
     h.key("Down"); // URI
     h.key("Enter");
@@ -1897,7 +1898,7 @@ async fn the_listing_is_exported_to_a_file_or_the_clipboard() {
 async fn links_are_made_in_the_other_panel() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("Alt+L");
+    h.key("Shift+F4");
     assert_eq!(results(&h).len(), 3);
     h.key("Enter"); // relative symbolic link
     h.settle().await;
@@ -1905,7 +1906,7 @@ async fn links_are_made_in_the_other_panel() {
     assert_eq!(fs::read_link(&link).unwrap(), PathBuf::from("../left/a.txt"));
     assert_eq!(fs::read_to_string(&link).unwrap(), "alpha\n");
 
-    h.key("Alt+L");
+    h.key("Shift+F4");
     h.key("Down");
     h.key("Down"); // hard link
     h.key("Enter");
@@ -2082,13 +2083,13 @@ async fn search_results_go_to_the_basket_and_are_acted_on_together() {
 
     search(&mut h, "*.txt", "", "").await;
     assert_eq!(results(&h).len(), 3);
-    h.key("Alt+B");
+    h.key("Ctrl+G");
     assert!(h.app.overlay().is_none());
     assert_eq!(h.app.basket.len(), 3);
 
     // The selection of another folder joins them; duplicates do not.
     h.focus("a.txt");
-    h.key("Alt+B");
+    h.key("Ctrl+G");
     assert_eq!(h.app.basket.len(), 3);
 
     h.key("Ctrl+B");
@@ -2117,7 +2118,7 @@ async fn search_results_go_to_the_basket_and_are_acted_on_together() {
 async fn the_basket_can_be_emptied_and_shows_an_item() {
     let mut h = Harness::new().await;
     h.focus("notes.txt");
-    h.key("Alt+B");
+    h.key("Ctrl+G");
     h.focus("docs");
     h.key("Enter");
     h.settle().await;
@@ -2264,7 +2265,7 @@ async fn the_terminal_has_no_font_list() {
 #[tokio::test]
 async fn disk_usage_lists_by_size_and_drills_down() {
     let mut h = Harness::new().await;
-    h.key("Alt+U");
+    h.key("Ctrl+F7");
     h.settle().await;
     let rows = results(&h);
     assert_eq!(rows.len(), 3, "{rows:?}");
@@ -2311,7 +2312,7 @@ async fn no_duplicates_is_said() {
 #[tokio::test]
 async fn the_disk_table_opens_or_says_why_not() {
     let mut h = Harness::new().await;
-    h.key("Alt+K");
+    h.key("Ctrl+F8");
     h.settle().await;
     let shown = matches!(h.app.overlay(), Some(Overlay::Choose(_)));
     assert!(shown || h.status().contains("Disks:"), "{}", h.status());
@@ -2433,12 +2434,12 @@ async fn ctrl_right_opens_a_remote_subfolder_in_the_other_panel() {
 async fn the_basket_packs_what_it_holds() {
     let mut h = Harness::with_settings(|_| {}).await;
     h.focus("notes.txt");
-    h.key("Alt+B");
+    h.key("Ctrl+G");
     h.focus("docs");
     h.key("Enter");
     h.settle().await;
     h.focus("readme.md");
-    h.key("Alt+B");
+    h.key("Ctrl+G");
     h.key("Ctrl+B");
     h.key("Shift+F5");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no pack dialog") };
@@ -2502,7 +2503,7 @@ async fn pick_mode_for_a_folder_gives_the_one_shown() {
     h.key("Down"); // docs/
     h.key("Enter");
     h.settle().await;
-    h.key("Alt+Y");
+    h.key("Ctrl+F10");
     assert!(!h.app.is_running());
     assert_eq!(paths(&h), vec![h.path("left/docs")]);
 }
@@ -2510,7 +2511,7 @@ async fn pick_mode_for_a_folder_gives_the_one_shown() {
 #[tokio::test]
 async fn choosing_does_nothing_outside_pick_mode() {
     let mut h = Harness::new().await;
-    h.key("Alt+Y");
+    h.key("Ctrl+F10");
     assert!(h.app.is_running());
     assert!(h.app.picked().is_none());
 }
@@ -2518,7 +2519,7 @@ async fn choosing_does_nothing_outside_pick_mode() {
 #[tokio::test]
 async fn the_flat_view_lists_files_below_with_their_folder() {
     let mut h = Harness::new().await;
-    h.key("Alt+V");
+    h.key("Ctrl+F6");
     h.settle().await;
     let screen = h.screen();
     // (The title may be cut on long temporary paths; the column says it too.)
@@ -2532,10 +2533,10 @@ async fn the_flat_view_lists_files_below_with_their_folder() {
     let screen = h.screen();
     assert!(!screen.contains("Folder "), "Backspace leaves the flat view: {screen}");
     assert!(h.app.is_running());
-    h.key("Alt+V");
+    h.key("Ctrl+F6");
     h.settle().await;
-    assert!(h.screen().contains("Folder "), "Alt+V enters it again");
-    h.key("Alt+V");
+    assert!(h.screen().contains("Folder "), "Ctrl+F6 enters it again");
+    h.key("Ctrl+F6");
     h.settle().await;
     assert!(!h.screen().contains("Folder "), "and leaves it");
     assert!(screen.contains("docs"), "{screen}");
@@ -3054,7 +3055,7 @@ async fn the_entry_line_says_what_a_git_mark_means() {
 }
 
 #[tokio::test]
-async fn install_asks_before_it_starts_and_alt_left_goes_back() {
+async fn install_asks_before_it_starts_and_shift_tab_goes_back() {
     let mut h = Harness::new().await;
     h.app.perform(Action::InstallServe);
     h.type_text("me@nas.lan --read-only");
@@ -3063,13 +3064,13 @@ async fn install_asks_before_it_starts_and_alt_left_goes_back() {
     let Some(Overlay::Confirm(dialog)) = h.app.overlay() else { panic!("confirm dialog") };
     assert_eq!(dialog.title, "Install nmc serve?");
     assert!(dialog.lines.join("\n").contains("read only"), "{:?}", dialog.lines);
-    assert!(h.screen().contains("Alt+←: back"));
-    h.key("Alt+Left");
+    assert!(h.screen().contains("Shift+Tab: back"));
+    h.key("Shift+Tab");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("back to the question") };
     assert_eq!(dialog.field.text(), "me@nas.lan --read-only", "what was typed is kept");
     h.key("Esc");
     assert!(h.app.overlay().is_none());
-    h.key("Alt+Left");
+    h.key("Shift+Tab");
     assert!(h.app.overlay().is_none(), "nothing to go back to");
 }
 
@@ -3353,7 +3354,7 @@ if (command === "column:chars") {
     assert!(screen.contains("Shouted") && screen.contains("ALPHA"), "{screen}");
 }
 
-/// SC-131: the F1 help keeps inside its border and leaves a gap between its
+/// the F1 help keeps inside its border and leaves a gap between its
 /// two columns on every screen size, down to a small terminal.
 #[tokio::test]
 async fn the_help_fits_every_screen_size() {

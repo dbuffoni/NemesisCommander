@@ -138,7 +138,7 @@ pub(crate) async fn ssh_run(
     input: Option<PathBuf>,
 ) -> std::result::Result<String, String> {
     // On this computer itself the script runs directly: installing on
-    // `localhost` must not need an SSH server (SC-129).
+    // `localhost` must not need an SSH server.
     let mut command = if target.is_this_computer() {
         let mut command = Command::new("sh");
         command.args(["-c", script]);
@@ -234,7 +234,7 @@ mod tests {
 
     #[tokio::test]
     async fn localhost_needs_no_ssh_server() {
-        // No `ssh` is started for this computer itself (SC-129).
+        // No `ssh` is started for this computer itself.
         let target = Target::parse("localhost").unwrap();
         assert!(target.is_this_computer());
         assert_eq!(ssh_run(&target, "echo $((40 + 2))", None).await.unwrap(), "42");

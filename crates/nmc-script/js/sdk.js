@@ -1,4 +1,4 @@
-// The `nmc` global, a thin layer over the Rust operations (op_sc_*). Kept
+// The `nmc` global, a thin layer over the Rust operations (op_nmc_*). Kept
 // free of logic beyond argument checks: everything happens in Rust, where
 // permissions are enforced.
 "use strict";
@@ -32,27 +32,27 @@
       .map((part, index) => (index === 0 ? part.replace(/\/+$/, "") : part.replace(/^\/+|\/+$/g, "")))
       .join("/") || "/";
   const nmc = {
-    version: ops.op_sc_version(),
-    args: ops.op_sc_args(),
-    context: Object.freeze(ops.op_sc_context()),
-    print: (...values) => ops.op_sc_print(values.map(text).join(" ")),
-    list: (path) => ops.op_sc_list(stringArgument("path", path)),
-    stat: (path) => ops.op_sc_stat(stringArgument("path", path)),
-    exists: (path) => ops.op_sc_exists(stringArgument("path", path)),
-    readText: (path) => ops.op_sc_read_text(stringArgument("path", path)),
+    version: ops.op_nmc_version(),
+    args: ops.op_nmc_args(),
+    context: Object.freeze(ops.op_nmc_context()),
+    print: (...values) => ops.op_nmc_print(values.map(text).join(" ")),
+    list: (path) => ops.op_nmc_list(stringArgument("path", path)),
+    stat: (path) => ops.op_nmc_stat(stringArgument("path", path)),
+    exists: (path) => ops.op_nmc_exists(stringArgument("path", path)),
+    readText: (path) => ops.op_nmc_read_text(stringArgument("path", path)),
     writeText: (path, content) =>
-      ops.op_sc_write_text(stringArgument("path", path), stringArgument("text", content)),
+      ops.op_nmc_write_text(stringArgument("path", path), stringArgument("text", content)),
     writeBytes: (path, bytes) => {
       if (!(bytes instanceof Uint8Array)) throw new TypeError("bytes must be a Uint8Array");
-      return ops.op_sc_write_bytes(stringArgument("path", path), bytes);
+      return ops.op_nmc_write_bytes(stringArgument("path", path), bytes);
     },
-    mkdir: (path) => ops.op_sc_mkdir(stringArgument("path", path)),
-    rename: (from, to) => ops.op_sc_rename(stringArgument("from", from), stringArgument("to", to)),
-    remove: (path) => ops.op_sc_remove(stringArgument("path", path)),
+    mkdir: (path) => ops.op_nmc_mkdir(stringArgument("path", path)),
+    rename: (from, to) => ops.op_nmc_rename(stringArgument("from", from), stringArgument("to", to)),
+    remove: (path) => ops.op_nmc_remove(stringArgument("path", path)),
     copy: (sources, destination, options = {}) => {
       if (!Array.isArray(sources)) throw new TypeError("sources must be an array of strings");
       sources.forEach((source) => stringArgument("source", source));
-      return ops.op_sc_copy(sources, stringArgument("destination", destination), options.conflict ?? "fail");
+      return ops.op_nmc_copy(sources, stringArgument("destination", destination), options.conflict ?? "fail");
     },
     join,
     basename: (path) => stringArgument("path", path).replace(/\/+$/, "").split("/").pop() ?? "",

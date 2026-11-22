@@ -3,7 +3,7 @@
 ## Context
 
 F9 opened a menu bar copy: one menu per category, left and right to move
-between menus. Daniele asked for a command palette in the spirit of VS
+between menus. The maintainer asked for a command palette in the spirit of VS
 Code's: type to filter, buttons to show one category, every row named
 `category/command` with its shortcuts visible, any command bindable to a
 key, and plugins and scripts in the same list, in a category of their own or

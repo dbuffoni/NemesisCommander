@@ -1,6 +1,6 @@
-//! Plugin commands and scripts from the panels (Alt+X).
+//! Plugin commands and scripts from the panels (Ctrl+X).
 //!
-//! Alt+X lists the commands of the installed plugins, and, when the cursor
+//! Ctrl+X lists the commands of the installed plugins, and, when the cursor
 //! is on a `.ts` or `.js` file, "run this script". A plugin runs with what
 //! its manifest asks for once the user allowed it; a script from a panel
 //! may change only the folder it is in, after a confirmation each time.
@@ -25,7 +25,7 @@ use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay,
 };
 
-/// One row of the Alt+X list.
+/// One row of the Ctrl+X list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PluginChoice {
     /// A command of the plugin in `dir`.
@@ -156,7 +156,7 @@ impl App {
         }
     }
 
-    /// Alt+X: choose a plugin command (or the script under the cursor).
+    /// Ctrl+X: choose a plugin command (or the script under the cursor).
     pub(super) fn choose_plugin_command(&mut self) {
         if !cfg!(feature = "scripting") {
             self.set_error("Plugins and scripts are not part of this build");
@@ -190,7 +190,7 @@ impl App {
         self.overlay = Some(Overlay::Choose(dialog));
     }
 
-    /// A row of the Alt+X list was chosen.
+    /// A row of the Ctrl+X list was chosen.
     pub(super) fn plugin_chosen(&mut self, choice: PluginChoice) {
         let folder = self.workspace.active().location().clone();
         let (title, lines) = match &choice {

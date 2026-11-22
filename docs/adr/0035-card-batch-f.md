@@ -39,7 +39,7 @@ pull request. The choices that were not obvious are below.
   file) was already gone (ADR 0033).
 - **Advanced pack (SC-101).** The options are part of Pack: **Ctrl+O** in
   the Pack question (Shift+F5) opens them (a first version had a separate
-  command, removed at Daniele's request, PR after #20). They ask the format, the level (skipped for tar and 7z, which
+  command, removed at the maintainer's request, PR after #20). They ask the format, the level (skipped for tar and 7z, which
   have none to choose), the password (zip and 7z only, typed twice, shown as
   dots) and the destination, whose extension follows the chosen format.
   Encryption: zip uses AES-256 (the `aes-crypto` feature of the `zip` crate);

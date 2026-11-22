@@ -5,7 +5,7 @@
 
 ## Context
 
-Daniele asked that the multi-rename have a preview mode everywhere. Before
+The maintainer asked that the multi-rename have a preview mode everywhere. Before
 this record the window and the terminal showed the new names only after
 Enter, in the confirmation; `sc rename` had `--dry-run`; `sc ai rename`
 printed the names. None of them said when a new name belonged to a file

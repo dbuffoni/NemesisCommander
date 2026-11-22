@@ -132,7 +132,7 @@ pub struct CommandSpec {
     pub category: Option<String>,
 }
 
-/// A panel column a plugin fills (SC-30).
+/// A panel column a plugin fills.
 ///
 /// The plugin's script runs as the command `column:ID` with
 /// `nmc.context.selection` holding the files of the folder that match
@@ -153,7 +153,7 @@ pub struct ColumnSpec {
     pub width: Option<u16>,
 }
 
-/// A viewer a plugin adds for some kinds of files (SC-30).
+/// A viewer a plugin adds for some kinds of files.
 ///
 /// The plugin's script runs as the command `preview:ID` with the file in
 /// `nmc.context.selection` and prints Markdown, which the viewer and the

@@ -5,8 +5,8 @@
 
 ## Context
 
-Daniele asked whether viewers and archive formats are loaded only when
-needed, and to keep the footprint under control. Measured on `dev`
+The maintainer asked whether viewers and archive formats are loaded only when
+needed, and to keep the footprint under control. Measured on `main`
 (x86_64 release builds): viewers and archive formats are compiled in but
 nothing costly starts with the program (archive factories are tiny, the
 index is built on first open, previews run when a file is opened, V8 only

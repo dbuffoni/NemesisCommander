@@ -515,8 +515,8 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     let hint = if let Some(name) = &recording {
         format!("Press the new shortcut for {name}    Esc: cancel")
     } else {
-        "Type to find    Left Right: category    Enter: run    F1: help    \
-         Ctrl+K: set shortcut    Del: remove shortcut    Esc: close"
+        "Type to find    ← →: category    Enter: run    F1: help    \
+         Ctrl+K: set shortcut    Delete: remove shortcut    Esc: close"
             .to_owned()
     };
     CommandsView {
@@ -867,14 +867,16 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
     let hint = match screen.current() {
         Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
-                format!("{find}Enter / ← →: change   Del: default   {esc}")
+                format!("{find}Enter / ← →: change   Delete: default   {esc}")
             }
             FieldKind::Number(..) => {
-                format!("{find}Enter: type a value   ← →: one less / more   Del: default   {esc}")
+                format!(
+                    "{find}Enter: type a value   ← →: one less / more   Delete: default   {esc}"
+                )
             }
-            FieldKind::Text => format!("{find}Enter: type a value   Del: default   {esc}"),
+            FieldKind::Text => format!("{find}Enter: type a value   Delete: default   {esc}"),
             FieldKind::Font => {
-                format!("{find}Enter: choose an installed font   Del: default   {esc}")
+                format!("{find}Enter: choose an installed font   Delete: default   {esc}")
             }
         },
         _ => format!("{find}Enter: run   {esc}"),

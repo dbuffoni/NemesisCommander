@@ -530,7 +530,7 @@ impl Panel {
     /// Totals of the selection.
     pub fn selection_summary(&self) -> SelectionSummary {
         let mut summary = SelectionSummary::default();
-        for entry in self.all.iter().filter(|e| self.selected.contains(&e.name)) {
+        for entry in self.visible.iter().filter(|e| self.selected.contains(&e.name)) {
             if entry.is_dir() {
                 summary.dirs += 1;
             } else {

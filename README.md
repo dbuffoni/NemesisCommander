@@ -25,6 +25,13 @@ Read the **[manual](docs/manual/README.md)** for everything it does. Design
 decisions are in [docs/adr](docs/adr), scripting in
 [docs/scripting.md](docs/scripting.md).
 
+## Install
+
+Download the AppImage (window and `nmc`) or a static `nmc-agent` from the
+[releases](https://github.com/dbuffoni/NemesisCommander/releases). Releases are
+for Linux (x86_64; the agent also for aarch64); other systems can build from
+source. The SSH connections use the system's OpenSSH client.
+
 ## Building
 
 ```sh
@@ -32,6 +39,10 @@ cargo build --release              # nmc: terminal interface, CLI, agent
 cargo build --release -p nmc-gui    # the window (needs Qt 6.8 or later)
 cargo test --workspace
 ```
+
+You need a C compiler (bundled SQLite and zstd). Contributions are welcome:
+see [CONTRIBUTING.md](CONTRIBUTING.md); security reports go through
+[SECURITY.md](SECURITY.md).
 
 Build the window with its own cargo command: built together with `nmc`, it
 would link the script engine it does not need (ADR 0020).

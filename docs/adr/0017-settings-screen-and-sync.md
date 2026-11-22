@@ -7,7 +7,7 @@
 
 Settings were a TOML file edited in an external editor (Ctrl+,), with
 export and import to a file. The architecture document ruled out syncing
-settings between machines. Daniele then asked for a screen to change
+settings between machines. The maintainer then asked for a screen to change
 shortcuts and options inside the program, and for a way to send the
 settings to remote instances when needed.
 

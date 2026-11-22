@@ -52,7 +52,7 @@ Eleven more cards joined release 0.1.0 after the first batch (ADR 0026): SC-1,
   size and times within two seconds. Whole folders that exist on one side only
   are one item. Two-way never resolves a real conflict.
 
-- **Connection names (asked by Daniele afterwards):** a new connection already
+- **Connection names (asked by the maintainer afterwards):** a new connection already
   asked for its name as the second question; the prompt now says what the name
   is for, and F2 in the drive list renames a saved connection (names stay
   unique).

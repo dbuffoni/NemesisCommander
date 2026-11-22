@@ -3,11 +3,11 @@
 // without an extension and folders stay where they are.
 //
 // Install:  nmc plugin install examples/plugins/sort-by-type
-// Use:      select files in a panel, press Alt+X and pick the command.
+// Use:      select files in a panel, press Ctrl+X and pick the command.
 
 const context = nmc.context;
 if (context === null || context.panel === null) {
-  throw new Error("run this from a panel (Alt+X) or with `nmc plugin run`");
+  throw new Error("run this from a panel (Ctrl+X) or with `nmc plugin run`");
 }
 
 let moved = 0;

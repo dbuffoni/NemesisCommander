@@ -1,4 +1,4 @@
-//! Panel columns and viewers added by plugins (SC-30).
+//! Panel columns and viewers added by plugins.
 //!
 //! A plugin declares `columns` and `previewers` in its manifest. They run
 //! the plugin's script as the commands `column:ID` and `preview:ID` (see

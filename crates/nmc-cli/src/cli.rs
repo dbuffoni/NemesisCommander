@@ -740,7 +740,7 @@ pub enum PluginAction {
 pub struct PickArgs {
     /// Folder or URI to start in (the current folder when omitted).
     pub location: Option<String>,
-    /// Choose a folder (the one shown, with Alt+Y) instead of files.
+    /// Choose a folder (the one shown, with Ctrl+F10) instead of files.
     #[arg(short, long)]
     pub dir: bool,
     /// Allow several files: mark them with Space, then press Enter.

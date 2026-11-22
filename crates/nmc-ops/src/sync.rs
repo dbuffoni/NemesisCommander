@@ -84,9 +84,9 @@ pub async fn list_tree(registry: &ProviderRegistry, root: &VfsPath) -> Result<Tr
     let mut out = Tree::new();
     let mut items = walk(provider.as_ref(), root, None);
     while let Some(item) = items.next().await {
-        // Unreadable sub-folders are left out of the comparison; leaving them
-        // out of a mirror's deletions is the safe way to fail.
-        let Ok(item) = item else { continue };
+        // A folder that cannot be read fails the comparison: treating it as
+        // empty would make a mirror delete everything on the other side.
+        let item = item?;
         if let Some(relative) = item.path.relative_to(root) {
             out.insert(relative, item.entry);
         }

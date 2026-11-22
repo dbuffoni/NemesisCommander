@@ -8,8 +8,8 @@
       Starts COMMAND (standard input kept open), waits two seconds and
       fails when it uses more than MAX_MB of memory (resident set).
 
-  scripts/footprint.py bench SC
-      Times a few everyday jobs of the `nmc` program SC on generated files
+  scripts/footprint.py bench nmc
+      Times a few everyday jobs of the `nmc` program on generated files
       and prints a Markdown table with their time and peak memory (which
       includes about 10 MB of this script's own). Only informative: it
       never fails on numbers.
