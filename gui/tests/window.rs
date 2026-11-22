@@ -210,8 +210,8 @@ fn every_viewer_draws_cleanly() {
 #[test]
 fn the_settings_screen_saves_changes() {
     let home = home();
-    // Down to "Show hidden files" (General has three options), Enter.
-    let run = run(home.path(), "Ctrl+, Down Down Down Enter", None);
+    // Down to "Show hidden files" (General has four options), Enter.
+    let run = run(home.path(), "Ctrl+, Down Down Down Down Enter", None);
     assert_no_qml_warnings(&run);
     let rows = run.screen["overlay"]["rows"].as_array().unwrap();
     let hidden = rows.iter().find(|r| r["label"] == "Show hidden files").unwrap();
