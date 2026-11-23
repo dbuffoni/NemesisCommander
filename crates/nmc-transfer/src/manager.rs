@@ -970,6 +970,10 @@ impl Throttle for Both {
         self.0.acquire(bytes).await;
         self.1.acquire(bytes).await;
     }
+
+    fn limited(&self) -> bool {
+        self.0.limited() || self.1.limited()
+    }
 }
 
 #[cfg(test)]

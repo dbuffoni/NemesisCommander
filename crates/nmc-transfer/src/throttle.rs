@@ -76,6 +76,10 @@ impl Throttle for TokenBucket {
             tokio::time::sleep(wait).await;
         }
     }
+
+    fn limited(&self) -> bool {
+        self.rate() > 0
+    }
 }
 
 #[cfg(test)]
