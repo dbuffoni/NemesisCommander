@@ -1098,7 +1098,8 @@ impl App {
                     }
                     dialog.items.push(row);
                     paths.push(hit.path);
-                    dialog.footer = format!("{} found, searching…   {hint}", paths.len());
+                    dialog.footer =
+                        format!("{} found, searching…{}{hint}", paths.len(), crate::hints::SEP);
                 }
             }
             AppEvent::SearchDone(error) => {
@@ -1108,8 +1109,14 @@ impl App {
                     && let ChoosePurpose::SearchResults(paths) = &dialog.purpose
                 {
                     dialog.footer = match &error {
-                        Some(e) => format!("{} found, stopped: {e}   {hint}", paths.len()),
-                        None => format!("{} found   {hint}", paths.len()),
+                        Some(e) => {
+                            format!(
+                                "{} found, stopped: {e}{}{hint}",
+                                paths.len(),
+                                crate::hints::SEP
+                            )
+                        }
+                        None => format!("{} found{}{hint}", paths.len(), crate::hints::SEP),
                     };
                 }
             }
@@ -1233,7 +1240,7 @@ impl App {
         match (self.can_go_back(), hint.is_empty()) {
             (false, _) => hint,
             (true, true) => "Shift+Tab: back".into(),
-            (true, false) => format!("{hint}    Shift+Tab: back"),
+            (true, false) => crate::hints::with_back(&hint),
         }
     }
 
@@ -1428,8 +1435,11 @@ impl App {
                 Some(Overlay::Input(dialog))
             }
             Overlay::Confirm(dialog) => {
-                let yes = key == Some(Key::Enter) || matches!(press.text, Some('y' | 'Y'));
-                let no = is_esc || matches!(press.text, Some('n' | 'N'));
+                let enter = key == Some(Key::Enter);
+                let yes = matches!(press.text, Some('y' | 'Y')) || (enter && !dialog.default_no());
+                let no = is_esc
+                    || matches!(press.text, Some('n' | 'N'))
+                    || (enter && dialog.default_no());
                 if yes {
                     self.confirmed(dialog.purpose);
                     None
@@ -1713,7 +1723,7 @@ impl App {
                     items,
                     ChoosePurpose::BookmarkTarget(targets.to_vec()),
                 );
-                dialog.footer = "Enter: open in the other panel   Esc: leave it".into();
+                dialog.footer = crate::hints::list("open", &[], "cancel");
                 self.overlay = Some(Overlay::Choose(dialog));
             }
         }
@@ -1957,8 +1967,11 @@ impl App {
                 let mut items: Vec<String> = drives.iter().map(|d| d.row()).collect();
                 items.push("New connection…".into());
                 let mut dialog = ChooseDialog::new("Drives", items, ChoosePurpose::Drives(drives));
-                dialog.footer =
-                    "Enter: open   F2: rename   F4: edit   Ctrl+T: test   Delete: remove".into();
+                dialog.footer = crate::hints::list(
+                    "open",
+                    &["F2: rename", "F4: edit", "Ctrl+T: test", "Delete: remove"],
+                    "close",
+                );
                 self.overlay = Some(Overlay::Choose(dialog));
             }
             Action::RunScript => self.choose_plugin_command(),
@@ -2543,7 +2556,7 @@ impl App {
             Vec::new(),
             ChoosePurpose::SearchResults(Vec::new()),
         );
-        dialog.footer = "searching…".into();
+        dialog.footer = format!("searching…{}{}", crate::hints::SEP, self.basket_hint());
         self.overlay = Some(Overlay::Choose(dialog));
         let registry = self.context.registry.clone();
         let events = self.events.clone();

@@ -87,10 +87,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 let mut lines: Vec<Line> =
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
                 lines.push(Line::raw(""));
-                lines.push(Line::styled(
-                    app.with_back("Enter / y: yes    Esc / n: no".into()),
-                    dim(),
-                ));
+                lines.push(Line::styled(app.with_back(dialog.hint()), dim()));
                 draw_box(frame, &dialog.title, lines);
             }
             Overlay::Choose(dialog) => {
@@ -136,8 +133,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             Line::raw(format!("  Existing: {}", describe(&conflict.destination_entry))),
             Line::raw(format!("  New:      {}", describe(&conflict.source_entry))),
             Line::raw(""),
-            Line::raw("o: overwrite   s: skip   r: keep both   a / Esc: abort"),
-            Line::styled("Capital letter (O, S, R): same answer for all", dim()),
+            Line::styled(
+                shrink_hint(nmc_frontend::hints::CONFLICT, box_width(frame.area()) as usize - 4),
+                dim(),
+            ),
         ];
         draw_box(frame, "File exists", lines);
     }
@@ -349,9 +348,12 @@ pub fn fit(text: &str, width: usize) -> String {
 /// or more spaces) that fits `width` columns: when it is too long, items
 /// from the middle go, the first and the last (the way out) stay.
 pub fn shrink_hint(hint: &str, width: usize) -> String {
-    let items: Vec<&str> =
-        hint.split("  ").map(str::trim).filter(|item| !item.is_empty()).collect();
-    let join = |items: &[&str]| items.join("   ");
+    let items: Vec<&str> = hint
+        .split(nmc_frontend::hints::SEP)
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .collect();
+    let join = |items: &[&str]| items.join(nmc_frontend::hints::SEP);
     if join(&items).chars().count() <= width || items.len() < 3 {
         return join(&items);
     }
@@ -616,10 +618,7 @@ fn draw_help(frame: &mut Frame, app: &App) {
     let height = left.len().max(right.len()) as u16 + 4;
     let area = centered(screen, width, height);
     frame.render_widget(Clear, area);
-    let hint = shrink_hint(
-        "Any key closes    F9: lists every command",
-        area.width.saturating_sub(4) as usize,
-    );
+    let hint = shrink_hint(nmc_frontend::hints::HELP, area.width.saturating_sub(4) as usize);
     let block = Block::bordered()
         .title(Line::styled(" Main shortcuts ", bold()))
         .title_bottom(Line::styled(format!(" {hint} "), dim()));
@@ -831,6 +830,7 @@ fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog, footer: &str) -> usize 
     };
     let rect = centered(area, width, height);
     frame.render_widget(Clear, rect);
+    let footer = shrink_hint(footer, rect.width.saturating_sub(4) as usize);
     let block = Block::bordered()
         .title(Line::styled(format!(" {} ", dialog.title), bold()))
         .title_bottom(Line::styled(format!(" {footer} "), dim()));
@@ -1048,10 +1048,7 @@ fn draw_jobs(frame: &mut Frame, app: &App, cursor: usize) {
         Line::styled(
             format!(
                 " {} ",
-                shrink_hint(
-                    "p: pause  r: resume/retry  c: cancel  +/-: priority  [/]: files at once  a: auto  x: remove finished  Esc: close",
-                    rect.width.saturating_sub(6) as usize
-                )
+                shrink_hint(nmc_frontend::hints::JOBS, rect.width.saturating_sub(6) as usize)
             ),
             dim(),
         ),

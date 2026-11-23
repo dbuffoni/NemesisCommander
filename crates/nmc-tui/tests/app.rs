@@ -229,7 +229,13 @@ async fn delete_asks_first() {
 
     h.key("F8");
     h.settle().await;
+    // Permanent: Enter says no, only y deletes.
     h.key("Enter");
+    h.settle().await;
+    assert!(h.path("left/docs").exists());
+    h.key("F8");
+    h.settle().await;
+    h.press(KeyPress::char('y'));
     h.settle().await;
     assert!(!h.path("left/docs").exists());
     assert!(!h.names(SideId::Left).contains(&"docs".to_owned()));
@@ -1241,7 +1247,10 @@ async fn the_settings_screen_changes_options_and_saves_them() {
     h.key("Ctrl+,");
     let screen = h.screen();
     assert!(screen.contains("Settings") && screen.contains("Ask before deleting"), "{screen}");
-    assert!(screen.contains("General") && screen.contains("Enter / ← →: change"), "{screen}");
+    assert!(
+        screen.contains("General") && screen.contains("Enter: change    ←/→: change"),
+        "{screen}"
+    );
 
     settings_row(&mut h, "Show hidden files");
     h.key("Enter");
@@ -1757,7 +1766,7 @@ async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
     assert!(changed.contains('~') && changed.contains("beta"), "paired on one row: {changed}");
     let added = screen.lines().find(|l| l.contains("delta")).unwrap();
     assert!(added.contains('+'), "only on the right: {added}");
-    assert!(screen.contains("next/previous change"), "{screen}");
+    assert!(screen.contains("n / p: next change"), "{screen}");
     h.key("n");
     h.key("Esc");
     assert!(h.app.overlay().is_none());
@@ -3370,7 +3379,7 @@ async fn the_help_fits_every_screen_size() {
             .collect();
         let screen = lines.join("\n");
         let top = lines.iter().position(|l| l.contains("Main shortcuts")).expect(&screen);
-        let bottom = lines.iter().position(|l| l.contains("Any key")).expect(&screen);
+        let bottom = lines.iter().position(|l| l.contains("Esc: close")).expect(&screen);
         assert!(bottom > top, "{w}x{rows}:\n{screen}");
         let first = lines[top].chars().position(|c| c == '┌').unwrap();
         for line in &lines[top + 1..bottom] {
@@ -3381,4 +3390,94 @@ async fn the_help_fits_every_screen_size() {
         // No label touches the next column: keys and labels are cut with …
         assert!(!screen.contains("Delete (to…Nemesis"), "{w}x{rows}:\n{screen}");
     }
+}
+
+/// The key row of the open dialog, as the window gets it from the screen
+/// description (the terminal draws the same text).
+fn dialog_hint(h: &mut Harness) -> Option<String> {
+    use nmc_frontend::view::{OverlayView, Screen};
+    let screen = Screen::of(&mut h.app, 20, 30);
+    if let Some(conflict) = screen.conflict {
+        return Some(conflict.hint);
+    }
+    Some(match screen.overlay? {
+        OverlayView::Help { hint, .. } | OverlayView::Jobs { hint, .. } => hint,
+        OverlayView::Commands(view) => view.hint,
+        OverlayView::Input { hint, .. }
+        | OverlayView::Confirm { hint, .. }
+        | OverlayView::Message { hint, .. } => hint,
+        OverlayView::Choose { footer, .. } => footer,
+        OverlayView::Viewer(view) => view.keys,
+        OverlayView::Settings(view) => view.hint,
+    })
+}
+
+/// Every dialog ends its key row with Esc, keeps one convention, and the
+/// terminal shows the same row as the window (first and last parts, the
+/// ones that stay when the row is shortened).
+#[tokio::test]
+async fn every_dialog_has_a_key_row_in_one_convention() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("left/pack.zip"), b"PK\x05\x06\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    let cases: &[(&str, &[&str])] = &[
+        ("help", &["F1"]),
+        ("commands", &["F9"]),
+        ("settings", &["Ctrl+,"]),
+        ("jobs", &["Ctrl+J"]),
+        ("copy", &["F5"]),
+        ("move", &["F6"]),
+        ("mkdir", &["F7"]),
+        ("rename", &["Shift+F6"]),
+        ("delete", &["F8"]),
+        ("delete forever", &["Shift+F8"]),
+        ("search", &["Shift+F7"]),
+        ("drives", &["Shift+F1"]),
+        ("bookmarks", &["Ctrl+D"]),
+        ("properties", &["Ctrl+E"]),
+        ("pack", &["Shift+F5"]),
+        ("copy path", &["Ctrl+P"]),
+        ("link", &["Shift+F4"]),
+        ("disks", &["Ctrl+F8"]),
+        ("disk usage", &["Ctrl+F7"]),
+        ("viewer", &["F3"]),
+        ("select mask", &["+"]),
+        ("quick filter", &["Ctrl+S"]),
+    ];
+    for (name, keys) in cases {
+        h.focus("a.txt");
+        for key in *keys {
+            h.key(key);
+            h.settle().await;
+        }
+        let Some(hint) = dialog_hint(&mut h) else { panic!("{name}: no dialog opened") };
+        nmc_frontend::hints::check(&hint).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let screen = h.screen();
+        save_screen(&format!("dialog-{}", name.replace(' ', "-")), &screen);
+        let parts: Vec<&str> = hint.split(nmc_frontend::hints::SEP).collect();
+        let (first, last) = (parts[0], parts[parts.len() - 1]);
+        assert!(screen.contains(first) && screen.contains(last), "{name}: {hint}\n{screen}");
+        for _ in 0..3 {
+            h.key("Esc");
+            h.settle().await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_conflict_question_has_the_shared_key_row() {
+    let mut h = Harness::new().await;
+    fs::write(h.path("right/a.txt"), "other").unwrap();
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("a.txt");
+    h.key("F5");
+    h.key("Enter");
+    h.settle_until(|app| app.pending_conflict().is_some()).await;
+    let hint = dialog_hint(&mut h).unwrap();
+    nmc_frontend::hints::check(&hint).unwrap();
+    let screen = h.screen();
+    let parts: Vec<&str> = hint.split(nmc_frontend::hints::SEP).collect();
+    assert!(screen.contains(parts[0]) && screen.contains(parts[parts.len() - 1]), "{screen}");
 }

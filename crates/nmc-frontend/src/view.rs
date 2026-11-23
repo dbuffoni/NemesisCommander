@@ -180,6 +180,8 @@ pub struct KeyLabel {
 pub enum OverlayView {
     /// F1: the main shortcuts, by category.
     Help {
+        /// The keys shown under the list.
+        hint: String,
         /// Groups of `(keys, label)` rows.
         groups: Vec<HelpGroup>,
     },
@@ -249,6 +251,8 @@ pub enum OverlayView {
     Viewer(ViewerView),
     /// Ctrl+J: the transfer queue.
     Jobs {
+        /// The keys shown under the list.
+        hint: String,
         /// One line per job.
         rows: Vec<JobRow>,
         /// Highlighted job.
@@ -453,6 +457,8 @@ pub struct ConflictView {
     pub existing: String,
     /// The file being copied.
     pub incoming: String,
+    /// The keys shown under the question.
+    pub hint: String,
 }
 
 impl Screen {
@@ -499,6 +505,7 @@ impl Screen {
             destination: display_location(&c.destination),
             existing: describe(&c.destination_entry),
             incoming: describe(&c.source_entry),
+            hint: crate::hints::CONFLICT.into(),
         });
         Screen {
             panels,
@@ -530,11 +537,18 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     let keymap = &app.context().keymap;
     let recording = palette.recording.then(|| palette.selected().map(|e| e.name())).flatten();
     let hint = if let Some(name) = &recording {
-        format!("Press the new shortcut for {name}    Esc: cancel")
+        format!("Press the new shortcut for {name}{}Esc: cancel", crate::hints::SEP)
     } else {
-        "Type to find   ← →: category   Enter: run   F1: help   \
-         Ctrl+K: set key   Del: remove key   Esc: close"
-            .to_owned()
+        [
+            "Enter: run",
+            "←/→: category",
+            "Ctrl+K: set key",
+            "Delete: remove key",
+            "Type: find",
+            "F1: help",
+            "Esc: close",
+        ]
+        .join(crate::hints::SEP)
     };
     CommandsView {
         categories: palette.categories.clone(),
@@ -808,6 +822,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
 fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
     Some(match app.overlay()? {
         Overlay::Help => OverlayView::Help {
+            hint: crate::hints::HELP.into(),
             groups: app
                 .context()
                 .keymap
@@ -833,7 +848,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         Overlay::Confirm(dialog) => OverlayView::Confirm {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
-            hint: app.with_back("Enter / y: yes    Esc / n: no".into()),
+            hint: app.with_back(dialog.hint()),
         },
         Overlay::Choose(dialog) => OverlayView::Choose {
             title: dialog.title.clone(),
@@ -853,6 +868,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         },
         Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
         Overlay::Jobs(view) => OverlayView::Jobs {
+            hint: crate::hints::JOBS.into(),
             rows: app
                 .jobs
                 .iter()
@@ -900,29 +916,28 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             changed: false,
         },
     };
-    let find = if screen.filter.is_empty() {
-        "Type to find   ".to_owned()
+    let (lead, esc) = if screen.filter.is_empty() {
+        (String::new(), "Esc: close")
     } else {
-        format!("Find: {}_   ", screen.filter)
+        (format!("Find: {}_{}", screen.filter, crate::hints::SEP), "Esc: clear")
     };
-    let esc = if screen.filter.is_empty() { "Esc: close" } else { "Esc: clear" };
-    let hint = match screen.current() {
+    let typing = if screen.filter.is_empty() { Some("Type: find") } else { None };
+    let mut parts: Vec<&str> = match screen.current() {
         Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
-                format!("{find}Enter / ← →: change   Delete: default   {esc}")
+                vec!["Enter: change", "←/→: change", "Delete: default"]
             }
             FieldKind::Number(..) => {
-                format!(
-                    "{find}Enter: type a value   ← →: one less / more   Delete: default   {esc}"
-                )
+                vec!["Enter: type a value", "←/→: less / more", "Delete: default"]
             }
-            FieldKind::Text => format!("{find}Enter: type a value   Delete: default   {esc}"),
-            FieldKind::Font => {
-                format!("{find}Enter: choose an installed font   Delete: default   {esc}")
-            }
+            FieldKind::Text => vec!["Enter: type a value", "Delete: default"],
+            FieldKind::Font => vec!["Enter: choose", "Delete: default"],
         },
-        _ => format!("{find}Enter: run   {esc}"),
+        _ => vec!["Enter: run"],
     };
+    parts.extend(typing);
+    parts.push(esc);
+    let hint = format!("{lead}{}", parts.join(crate::hints::SEP));
     SettingsView {
         rows: screen.rows.iter().skip(offset).take(rows).map(row_view).collect(),
         cursor: screen.cursor - offset,
@@ -981,14 +996,14 @@ fn file_url(path: &std::path::Path) -> String {
 /// The keys that matter in the viewer's current mode.
 pub fn viewer_keys(viewer: &Viewer) -> &'static str {
     if viewer.diff.is_some() {
-        return "n/p: next/previous change   PgUp/PgDn: scroll   Esc: close";
+        return "n / p: next change    PgUp/PgDn: scroll    Esc: close";
     }
     match viewer.mode() {
-        "pdf" => "PgUp/PgDn: page   +/-: zoom   0: fit   F4: hex   Esc: close",
-        "model" => "Arrows: turn   +/-: zoom   0: reset   F4: hex   Esc: close",
-        "image" => "+/-: zoom   0: fit   arrows: move   F4: hex   Esc: close",
-        "document" => "PgUp/PgDn: scroll   F4: hex   Esc: close",
-        _ => "F2: wrap   F4: hex   Esc: close",
+        "pdf" => "PgUp/PgDn: page    +/-: zoom    0: fit    F4: hex    Esc: close",
+        "model" => "Arrows: turn    +/-: zoom    0: reset    F4: hex    Esc: close",
+        "image" => "Arrows: move    +/-: zoom    0: fit    F4: hex    Esc: close",
+        "document" => "PgUp/PgDn: scroll    F4: hex    Esc: close",
+        _ => "F2: wrap    F4: hex    Esc: close",
     }
 }
 

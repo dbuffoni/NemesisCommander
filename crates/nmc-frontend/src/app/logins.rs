@@ -92,7 +92,7 @@ impl App {
         } else {
             2
         };
-        dialog.footer = "Enter: choose   Esc: cancel   Ctrl+T: test the connection".into();
+        dialog.footer = crate::hints::list("choose", &["Ctrl+T: test"], "cancel");
         self.overlay = Some(Overlay::Choose(dialog));
     }
 

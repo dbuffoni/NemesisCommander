@@ -118,7 +118,7 @@ Item {
         Box {
             id: helpBox
             title: "Main shortcuts"
-            hint: "Any key closes    F9: lists every command"
+            hint: dialogs.view.hint
             readonly property real gap: 32
             readonly property var bold: Qt.font({ family: dialogs.theme.font.family,
                                                   pointSize: dialogs.theme.font.pointSize,
@@ -523,9 +523,8 @@ Item {
     Component {
         id: jobs
         Box {
-            title: "Transfers"
-            hint: "p: pause    r: resume/retry    c: cancel    +/-: priority    "
-                  + "[/]: files at once    a: auto    x: remove finished    Esc: close"
+            title: "Transfer queue"
+            hint: dialogs.view.hint
             fixedHeight: dialogs.height * 0.8
             width: Math.min(dialogs.theme.width * 0.9, 1100)
             Label {
@@ -633,8 +632,7 @@ Item {
         anchors.centerIn: parent
         visible: dialogs.conflict !== null
         title: "File exists"
-        hint: "o: overwrite    s: skip    r: keep both    a / Esc: abort\n"
-              + "Capital letter (O, S, R): same answer for all"
+        hint: dialogs.conflict ? dialogs.conflict.hint : ""
         Label {
             Layout.fillWidth: true
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere

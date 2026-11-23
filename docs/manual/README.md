@@ -248,6 +248,18 @@ systems with Unix permissions, Enter changes them (octal mode).
 
 ![Properties](images/properties.png)
 
+### The keys of a dialog
+
+Every dialog has one row of keys at the bottom, the same in the window and
+in the terminal, always in this order: the main action first (`Enter: OK`,
+`Enter: open`, `Enter: run`), then the keys this dialog adds (`Ctrl+U: clear`,
+`Ctrl+T: test`, `Ctrl+O: more options`, `Delete: remove`…), then
+`Shift+Tab: back` when there is a question before this one, `F1: help` when
+the dialog explains itself, and last **Esc**: `Esc: cancel` for questions and
+confirmations, `Esc: close` for lists, messages and viewers. A question that
+cannot be undone, such as deleting for good, answers **no** to Enter: only
+**y** says yes (its row says so).
+
 ### Typing and pasting
 
 Every question (new folder, go to, a connection's address, a password…) is a
