@@ -103,8 +103,7 @@ Item {
             readonly property bool columns: table && modelData.indexOf("  ", 2) >= 0
             Layout.fillWidth: true
             text: modelData
-            wrapMode: columns ? Text.NoWrap : Text.Wrap
-            elide: columns ? Text.ElideRight : Text.ElideNone
+            wrapMode: Text.Wrap
             textFormat: Text.PlainText
         }
     }
@@ -213,6 +212,9 @@ Item {
         id: commands
         Box {
             title: "Commands"
+            // In a small window the list shrinks (down to 60%) to show more rows.
+            readonly property real sc: Math.max(0.6, Math.min(1,
+                dialogs.height / (dialogs.theme.rowHeight * 20)))
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
             width: Math.min(dialogs.theme.width * 0.9, 1000)
@@ -233,6 +235,7 @@ Item {
                             id: name
                             anchors.centerIn: parent
                             text: modelData
+                            font.pointSize: dialogs.theme.font.pointSize * sc
                             color: chosen ? palette.highlightedText : palette.windowText
                         }
                         MouseArea {
@@ -263,7 +266,7 @@ Item {
                 id: rowsArea
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 3 * dialogs.theme.rowHeight
+                Layout.minimumHeight: 3 * dialogs.theme.rowHeight * sc
                 Layout.preferredHeight: 16 * dialogs.theme.rowHeight
                 implicitWidth: 600
             ListView {
@@ -272,7 +275,7 @@ Item {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 // Whole rows only.
-                height: Math.floor(parent.height / dialogs.theme.rowHeight) * dialogs.theme.rowHeight
+                height: Math.floor(parent.height / (dialogs.theme.rowHeight * sc)) * dialogs.theme.rowHeight * sc
                 interactive: false
                 clip: true
                 model: dialogs.view.rows
@@ -282,7 +285,7 @@ Item {
                 delegate: Rectangle {
                     readonly property bool current: index === dialogs.view.item
                     width: ListView.view.width
-                    height: dialogs.theme.rowHeight
+                    height: dialogs.theme.rowHeight * sc
                     radius: 2
                     color: current ? palette.highlight : "transparent"
                     RowLayout {
@@ -294,11 +297,13 @@ Item {
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             text: modelData.name
+                            font.pointSize: dialogs.theme.font.pointSize * sc
                             color: current ? palette.highlightedText : palette.windowText
                         }
                         Label {
                             text: modelData.keys
-                            font: dialogs.theme.fixedFont
+                            font.family: dialogs.theme.fixedFont.family
+                            font.pointSize: dialogs.theme.fixedFont.pointSize * sc
                             color: current ? palette.highlightedText : dialogs.theme.dim
                         }
                     }
@@ -386,15 +391,21 @@ Item {
             }
             // Under the field: examples, what was understood, the new names.
             // The room is kept whatever is written, so the window stays put.
-            Item {
+            Flickable {
+                id: previewScroll
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 2 * dialogs.theme.rowHeight
                 Layout.preferredHeight: Math.max(dialogs.view.preview_rows * dialogs.theme.rowHeight,
                                                  previewLines.implicitHeight)
+                contentWidth: width
+                contentHeight: previewLines.implicitHeight
                 clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
                 ColumnLayout {
                     id: previewLines
-                    anchors.left: parent.left
-                    anchors.right: parent.right
+                    width: previewScroll.width
                     spacing: 0
                     Lines { table: true; model: dialogs.view.preview }
                 }
@@ -488,6 +499,11 @@ Item {
                 Layout.preferredHeight: messageLines.implicitHeight
                 contentWidth: width
                 contentHeight: messageLines.implicitHeight
+                // A finished log (install, tests) is read from its result.
+                readonly property bool isLog: dialogs.view.lines.length > 0
+                    && dialogs.view.lines[0].charAt(0) === "["
+                onContentHeightChanged: if (isLog) contentY = Math.max(0, contentHeight - height)
+                onHeightChanged: if (isLog) contentY = Math.max(0, contentHeight - height)
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ScrollBar {}
@@ -604,7 +620,7 @@ Item {
                 model: dialogs.view.rows
                 delegate: Rectangle {
                     Layout.fillWidth: true
-                    implicitHeight: dialogs.theme.rowHeight
+                    implicitHeight: dialogs.theme.rowHeight * dialogs.theme.settingsScale
                     readonly property bool current: index === dialogs.view.cursor
                     readonly property bool header: modelData.kind === "header"
                     color: current ? palette.highlight : "transparent"
@@ -618,6 +634,7 @@ Item {
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                             text: modelData.label
+                            font.pointSize: dialogs.theme.font.pointSize * dialogs.theme.settingsScale
                             font.bold: header
                             color: current ? palette.highlightedText
                                  : header ? dialogs.theme.headingColor
@@ -629,7 +646,8 @@ Item {
                             Layout.preferredWidth: parent.width * 0.38
                             elide: Text.ElideRight
                             text: (modelData.changed ? "• " : "") + modelData.value
-                            font: dialogs.theme.fixedFont
+                            font.family: dialogs.theme.fixedFont.family
+                            font.pointSize: dialogs.theme.fixedFont.pointSize * dialogs.theme.settingsScale
                             color: current ? palette.highlightedText
                                  : modelData.changed ? dialogs.theme.selectedText
                                  : modelData.value === "none" ? dialogs.theme.dim

@@ -418,7 +418,7 @@ Rectangle {
             // Whole words, on two lines at most: the keys of the quick view
             // footer must not end in an ellipsis.
             wrapMode: Text.Wrap
-            maximumLineCount: 2
+            maximumLineCount: 3
             elide: Text.ElideRight
         }
     }

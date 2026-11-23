@@ -38,6 +38,8 @@ Rectangle {
         width: parent.width - 32
         text: box.title
         font.bold: true
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
         elide: Text.ElideRight
     }
 

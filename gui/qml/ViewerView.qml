@@ -166,6 +166,8 @@ Item {
                             id: line
                             visible: !modelData.rule
                             anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width
+                            wrapMode: modelData.code ? Text.NoWrap : Text.Wrap
                             text: viewer.styledLine(modelData.spans, parent.level)
                             textFormat: Text.StyledText
                             font.family: viewer.theme.fixedFont.family

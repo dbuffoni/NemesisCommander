@@ -3348,6 +3348,7 @@ if (command === "column:chars") {
     h.settle_until(|app| !app.plugin_columns(SideId::Left).is_empty()).await;
     let screen = h.screen();
     assert!(screen.contains("Chars"), "{screen}");
+    save_screen("plugin-column", &screen);
     // "alpha\n" is 6 characters, "the needle is here\n" 19.
     let row = |name: &str| screen.lines().find(|l| l.contains(name)).unwrap().to_owned();
     assert!(row("a.txt").contains(" 6 "), "{}", row("a.txt"));
@@ -3362,6 +3363,7 @@ if (command === "column:chars") {
         .await;
     let screen = h.screen();
     assert!(screen.contains("Shouted") && screen.contains("ALPHA"), "{screen}");
+    save_screen("plugin-previewer", &screen);
 }
 
 /// the F1 help keeps inside its border and leaves a gap between its
@@ -3500,11 +3502,14 @@ async fn install_test_pack_and_plugin_dialogs_follow_the_convention() {
     let steps: &[(&str, &[&str])] = &[
         ("install-question", &["F9", "i", "n", "s", "t", "a", "l", "l", "Enter"]),
         ("install-help", &["F1"]),
+        ("install-test", &["F9", "i", "n", "s", "t", "a", "l", "l", "Enter"]),
+        ("install-confirm", &["F9", "i", "n", "s", "t", "a", "l", "l", "Enter"]),
         ("plugins", &["Ctrl+X"]),
         ("plugin-allow", &["Ctrl+X", "Enter"]),
         ("pack-format", &["Shift+F5", "Ctrl+O"]),
         ("pack-level", &["Shift+F5", "Ctrl+O", "Enter"]),
         ("pack-password", &["Shift+F5", "Ctrl+O", "Enter", "Enter"]),
+        ("connection-test", &["Shift+F1", "End", "Enter"]),
     ];
     for (name, keys) in steps {
         // The install help is a step on from the install question.
@@ -3513,6 +3518,21 @@ async fn install_test_pack_and_plugin_dialogs_follow_the_convention() {
         }
         for key in *keys {
             h.key(key);
+            h.settle().await;
+        }
+        if *name == "install-test" {
+            h.type_text("me@127.0.0.1");
+            h.key("Ctrl+T");
+            h.settle().await;
+        }
+        if *name == "install-confirm" {
+            h.type_text("me@127.0.0.1");
+            h.key("Enter");
+            h.settle().await;
+        }
+        if *name == "connection-test" {
+            h.type_text("sftp://me@127.0.0.1:2/x");
+            h.key("Ctrl+T");
             h.settle().await;
         }
         let Some(hint) = dialog_hint(&mut h) else { continue };

@@ -110,8 +110,16 @@ ApplicationWindow {
     Component.onCompleted: commander.start(Qt.fontFamilies().join("\n"))
 
     // Rows that fit: tell the application, which scrolls and pages with it.
+    // The settings list shrinks its text (down to 60%) in a small window so
+    // that more of its rows are in sight.
+    readonly property bool settingsOpen: screen !== null && screen.overlay !== null
+        && screen.overlay.kind === "settings"
+    readonly property real settingsScale: !settingsOpen ? 1
+        : Math.max(0.6, Math.min(1, body.height / (rowHeight * 16)))
+    onSettingsScaleChanged: reportSize()
     function reportSize() {
-        commander.resize(left.visibleRows, Math.max(1, Math.floor(body.height / rowHeight) - 4),
+        var unit = rowHeight * settingsScale
+        commander.resize(left.visibleRows, Math.max(1, Math.floor(body.height / unit) - 4),
                          Math.floor(body.width / fixedMetrics.averageCharacterWidth) - 4)
     }
 
@@ -258,10 +266,11 @@ ApplicationWindow {
             }
             // The text shrinks, down to 70%, so that every label fits.
             readonly property real keyScale: {
-                var all = 2 * keyList.length
+                var all = 0, gaps = 2 * keyList.length
                 for (var i = 0; i < keyList.length; i++)
                     all += fullWidth(keyList[i], true)
-                return all <= body.width ? 1 : Math.max(0.5, (body.width) / all)
+                return all + gaps <= body.width ? 1
+                    : Math.max(0.4, (body.width - gaps - 4) / all)
             }
             function keyWidth(key, labelled) {
                 return fullWidth(key, labelled) * keyScale
