@@ -86,6 +86,10 @@ jobs:
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             qml6-module-qtqml-workerscript qml6-module-qtqml-models
       - run: cargo clippy -p nmc-gui --all-targets
+      # The window runs plugins through the `nmc` program next to it: build
+      # it first, on its own so the window does not link the script engine
+      # (ADR 0020).
+      - run: cargo build -p nmc-cli
       # The window tests use Qt's offscreen platform: no display needed.
       - run: cargo test -p nmc-gui
 
