@@ -88,33 +88,90 @@ Item {
         }
     }
 
+    // F1: the groups of shortcuts in as many columns (1 to 3) as the window
+    // has room for. A key column and a description column per group, the
+    // descriptions cut with an ellipsis when even one column is too narrow,
+    // and the whole list scrolls when it is too tall.
     Component {
         id: help
         Box {
+            id: helpBox
             title: "Main shortcuts"
             hint: "F9 lists every command.    Esc: close"
-            GridLayout {
-                columns: 3
-                columnSpacing: 32
-                Repeater {
-                    model: dialogs.view.groups
-                    delegate: ColumnLayout {
-                        Layout.alignment: Qt.AlignTop
-                        Label {
-                            text: modelData.title
-                            font.bold: true
-                            color: dialogs.theme.accent
-                        }
-                        Repeater {
-                            model: modelData.rows
-                            delegate: RowLayout {
-                                spacing: 12
-                                Label {
-                                    text: modelData[0]
-                                    font.bold: true
-                                    Layout.preferredWidth: 110
+            readonly property real gap: 32
+            readonly property var bold: Qt.font({ family: dialogs.theme.font.family,
+                                                  pointSize: dialogs.theme.font.pointSize,
+                                                  bold: true })
+            FontMetrics { id: boldMetrics; font: helpBox.bold }
+            FontMetrics { id: plainMetrics; font: dialogs.theme.font }
+            // The widest key text and the widest description of all groups.
+            readonly property var widest: {
+                // The metrics change with the font: depend on them.
+                var key = 0, desc = 0, groups = dialogs.view.groups
+                key += 0 * (boldMetrics.height + plainMetrics.height)
+                for (var i = 0; i < groups.length; i++) {
+                    key = Math.max(key, boldMetrics.advanceWidth(groups[i].title))
+                    for (var j = 0; j < groups[i].rows.length; j++) {
+                        key = Math.max(key, boldMetrics.advanceWidth(groups[i].rows[j][0]))
+                        desc = Math.max(desc, plainMetrics.advanceWidth(groups[i].rows[j][1]))
+                    }
+                }
+                return { key: Math.ceil(key) + 2, desc: Math.ceil(desc) + 2 }
+            }
+            readonly property real groupWidth: widest.key + 12 + widest.desc
+            readonly property int wanted: Math.min(3, Math.max(1, dialogs.view.groups.length))
+            width: Math.min(maxWidth, wanted * groupWidth + (wanted - 1) * gap + 32)
+            readonly property real room: width - 32
+            readonly property int cols: Math.max(1, Math.min(wanted,
+                Math.floor((room + gap) / (groupWidth + gap))))
+            readonly property real cellWidth: (room - (cols - 1) * gap) / cols
+            readonly property real keyWidth: Math.min(widest.key, cellWidth * 0.55)
+            Flickable {
+                id: scroller
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(grid.implicitHeight, dialogs.height * 0.9 - 120)
+                contentWidth: width
+                contentHeight: grid.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                GridLayout {
+                    id: grid
+                    width: scroller.width
+                    columns: helpBox.cols
+                    columnSpacing: helpBox.gap
+                    rowSpacing: 6
+                    Repeater {
+                        model: dialogs.view.groups
+                        delegate: ColumnLayout {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.preferredWidth: helpBox.cellWidth
+                            Layout.maximumWidth: helpBox.cellWidth
+                            spacing: 0
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.title
+                                font.bold: true
+                                elide: Text.ElideRight
+                                color: dialogs.theme.accent
+                            }
+                            Repeater {
+                                model: modelData.rows
+                                delegate: RowLayout {
+                                    spacing: 12
+                                    Label {
+                                        text: modelData[0]
+                                        font.bold: true
+                                        elide: Text.ElideRight
+                                        Layout.preferredWidth: helpBox.keyWidth
+                                        Layout.maximumWidth: helpBox.keyWidth
+                                    }
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: modelData[1]
+                                        elide: Text.ElideRight
+                                    }
                                 }
-                                Label { text: modelData[1] }
                             }
                         }
                     }
@@ -133,6 +190,7 @@ Item {
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
             width: Math.min(dialogs.theme.width * 0.9, 860)
+            fixedHeight: Math.min(dialogs.theme.height * 0.9, 26 * dialogs.theme.rowHeight + 60)
             Flow {
                 Layout.fillWidth: true
                 spacing: 6
@@ -178,9 +236,12 @@ Item {
             ListView {
                 id: rows
                 Layout.fillWidth: true
-                // A fixed height: the window keeps its size whatever
-                // the filter leaves in the list.
-                Layout.preferredHeight: Math.min(16 * dialogs.theme.rowHeight, dialogs.height * 0.6)
+                // The window keeps its size whatever the filter leaves in
+                // the list; the list takes what the buttons, the field and
+                // the help leave (never fewer than three rows).
+                Layout.fillHeight: true
+                Layout.minimumHeight: 3 * dialogs.theme.rowHeight
+                Layout.preferredHeight: 16 * dialogs.theme.rowHeight
                 implicitWidth: 600
                 interactive: false
                 clip: true
@@ -222,7 +283,7 @@ Item {
             Label {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                Layout.preferredHeight: 2 * dialogs.theme.rowHeight
+                Layout.preferredHeight: (dialogs.view.help === "" ? 1 : 2) * dialogs.theme.rowHeight
                 verticalAlignment: Text.AlignTop
                 clip: true
                 text: dialogs.view.rows.length === 0 ? "Nothing matches" : dialogs.view.help
@@ -459,7 +520,7 @@ Item {
             title: "Settings    " + dialogs.view.percent + "%"
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
-            width: Math.min(dialogs.theme.width * 0.9, 860)
+            width: Math.min(dialogs.theme.width * 0.9, 1000)
             Repeater {
                 model: dialogs.view.rows
                 delegate: Rectangle {

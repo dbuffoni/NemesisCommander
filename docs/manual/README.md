@@ -339,9 +339,10 @@ until you quit.
 
 ### A text for the folder
 
-A file called `nmc_folder.md` in a folder is shown, as
-Markdown, at the top of its panel in the terminal interface (up to a third of
-the panel; files over 64 KiB are ignored): notes on what the folder is for.
+A file called `nmc_folder.md` in a folder is shown at the top of its panel,
+in the terminal interface as Markdown and in the window as plain wrapped
+text (up to a third of the panel; files over 64 KiB are ignored): notes on
+what the folder is for.
 
 ## Selecting files
 

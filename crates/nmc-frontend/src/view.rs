@@ -94,6 +94,9 @@ pub struct PanelView {
     pub headers: [String; 3],
     /// The panel shows the flat (branch) view: rows carry a folder column.
     pub flat: bool,
+    /// The text of the folder's `nmc_folder.md` as plain lines (the window
+    /// wraps and limits it); empty when the folder has none.
+    pub folder_text: String,
 }
 
 /// A tab of a panel.
@@ -515,8 +518,8 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     let hint = if let Some(name) = &recording {
         format!("Press the new shortcut for {name}    Esc: cancel")
     } else {
-        "Type to find    ← →: category    Enter: run    F1: help    \
-         Ctrl+K: set shortcut    Delete: remove shortcut    Esc: close"
+        "Type to find   ← →: category   Enter: run   F1: help   \
+         Ctrl+K: set key   Del: remove key   Esc: close"
             .to_owned()
     };
     CommandsView {
@@ -615,6 +618,11 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         loading: panel.is_loading(),
         quick_view: None,
         headers: column_headers(panel.sort()),
+        folder_text: folder_text_lines(app, side, 100, 60)
+            .iter()
+            .map(nmc_preview::rich::line_text)
+            .collect::<Vec<_>>()
+            .join("\n"),
     };
     app.scroll[index] = offset;
     view
@@ -760,6 +768,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         quick_view: Some(quick_view),
         headers: Default::default(),
         flat: false,
+        folder_text: String::new(),
     }
 }
 
@@ -824,7 +833,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         },
         // The window's title and hint lines take some of the rows.
         Overlay::Settings(screen) => {
-            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(7)))
+            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(4)))
         }
     })
 }

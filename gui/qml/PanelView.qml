@@ -20,6 +20,20 @@ Rectangle {
     border.color: view && view.active ? palette.highlight : palette.mid
     radius: 2
 
+    // The name keeps at least a dozen characters; the size, then the date,
+    // are left out when the panel is too narrow for them.
+    TextMetrics {
+        id: nameMin
+        font: panel.theme.font
+        text: "xxxxxxxxxxxx"
+    }
+    readonly property real iconSize: Math.max(16, Math.round(theme.rowHeight * 0.8))
+    readonly property real fixedRoom: width - 8 - 8 - nameMin.width - iconSize - 12
+    readonly property bool showSize: fixedRoom >= sizeWidth.width + 12
+    readonly property bool showDate: showSize && fixedRoom >= sizeWidth.width + dateWidth.width + 24
+    readonly property bool showFolder: view !== null && view.flat && showDate
+        && fixedRoom >= sizeWidth.width + dateWidth.width + 150 + 36
+
     TextMetrics {
         id: sizeWidth
         font: panel.theme.fixedFont
@@ -110,6 +124,26 @@ Rectangle {
             }
         }
 
+        // The text of nmc_folder.md, at most a third of the panel.
+        Label {
+            Layout.fillWidth: true
+            Layout.maximumHeight: panel.height / 3
+            Layout.leftMargin: 4
+            Layout.rightMargin: 4
+            visible: panel.view !== null && !panel.view.quick_view && panel.view.folder_text !== ""
+            text: panel.view ? panel.view.folder_text : ""
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            elide: Text.ElideRight
+            clip: true
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 1
+            color: panel.theme.lineColor
+            visible: panel.view !== null && !panel.view.quick_view && panel.view.folder_text !== ""
+        }
+
         // Column titles; the sorted one has an arrow.
         RowLayout {
             Layout.fillWidth: true
@@ -119,18 +153,20 @@ Rectangle {
             visible: panel.view !== null && !panel.view.quick_view
             Label {
                 Layout.fillWidth: true
+                elide: Text.ElideRight
                 text: panel.view ? panel.view.headers[0] : ""
                 color: panel.theme.dim
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
             Label {
-                visible: panel.view !== null && panel.view.flat
+                visible: panel.showFolder
                 Layout.preferredWidth: 150
                 text: "Folder"
                 color: panel.theme.dim
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
             Label {
+                visible: panel.showSize
                 Layout.preferredWidth: sizeWidth.width
                 horizontalAlignment: Text.AlignRight
                 text: panel.view ? panel.view.headers[1] : ""
@@ -138,6 +174,7 @@ Rectangle {
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
             Label {
+                visible: panel.showDate
                 Layout.preferredWidth: dateWidth.width
                 text: panel.view ? panel.view.headers[2] : ""
                 color: panel.theme.dim
@@ -246,17 +283,19 @@ Rectangle {
                             Canvas {
                                 id: glyph
                                 visible: entry.icon !== ""
-                                Layout.preferredWidth: visible ? 16 : 0
-                                Layout.preferredHeight: 16
+                                Layout.preferredWidth: visible ? panel.iconSize : 0
+                                Layout.preferredHeight: panel.iconSize
                                 Layout.rightMargin: -6
                                 Layout.alignment: Qt.AlignVCenter
                                 property string shape: entry.icon
                                 property string tint: entry.icon_color
                                 onShapeChanged: requestPaint()
                                 onTintChanged: requestPaint()
+                                onWidthChanged: requestPaint()
                                 onPaint: {
                                     var ctx = getContext("2d")
                                     ctx.reset()
+                                    ctx.scale(width / 16, height / 16)
                                     var strokes = panel.theme.iconShapes[shape]
                                     if (!strokes)
                                         return
@@ -284,13 +323,14 @@ Rectangle {
                             // The flat view: where the file is, the deepest folder
                             // kept when the path is long.
                             Label {
-                                visible: panel.view.flat
+                                visible: panel.showFolder
                                 Layout.preferredWidth: 150
                                 text: entry.folder
                                 elide: Text.ElideLeft
                                 color: panel.theme.dim
                             }
                             Label {
+                                visible: panel.showSize
                                 text: entry.size
                                 horizontalAlignment: Text.AlignRight
                                 Layout.preferredWidth: sizeWidth.width
@@ -298,6 +338,7 @@ Rectangle {
                                 font: panel.theme.fixedFont
                             }
                             Label {
+                                visible: panel.showDate
                                 text: entry.date
                                 Layout.preferredWidth: dateWidth.width
                                 color: row.textColor
