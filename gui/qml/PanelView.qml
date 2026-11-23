@@ -145,6 +145,7 @@ Rectangle {
         Label {
             Layout.fillWidth: true
             Layout.maximumHeight: panel.height / 3
+            maximumLineCount: Math.max(1, Math.floor(panel.height / 3 / nameMin.height))
             Layout.leftMargin: 4
             Layout.rightMargin: 4
             visible: panel.view !== null && !panel.view.quick_view && panel.view.folder_text !== ""
@@ -315,7 +316,10 @@ Rectangle {
                                 Layout.rightMargin: -6
                                 Layout.alignment: Qt.AlignVCenter
                                 property string shape: entry.icon
-                                property string tint: entry.icon_color
+                                // On the cursor bar the icon takes the text colour,
+                                // or blue folders vanish into the blue bar.
+                                property string tint: row.strong ? String(palette.highlightedText)
+                                                                 : entry.icon_color
                                 onShapeChanged: requestPaint()
                                 onTintChanged: requestPaint()
                                 onWidthChanged: requestPaint()
@@ -411,6 +415,10 @@ Rectangle {
             Layout.fillWidth: true
             text: panel.view ? panel.view.footer : ""
             color: panel.theme.dim
+            // Whole words, on two lines at most: the keys of the quick view
+            // footer must not end in an ellipsis.
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
         }
     }

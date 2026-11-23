@@ -641,11 +641,19 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
             .iter()
             .map(|h| PluginHeadView { title: h.title.clone(), width: h.width })
             .collect(),
-        folder_text: folder_text_lines(app, side, 100, 60)
-            .iter()
-            .map(nmc_preview::rich::line_text)
-            .collect::<Vec<_>>()
-            .join("\n"),
+        folder_text: {
+            // A run of blank lines counts as one: the window shows little.
+            let mut lines: Vec<String> = Vec::new();
+            for line in
+                folder_text_lines(app, side, 100, 60).iter().map(nmc_preview::rich::line_text)
+            {
+                if line.trim().is_empty() && lines.last().is_none_or(|l| l.trim().is_empty()) {
+                    continue;
+                }
+                lines.push(line);
+            }
+            lines.join("\n")
+        },
     };
     app.scroll[index] = offset;
     view

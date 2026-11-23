@@ -52,13 +52,27 @@ Item {
         // middle, where a path keeps its start and its end.
         property bool keepsSize: false
         Layout.fillWidth: true
-        Layout.preferredHeight: keepsSize ? dialogs.height * 0.6
-                                          : Math.min(contentHeight, dialogs.height * 0.6)
+        // Whole rows only: a row is never cut in half.
+        Layout.preferredHeight: Math.max(1, Math.floor((keepsSize ? dialogs.height * 0.6
+            : Math.min(contentHeight, dialogs.height * 0.6)) / dialogs.theme.rowHeight))
+            * dialogs.theme.rowHeight
         implicitWidth: 480
         interactive: false
         clip: true
         onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)
         onCountChanged: positionViewAtIndex(cursor, ListView.Contain)
+        // Tables in the fixed font (disks, drives) shrink, down to 60%, so
+        // that their columns are not cut.
+        FontMetrics { id: tableMetrics; font: dialogs.theme.fixedFont }
+        readonly property real shrink: {
+            if (!fixed || !model || width <= 0)
+                return 1
+            var widest = 0 * tableMetrics.height
+            for (var i = 0; i < model.length; i++)
+                widest = Math.max(widest, tableMetrics.advanceWidth(
+                    typeof model[i] === "string" ? model[i] : model[i].text))
+            return widest <= width - 8 ? 1 : Math.max(0.6, (width - 8) / widest)
+        }
         delegate: Component {
             Rectangle {
                 width: ListView.view.width
@@ -69,7 +83,9 @@ Item {
                     x: 4
                     width: parent.width - 8
                     elide: Text.ElideMiddle
-                    font: list.fixed ? dialogs.theme.fixedFont : Qt.application.font
+                    font: list.fixed ? Qt.font({ family: dialogs.theme.fixedFont.family,
+                                                 pointSize: dialogs.theme.fixedFont.pointSize * list.shrink })
+                                     : Qt.application.font
                     text: typeof modelData === "string" ? modelData : modelData.text
                     color: index === list.cursor ? palette.highlightedText
                          : list.stateOf(modelData) === "failed" ? dialogs.theme.errorColor
@@ -80,10 +96,15 @@ Item {
     }
 
     component Lines: Repeater {
+        // A table of examples keeps its columns: a line with a run of spaces
+        // is cut with an ellipsis instead of wrapped.
+        property bool table: false
         delegate: Label {
+            readonly property bool columns: table && modelData.indexOf("  ", 2) >= 0
             Layout.fillWidth: true
             text: modelData
-            wrapMode: Text.Wrap
+            wrapMode: columns ? Text.NoWrap : Text.Wrap
+            elide: columns ? Text.ElideRight : Text.ElideNone
             textFormat: Text.PlainText
         }
     }
@@ -129,7 +150,10 @@ Item {
             Flickable {
                 id: scroller
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(grid.implicitHeight, dialogs.height * 0.9 - 120)
+                // Whole lines only, so the scroll never cuts a row in half.
+                readonly property real lineH: Math.max(1, Math.ceil(boldMetrics.lineSpacing))
+                Layout.preferredHeight: Math.min(grid.implicitHeight,
+                    Math.max(3, Math.floor((dialogs.height * 0.9 - 120) / lineH)) * lineH)
                 contentWidth: width
                 contentHeight: grid.implicitHeight
                 clip: true
@@ -140,7 +164,7 @@ Item {
                     width: scroller.width
                     columns: helpBox.cols
                     columnSpacing: helpBox.gap
-                    rowSpacing: 6
+                    rowSpacing: 0
                     Repeater {
                         model: dialogs.view.groups
                         delegate: ColumnLayout {
@@ -150,6 +174,8 @@ Item {
                             spacing: 0
                             Label {
                                 Layout.fillWidth: true
+                                // A blank line between the groups of a column.
+                                Layout.topMargin: index >= helpBox.cols ? scroller.lineH : 0
                                 text: modelData.title
                                 font.bold: true
                                 elide: Text.ElideRight
@@ -233,16 +259,20 @@ Item {
                     font: dialogs.theme.fixedFont
                 }
             }
-            ListView {
-                id: rows
+            Item {
+                id: rowsArea
                 Layout.fillWidth: true
-                // The window keeps its size whatever the filter leaves in
-                // the list; the list takes what the buttons, the field and
-                // the help leave (never fewer than three rows).
                 Layout.fillHeight: true
                 Layout.minimumHeight: 3 * dialogs.theme.rowHeight
                 Layout.preferredHeight: 16 * dialogs.theme.rowHeight
                 implicitWidth: 600
+            ListView {
+                id: rows
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                // Whole rows only.
+                height: Math.floor(parent.height / dialogs.theme.rowHeight) * dialogs.theme.rowHeight
                 interactive: false
                 clip: true
                 model: dialogs.view.rows
@@ -278,12 +308,14 @@ Item {
                     }
                 }
             }
+            }
             // F1: what the highlighted command does. Its room is always
             // reserved, so showing or hiding it does not move the window.
             Label {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                Layout.preferredHeight: (dialogs.view.help === "" ? 1 : 2) * dialogs.theme.rowHeight
+                Layout.preferredHeight: dialogs.view.help === "" ? dialogs.theme.rowHeight
+                    : Math.min(contentHeight, 3 * dialogs.theme.rowHeight)
                 verticalAlignment: Text.AlignTop
                 clip: true
                 text: dialogs.view.rows.length === 0 ? "Nothing matches" : dialogs.view.help
@@ -364,7 +396,7 @@ Item {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     spacing: 0
-                    Lines { model: dialogs.view.preview }
+                    Lines { table: true; model: dialogs.view.preview }
                 }
             }
         }
@@ -382,8 +414,21 @@ Item {
     Component {
         id: choose
         Box {
+            id: chooseBox
             title: dialogs.view.title
             hint: dialogs.view.footer
+            FontMetrics { id: chooseMetrics; font: dialogs.theme.fixedFont }
+            // Tables (disks, drives, disk usage) get the width they need, up
+            // to the window, so their columns are not cut.
+            readonly property real wanted: {
+                var widest = 0, items = dialogs.view.items
+                widest += 0 * chooseMetrics.height
+                for (var i = 0; i < items.length; i++)
+                    widest = Math.max(widest, chooseMetrics.advanceWidth(
+                        typeof items[i] === "string" ? items[i] : items[i].text))
+                return widest + 48
+            }
+            width: Math.min(maxWidth, Math.max(theme.width * 0.6, 560, wanted))
             CursorList {
                 fixed: true
                 keepsSize: dialogs.view.keeps_size
@@ -401,14 +446,17 @@ Item {
             hint: dialogs.view.hint
             // A log (the steps of an install, a connection test) keeps one
             // size while lines are added, and shows its end.
-            readonly property bool log: dialogs.view.busy || dialogs.view.lines.length > 8
+            readonly property bool log: dialogs.view.busy
+                || (dialogs.view.lines.length > 8 && !dialogs.view.logo_url)
             fixedHeight: log ? dialogs.height * 0.7 : 0
             // About: the logo above the text.
             Image {
                 visible: !!dialogs.view.logo_url
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: visible ? 128 : 0
-                Layout.preferredHeight: visible ? 128 : 0
+                // Smaller in a short window, so the text keeps its room.
+                readonly property real size: Math.min(128, dialogs.height * 0.16)
+                Layout.preferredWidth: visible ? size : 0
+                Layout.preferredHeight: visible ? size : 0
                 source: dialogs.view.logo_url
                         ? (dialogs.theme.dark ? dialogs.view.logo_url : dialogs.view.logo_url_light)
                         : ""
