@@ -118,7 +118,7 @@ Item {
         Box {
             id: helpBox
             title: "Main shortcuts"
-            hint: "F9 lists every command.    Esc: close"
+            hint: "Any key closes    F9: lists every command"
             readonly property real gap: 32
             readonly property var bold: Qt.font({ family: dialogs.theme.font.family,
                                                   pointSize: dialogs.theme.font.pointSize,
@@ -451,7 +451,7 @@ Item {
             fixedHeight: log ? dialogs.height * 0.7 : 0
             // About: the logo above the text.
             Image {
-                visible: !!dialogs.view.logo_url
+                visible: !!dialogs.view.logo_url && dialogs.height >= 600
                 Layout.alignment: Qt.AlignHCenter
                 // Smaller in a short window, so the text keeps its room.
                 readonly property real size: Math.min(128, dialogs.height * 0.16)
@@ -464,7 +464,24 @@ Item {
                 smooth: true
                 mipmap: true
             }
-            Lines { visible: !messageBox.log; model: messageBox.log ? [] : dialogs.view.lines }
+            // The text scrolls (wheel) when it is taller than the window.
+            Flickable {
+                id: messageScroll
+                visible: !messageBox.log
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: messageLines.implicitHeight
+                contentWidth: width
+                contentHeight: messageLines.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                ColumnLayout {
+                    id: messageLines
+                    width: messageScroll.width
+                    Lines { model: messageBox.log ? [] : dialogs.view.lines }
+                }
+            }
             ListView {
                 id: logLines
                 visible: messageBox.log
@@ -513,7 +530,7 @@ Item {
             width: Math.min(dialogs.theme.width * 0.9, 1100)
             Label {
                 visible: dialogs.view.rows.length === 0
-                text: "No transfers."
+                text: "No transfers"
                 color: dialogs.theme.dim
             }
             // Newest first. Each transfer takes a few rows: the job, then
@@ -620,18 +637,27 @@ Item {
               + "Capital letter (O, S, R): same answer for all"
         Label {
             Layout.fillWidth: true
-            wrapMode: Text.WrapAnywhere
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
             text: dialogs.conflict ? dialogs.conflict.destination + " already exists." : ""
         }
-        Label {
+        // What is there and what comes, in two aligned columns.
+        GridLayout {
             Layout.fillWidth: true
-            wrapMode: Text.Wrap
-            text: dialogs.conflict ? "Existing:  " + dialogs.conflict.existing : ""
-        }
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.Wrap
-            text: dialogs.conflict ? "New:          " + dialogs.conflict.incoming : ""
+            columns: 2
+            columnSpacing: 12
+            rowSpacing: 2
+            Label { text: "Existing:" }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: dialogs.conflict ? dialogs.conflict.existing : ""
+            }
+            Label { text: "New:" }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: dialogs.conflict ? dialogs.conflict.incoming : ""
+            }
         }
     }
 }

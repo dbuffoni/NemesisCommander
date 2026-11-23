@@ -617,7 +617,7 @@ fn draw_help(frame: &mut Frame, app: &App) {
     let area = centered(screen, width, height);
     frame.render_widget(Clear, area);
     let hint = shrink_hint(
-        "Any key closes  F9: every command in the menu",
+        "Any key closes    F9: lists every command",
         area.width.saturating_sub(4) as usize,
     );
     let block = Block::bordered()

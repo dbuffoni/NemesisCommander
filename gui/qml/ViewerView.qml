@@ -103,7 +103,17 @@ Item {
             Layout.fillHeight: true
             clip: true
 
-            // Text and hex lines.
+            // Text and hex lines. A line wider than the window shrinks the
+            // text, down to 60%, before anything is cut.
+            FontMetrics { id: lineMetrics; font: viewer.theme.fixedFont }
+            readonly property real shrink: {
+                if (!viewer.view || viewer.isPicture || viewer.isDocument)
+                    return 1
+                var widest = 0 * lineMetrics.height, lines = viewer.view.lines
+                for (var i = 0; i < lines.length; i++)
+                    widest = Math.max(widest, lineMetrics.advanceWidth(lines[i]))
+                return widest <= width ? 1 : Math.max(0.6, width / widest)
+            }
             Column {
                 visible: !viewer.isPicture && !viewer.isDocument
                 Repeater {
@@ -115,7 +125,8 @@ Item {
                             viewer.view.tinted.length > index
                         text: tinted ? viewer.styledLine(viewer.view.tinted[index].spans, 0)
                                      : modelData
-                        font: viewer.theme.fixedFont
+                        font.family: viewer.theme.fixedFont.family
+                        font.pointSize: viewer.theme.fixedFont.pointSize * content.shrink
                         color: palette.text
                         height: viewer.theme.rowHeight
                         width: content.width

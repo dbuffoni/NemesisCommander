@@ -207,9 +207,11 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Label {
                     Layout.fillWidth: true
-                    // An error keeps its beginning and its end (the host and
-                    // the reason); the rest of the line is cut in the middle.
-                    elide: Text.ElideMiddle
+                    // Whole words on two lines at most; an error keeps its
+                    // beginning (the host), the end is cut.
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                     text: window.screen ? window.screen.status.text : ""
                     color: window.screen && window.screen.status.error ? window.errorColor
                                                                        : palette.windowText
@@ -249,10 +251,20 @@ ApplicationWindow {
             FontMetrics { id: keyPlain; font: window.font }
             readonly property var keyList: window.screen ? window.screen.keys : []
             readonly property var keyPriority: [10, 9, 1, 3, 5, 6, 7, 8, 4, 2]
-            function keyWidth(key, labelled) {
+            function fullWidth(key, labelled) {
                 // (the metrics change with the font: depend on them)
                 return 8 + 0 * (keyBold.height + keyPlain.height) + keyBold.advanceWidth("F" + key.number)
                      + (labelled ? 4 + keyPlain.advanceWidth(key.label) : 0)
+            }
+            // The text shrinks, down to 70%, so that every label fits.
+            readonly property real keyScale: {
+                var all = 2 * keyList.length
+                for (var i = 0; i < keyList.length; i++)
+                    all += fullWidth(keyList[i], true)
+                return all <= body.width ? 1 : Math.max(0.7, (body.width) / all)
+            }
+            function keyWidth(key, labelled) {
+                return fullWidth(key, labelled) * keyScale
             }
             // The numbers of the keys that keep their label.
             readonly property var labelled: {
@@ -304,11 +316,13 @@ ApplicationWindow {
                             Label {
                                 text: "F" + modelData.number
                                 font.bold: true
+                                font.pointSize: window.font.pointSize * body.keyScale
                             }
                             Label {
                                 visible: withLabel
                                 text: modelData.label
                                 color: palette.buttonText
+                                font.pointSize: window.font.pointSize * body.keyScale
                             }
                         }
                     }

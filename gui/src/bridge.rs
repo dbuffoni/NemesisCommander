@@ -316,7 +316,13 @@ impl qobject::Commander {
     /// The next step of the self test, once the application is idle.
     fn advance_test(mut self: Pin<&mut Self>) {
         let mut rust = self.as_mut().rust_mut();
-        let idle = rust.sized && rust.app.as_ref().is_some_and(|app| !app.is_busy());
+        // A copy waiting for the answer to a conflict question is busy, but
+        // it is as settled as it will get: the picture shows the question.
+        let idle = rust.sized
+            && rust
+                .app
+                .as_ref()
+                .is_some_and(|app| !app.is_busy() || app.pending_conflict().is_some());
         if !idle {
             return;
         }
