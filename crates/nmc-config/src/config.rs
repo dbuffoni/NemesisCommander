@@ -231,8 +231,8 @@ pub struct Connection {
     pub name: String,
     /// The root URI, e.g. `sftp://me@host:22/srv` or `agent://build01/`.
     pub uri: String,
-    /// Not used any more: `ssh` finds its keys as it does in a terminal
-    /// (ADR 0033). Read so that settings written before still load; never
+    /// Not used any more: `ssh` finds its keys as it does in a terminal.
+    /// Read so that settings written before still load; never
     /// written back.
     #[serde(default, skip_serializing)]
     pub identity_file: Option<String>,

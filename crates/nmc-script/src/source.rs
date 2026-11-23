@@ -1,6 +1,6 @@
 //! Plugins from Git: `nmc plugin install URL` clones a repository, installs
 //! the plugin in it and remembers where it came from in a lock file, so
-//! `nmc plugin update` can fetch a newer version (ADR 0038).
+//! `nmc plugin update` can fetch a newer version.
 //!
 //! The system's `git` does the fetching, so the user's credentials, proxies
 //! and `url.insteadOf` rules apply as they do everywhere else. Nothing

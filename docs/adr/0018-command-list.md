@@ -11,9 +11,9 @@ in an existing one. He also asked to call it "Commands" rather than "Menu".
 
 ## Decision
 
-- F9 (`app.commands`) opens the command list (`sc_frontend::commands`).
+- F9 (`app.commands`) opens the command list (`nmc_frontend::commands`).
   It is built when it opens from the action table, the installed plugins'
-  manifests and the user's scripts folder (`$SC_DATA_DIR/scripts`), plus
+  manifests and the user's scripts folder (`$NMC_DATA_DIR/scripts`), plus
   "Run <file>" when the cursor is on a script.
 - Rows read `Category/Command` with every shortcut. Typing keeps the rows
   containing every typed word (category, name or id). Category buttons

@@ -5,7 +5,7 @@
 
 ## Context
 
-Card SC-108 (the logo is not good). The maintainer supplied a new N: two white
+The logo was not good enough. The maintainer supplied a new N: two white
 pills with a black outline, a black diagonal band and a band between them,
 first purple, then asked blue. He asked the logo to be used to rebrand the
 app and the same blue, transparent, for selected rows.

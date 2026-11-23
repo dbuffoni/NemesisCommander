@@ -5,7 +5,7 @@
 
 ## Context
 
-Card SC-104 asks for a first simple plugin that developers can copy as a
+A card asked for a first simple plugin that developers can copy as a
 template: it creates a file with random content chosen among json, xml, txt
 and png, with well-commented code and placeholders. The only example plugin
 (`sort-by-type`) moves files, and the script API could only write UTF-8 text,

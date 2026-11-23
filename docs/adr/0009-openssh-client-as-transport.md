@@ -10,11 +10,11 @@ Two providers need SSH: the agent (`agent://`, ADR 0008) and SFTP
 host aliases, keys in an agent, hardware tokens, jump hosts, known hosts,
 Kerberos. Reimplementing SSH in-process (for example with `russh`) would
 mean re-reading and partly re-implementing all of that, and every gap would
-show up as "works in my terminal but not in SuperCommander".
+show up as "works in my terminal but not in NemesisCommander".
 
 ## Decision
 
-- The `sc-ssh` crate builds `ssh` command lines and starts them with piped
+- The `nmc-ssh` crate builds `ssh` command lines and starts them with piped
   standard streams. Paths name the server as `[user@]host[:port]`.
   Connections run with `-T -o BatchMode=yes`: no terminal, and no password
   prompt that nobody could answer. Authentication must work without typing
@@ -23,14 +23,14 @@ show up as "works in my terminal but not in SuperCommander".
   standard subsystem, `ssh -s host sftp`. The SFTP protocol is spoken by
   the pure-Rust `russh-sftp` client over those streams.
 - An environment variable per provider replaces the whole command
-  (`SC_AGENT_COMMAND`, `SC_SFTP_COMMAND`, with `{host}` substituted). Tests
-  use it to run `sc agent --stdio` or OpenSSH's `sftp-server` locally, so
+  (`NMC_AGENT_COMMAND`, `NMC_SFTP_COMMAND`, with `{host}` substituted). Tests
+  use it to run `nmc agent --stdio` or OpenSSH's `sftp-server` locally, so
   everything except the SSH login is covered in CI.
 
 ## Consequences
 
 - The behaviour matches the user's `ssh`; no keys or passwords are stored
-  by SuperCommander.
+  by NemesisCommander.
 - An `ssh` client must be installed (it is on Linux and macOS, and on
   current Windows). Interactive password logins are not supported yet; a
   later front-end feature can add an askpass helper.

@@ -12,7 +12,7 @@
 //!
 //! There is no key setting of its own: `ssh` finds the keys the same way it
 //! does for the user in a terminal (`~/.ssh/config`, the default key files,
-//! the SSH agent). See ADR 0033.
+//! the SSH agent).
 
 use std::process::Stdio;
 

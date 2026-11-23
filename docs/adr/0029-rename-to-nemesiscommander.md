@@ -5,8 +5,7 @@
 
 ## Context
 
-The maintainer renamed the product from SuperCommander to NemesisCommander (Notion
-card SC-88). He asked for a clean rename: no backward compatibility and no
+The maintainer renamed the product from SuperCommander to NemesisCommander . He asked for a clean rename: no backward compatibility and no
 migration of existing installs. `sc` also collided with `sc.exe` (Windows
 Service Control). He chose the short name `nmc` and accepted the trademark risk
 of the name (live NEMESIS marks exist in class 9; no official register search
@@ -39,7 +38,6 @@ variables, no old binary name, no old certificates.
 - Existing users start fresh: settings, bookmarks, connections, plugins, scripts
   and certificates (`nmc tls init` again) of SuperCommander are not picked up,
   and scripts must use `nmc.*`.
-- Earlier ADRs (0001 to 0028) keep the old name and the `sc` command: they are
-  history and are not rewritten.
-- The GitHub repository, the Notion pages and the project memory are renamed
-  outside the code.
+- Earlier ADRs were rewritten to the new names in release 0.3.0; only this
+  record keeps the old ones, because it describes the change.
+- The GitHub repository and the project pages are renamed outside the code.

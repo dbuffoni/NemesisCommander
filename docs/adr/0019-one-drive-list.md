@@ -16,10 +16,10 @@ connection meant editing the settings file.
 
 ## Decision
 
-- One action, `nav.drives` ("Drives and connections…", Alt+F1 and Ctrl+N),
+- One action, `nav.drives` ("Drives and connections…", Shift+F1 and Ctrl+N),
   replaces `tools.connect`. The old id is still read from `[keys]`, so a
   shortcut the user had given to Connect keeps working.
-- `sc_frontend::drives` builds the list: the home folder ("~"), the
+- `nmc_frontend::drives` builds the list: the home folder ("~"), the
   computer's drives (Linux: `/` and the disks and network shares in
   `/proc/self/mounts`, leaving out system mounts such as `/boot`, `/proc`
   and snaps; macOS: `/` and `/Volumes/*`; Windows: the drive letters), then

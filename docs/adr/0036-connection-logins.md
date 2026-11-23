@@ -5,7 +5,7 @@
 
 ## Context
 
-The new-connection question of ADR 0035 listed its examples on one long line,
+The new-connection question of of an earlier release listed its examples on one long line,
 carried a note about passwords among the examples and refused a password in the
 address. Feedback: one example per line, the note only as a warning when a
 password is really typed, the connection test while creating (not only

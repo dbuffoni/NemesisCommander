@@ -24,7 +24,7 @@ behave the same whether started from the GUI, the TUI, the CLI or an agent.
   devices) it falls back to copy-then-delete, deleting the source only if
   every copy succeeded.
 - File data is streamed through a bounded reader/writer pipeline into a
-  hidden `.<name>.sc-part` file when the destination can rename atomically.
+  hidden `.<name>.nmc-part` file when the destination can rename atomically.
   A partial file is never visible under its final name, and an interrupted
   copy resumes from the part file when both sides support seeking/resuming.
 - Same-provider copies use `Provider::copy_within` when advertised

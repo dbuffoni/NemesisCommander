@@ -12,14 +12,14 @@ nothing read it, and no screen could set it.
 
 ## Decision
 
-- `sc-ssh` keeps a process-wide list of logins (user, host, port; no port
+- `nmc-ssh` keeps a process-wide list of logins (user, host, port; no port
   means 22) and their key files, set with `set_identity_files`. `ssh_args`
   adds `-i FILE -o IdentitiesOnly=yes` for a listed login, so both SFTP and
   the agent (and the agent's install step) use the key. It now returns a
   `Result`: a key file that is missing, is not a file or, on Unix, can be
   read by others is reported before `ssh` starts, with the `chmod 600` fix,
   instead of ssh's own message after it silently skips the key.
-- `sc-app` fills that list from the SFTP and agent connections of the
+- `nmc-app` fills that list from the SFTP and agent connections of the
   settings, when they are loaded and every time they are saved. Keyed by
   login rather than by connection, a path opened by hand on the same login
   (Go to, the command line) uses the same key.

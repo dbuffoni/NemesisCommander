@@ -21,7 +21,7 @@ dialogs.
    route and the status code (`route::describe`).
 3. **Full path in copy/move questions**: the answer of a place is shown whole
    under the field (TUI and window); the field scrolls with the cursor.
-4. **Back**: Alt+Left returns to the previous question of a series (the
+4. **Back**: Shift+Tab returns to the previous question of a series (the
    questions are kept in `App::history`; the hint shows the key).
 5. **Dialogs**: wide enough for long paths and wrapped, never cut; checked with
    10, 16 and 24 pt fonts. The transfer queue is newest first, three rows a job.

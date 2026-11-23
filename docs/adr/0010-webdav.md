@@ -12,7 +12,7 @@ find the user's login. ADR 0009 rules out storing secrets.
 
 ## Decision
 
-- `sc-webdav` uses `reqwest` with `rustls` and the `ring` crypto provider.
+- `nmc-webdav` uses `reqwest` with `rustls` and the `ring` crypto provider.
   Both build from Rust sources plus a little C and assembly that
   cross-compiles with the musl/zig toolchain of the static agent build; no
   OpenSSL, no cmake. The system's root certificates are used through
@@ -35,7 +35,7 @@ find the user's login. ADR 0009 rules out storing secrets.
   - Uploads are a single streamed `PUT` (`If-None-Match: *` for new
     files). There is no partial write, so no resume, and no way to set
     modification times or permissions.
-- The streaming upload sink is generic (`sc_vfs::upload_sink`), so other
+- The streaming upload sink is generic (`nmc_vfs::upload_sink`), so other
   request-based providers (S3) reuse it.
 
 ## Consequences
