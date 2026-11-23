@@ -94,6 +94,8 @@ pub struct PanelView {
     pub headers: [String; 3],
     /// The panel shows the flat (branch) view: rows carry a folder column.
     pub flat: bool,
+    /// The columns plugins add before the size, left to right.
+    pub plugin_heads: Vec<PluginHeadView>,
     /// The text of the folder's `nmc_folder.md` as plain lines (the window
     /// wraps and limits it); empty when the folder has none.
     pub folder_text: String,
@@ -138,6 +140,18 @@ pub struct RowView {
     /// The file as a `file://` URL, for dragging it to other programs;
     /// empty for anything that is not on this disk.
     pub url: String,
+    /// The text of the plugin columns, left to right (see
+    /// [`PanelView::plugin_heads`]).
+    pub cells: Vec<String>,
+}
+
+/// A column added by a plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PluginHeadView {
+    /// The heading.
+    pub title: String,
+    /// Width in characters.
+    pub width: usize,
 }
 
 /// The status line.
@@ -590,7 +604,11 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .enumerate()
         .skip(offset)
         .take(rows)
-        .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref(), icons))
+        .map(|(i, entry)| {
+            let mut view = row_view(panel, entry, i == cursor, human, git.as_deref(), icons);
+            view.cells = app.plugin_cells(side, &entry.name);
+            view
+        })
         .collect();
     let view = PanelView {
         title: {
@@ -618,6 +636,11 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         loading: panel.is_loading(),
         quick_view: None,
         headers: column_headers(panel.sort()),
+        plugin_heads: app
+            .plugin_columns(side)
+            .iter()
+            .map(|h| PluginHeadView { title: h.title.clone(), width: h.width })
+            .collect(),
         folder_text: folder_text_lines(app, side, 100, 60)
             .iter()
             .map(nmc_preview::rich::line_text)
@@ -708,6 +731,7 @@ fn row_view(
                 .map(|p| file_url(&p))
                 .unwrap_or_default()
         },
+        cells: Vec::new(),
     }
 }
 
@@ -768,6 +792,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         quick_view: Some(quick_view),
         headers: Default::default(),
         flat: false,
+        plugin_heads: Vec::new(),
         folder_text: String::new(),
     }
 }

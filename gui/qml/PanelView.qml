@@ -34,6 +34,23 @@ Rectangle {
     readonly property bool showFolder: view !== null && view.flat && showDate
         && fixedRoom >= sizeWidth.width + dateWidth.width + 150 + 36
 
+    // Plugin columns come out of the name column; as many as fit are shown.
+    readonly property var pluginHeads: view ? view.plugin_heads : []
+    readonly property real charWidth: sizeWidth.width / 10
+    readonly property int pluginCount: {
+        var room = fixedRoom - (showSize ? sizeWidth.width + 12 : 0)
+                   - (showDate ? dateWidth.width + 12 : 0) - (showFolder ? 162 : 0)
+        var n = 0
+        for (var i = 0; i < pluginHeads.length; i++) {
+            var w = pluginHeads[i].width * charWidth + 12
+            if (w > room)
+                break
+            room -= w
+            n++
+        }
+        return n
+    }
+
     TextMetrics {
         id: sizeWidth
         font: panel.theme.fixedFont
@@ -165,6 +182,16 @@ Rectangle {
                 color: panel.theme.dim
                 font.pointSize: panel.theme.font.pointSize * 0.9
             }
+            Repeater {
+                model: panel.pluginCount
+                delegate: Label {
+                    Layout.preferredWidth: panel.pluginHeads[index].width * panel.charWidth
+                    text: panel.pluginHeads[index].title
+                    elide: Text.ElideRight
+                    color: panel.theme.dim
+                    font.pointSize: panel.theme.font.pointSize * 0.9
+                }
+            }
             Label {
                 visible: panel.showSize
                 Layout.preferredWidth: sizeWidth.width
@@ -196,7 +223,7 @@ Rectangle {
             clip: true
             visible: panel.view !== null && !panel.view.quick_view
             readonly property var blank: ({ cursor: false, selected: false, hidden: false,
-                dir: false, name: "", folder: "", size: "", date: "", git: "", icon: "", icon_color: "",
+                dir: false, name: "", folder: "", size: "", date: "", cells: [], git: "", icon: "", icon_color: "",
                 url: "" })
 
             WheelHandler {
@@ -328,6 +355,16 @@ Rectangle {
                                 text: entry.folder
                                 elide: Text.ElideLeft
                                 color: panel.theme.dim
+                            }
+                            Repeater {
+                                model: panel.pluginCount
+                                delegate: Label {
+                                    Layout.preferredWidth: panel.pluginHeads[index].width * panel.charWidth
+                                    text: entry.cells && index < entry.cells.length ? entry.cells[index] : ""
+                                    elide: Text.ElideRight
+                                    color: row.textColor
+                                    font: panel.theme.fixedFont
+                                }
                             }
                             Label {
                                 visible: panel.showSize

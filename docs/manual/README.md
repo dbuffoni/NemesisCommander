@@ -896,8 +896,9 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   `preview:csv` with the file in `nmc.context.selection` and prints Markdown,
   which F3 and the quick view show. Both run only for plugins you have
   already allowed (run one of their commands, or answer the question of
-  `nmc plugin list`); a plugin may have only columns and previewers. The
-  terminal interface shows the columns before the size; the window shows the
+  `nmc plugin list`); a plugin may have only columns and previewers. Both
+  interfaces show the columns before the size (the window leaves out the ones
+  that do not fit when a panel is narrow or the font is large) and the
   viewers.
 
 See [docs/scripting.md](../scripting.md) for the API and the examples in
