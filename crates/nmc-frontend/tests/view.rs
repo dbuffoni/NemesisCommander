@@ -66,7 +66,7 @@ async fn dialogs_are_described() {
     let (mut app, _events, _dir) = app().await;
     app.handle_key(KeyPress::key(Key::F(1)));
     match Screen::of(&mut app, 10, 20).overlay {
-        Some(OverlayView::Help { groups }) => assert!(!groups.is_empty()),
+        Some(OverlayView::Help { groups, .. }) => assert!(!groups.is_empty()),
         other => panic!("{other:?}"),
     }
     app.handle_key(KeyPress::key(Key::Esc));

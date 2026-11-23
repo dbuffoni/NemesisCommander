@@ -34,7 +34,7 @@ pub fn read_limit(name: &str) -> Option<u64> {
 /// How many entries of an archive the preview lists.
 pub const ARCHIVE_ROWS: usize = 5000;
 
-/// What the viewer shows for an archive (SC-105): its files, not the bytes
+/// What the viewer shows for an archive: its files, not the bytes
 /// of the archive. `None` when `path` is not an archive or cannot be listed
 /// (an encrypted one, a damaged one): the viewer then falls back to the
 /// description of the file.

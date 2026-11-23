@@ -804,6 +804,7 @@ impl Inner {
             endpoints: endpoints.clone(),
             reason: Mutex::new(String::new()),
         });
+        let finished = self.journal.finished_steps(id)?;
         self.controls.lock().unwrap_or_else(|e| e.into_inner()).insert(id, control.clone());
         let options = ExecuteOptions {
             conflict,
@@ -838,11 +839,7 @@ impl Inner {
         if let Some(resolver) = &self.resolver {
             executor = executor.with_resolver(resolver.clone());
         }
-        let tracker = JournalTracker {
-            journal: &self.journal,
-            id,
-            finished: self.journal.finished_steps(id)?,
-        };
+        let tracker = JournalTracker { journal: &self.journal, id, finished };
         // Only jobs with several files to copy can gain from more parallelism.
         let copies = plan.steps.iter().filter(|s| s.is_parallel()).count();
         let tuning = async {
@@ -972,6 +969,10 @@ impl Throttle for Both {
     async fn acquire(&self, bytes: usize) {
         self.0.acquire(bytes).await;
         self.1.acquire(bytes).await;
+    }
+
+    fn limited(&self) -> bool {
+        self.0.limited() || self.1.limited()
     }
 }
 

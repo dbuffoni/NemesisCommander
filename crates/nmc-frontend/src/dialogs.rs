@@ -356,18 +356,12 @@ impl InputDialog {
     /// The keys shown under the field: the usual ones, then those this
     /// question adds (kept out of the prompt text).
     pub fn hint(&self) -> String {
-        let mut hint = String::from("Enter: OK    Esc: cancel    Ctrl+U: clear");
         match &self.purpose {
-            InputPurpose::PackInto(_) => {
-                hint.push_str("    Ctrl+O: more options (format, level, password)")
-            }
-            InputPurpose::InstallServe => {
-                hint.push_str("    Ctrl+T: test without installing    F1: what this does")
-            }
-            purpose if purpose.testable() => hint.push_str("    Ctrl+T: test the connection"),
-            _ => {}
+            InputPurpose::PackInto(_) => crate::hints::question(&["Ctrl+O: more options"]),
+            InputPurpose::InstallServe => crate::hints::question(&["Ctrl+T: test", "F1: help"]),
+            purpose if purpose.testable() => crate::hints::question(&["Ctrl+T: test"]),
+            _ => crate::hints::question(&[]),
         }
-        hint
     }
 
     /// The field as it is drawn: dots for a password.
@@ -405,6 +399,18 @@ pub enum ConfirmPurpose {
     /// A server of a saved `scs://` location does not answer: offer to
     /// install `nmc serve` there (its host).
     OfferInstall(String),
+}
+
+impl ConfirmDialog {
+    /// Enter says no: what cannot be undone is never one key away.
+    pub fn default_no(&self) -> bool {
+        matches!(self.purpose, ConfirmPurpose::Delete { trash: false, .. })
+    }
+
+    /// The keys shown under the question.
+    pub fn hint(&self) -> String {
+        crate::hints::confirm(self.default_no())
+    }
 }
 
 /// A yes/no question.
@@ -538,7 +544,7 @@ impl ChooseDialog {
             items,
             cursor: 0,
             purpose,
-            footer: String::new(),
+            footer: crate::hints::list("choose", &[], "cancel"),
             query: None,
         }
     }
@@ -591,16 +597,16 @@ impl MessageDialog {
 
     /// The hint below the text: `Enter: <next dialog>   Esc: close`.
     pub fn hint(&self) -> String {
-        let copy = if self.can_copy() { "c: copy the log   " } else { "" };
+        let copy = if self.can_copy() { "c: copy the log    " } else { "" };
         if self.busy {
-            return format!("Working…   {copy}Esc: close this window (the work goes on)");
+            return format!("Working…    {copy}Esc: close");
         }
         match (&self.then, &self.then_choose) {
             (Some(next), _) => {
-                format!("Enter: {}   {copy}Esc: close", next.title.to_lowercase())
+                format!("Enter: {}    {copy}Esc: close", next.title.to_lowercase())
             }
             (None, Some(next)) => {
-                format!("Enter: {}   {copy}Esc: close", next.title.to_lowercase())
+                format!("Enter: {}    {copy}Esc: close", next.title.to_lowercase())
             }
             (None, None) => format!("{copy}Esc: close"),
         }

@@ -89,11 +89,11 @@ fn every_dialog_draws_cleanly() {
         ("F9 Right Ctrl+K", "commands"),
         ("F7", "input"),
         // Multi-rename shows the new names below the template.
-        ("Down Ctrl+M", "input"),
+        ("Down Shift+F2", "input"),
         ("Down F8", "confirm"),
         ("Ctrl+Shift+D Ctrl+D", "choose"),
         // A bookmark with two targets asks which one the other panel shows.
-        ("Ctrl+Alt+D Alt+O Ctrl+Alt+D Ctrl+D Enter", "choose"),
+        ("Ctrl+Shift+B Ctrl+Up Ctrl+Shift+B Ctrl+D Enter", "choose"),
         ("Shift+F1", "choose"),
         ("Ctrl+N", "choose"),
         // Advanced pack: format, level, then the password as dots.
@@ -138,7 +138,7 @@ fn the_command_list_finds_commands_and_takes_shortcuts() {
     assert_eq!(list["filter"], "sett");
     assert_eq!(list["categories"][0], "All");
     assert_eq!(list["rows"][0]["name"], "NemesisCommander/Settings…", "{list}");
-    assert_eq!(list["rows"][0]["keys"], "Ctrl+,");
+    assert_eq!(list["rows"][0]["keys"], "Ctrl+, / Ctrl+F1");
     let ran = run(home.path(), "F9 s e t t Enter", None);
     assert_eq!(ran.screen["overlay"]["kind"], "settings");
     // Files is the second category button; the shortcut is saved.
@@ -265,9 +265,9 @@ fn settings_with_a_key_file_still_load_and_f4_edits_the_address() {
 #[test]
 fn ctrl_v_pastes_the_clipboard_into_a_question() {
     let home = home();
-    // Alt+P puts the path of the file under the cursor in the clipboard;
+    // Ctrl+P puts the path of the file under the cursor in the clipboard;
     // Ctrl+V types it into the next question.
-    let run = run(home.path(), "Down Alt+P Enter F7 Ctrl+V", None);
+    let run = run(home.path(), "Down Ctrl+P Enter F7 Ctrl+V", None);
     assert_no_qml_warnings(&run);
     let overlay = &run.screen["overlay"];
     assert_eq!(overlay["kind"], "input", "{overlay}");
@@ -284,4 +284,39 @@ fn the_pack_question_lists_its_keys_in_the_key_row() {
     assert_eq!(overlay["kind"], "input", "{overlay}");
     assert!(!overlay["prompt"].as_str().unwrap().contains("Ctrl+O"), "{overlay}");
     assert!(overlay["hint"].as_str().unwrap().contains("Ctrl+O: more options"), "{overlay}");
+}
+
+/// A plugin that adds a column: its title and the value of each file reach
+/// the window's screen description.
+#[test]
+fn plugin_columns_are_in_the_screen_description() {
+    let home = home();
+    let data = home.path().join("data");
+    let plugin = data.join("plugins/lens");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(
+        plugin.join("plugin.json"),
+        r#"{ "name": "lens", "version": "1.0.0",
+             "columns": [{ "id": "chars", "title": "Chars", "match": ["*.txt"], "width": 6 }],
+             "permissions": { "read": ["$SELECTION"] } }"#,
+    )
+    .unwrap();
+    std::fs::write(
+        plugin.join("main.ts"),
+        r#"if (nmc.context!.command === "column:chars") {
+  for (const file of nmc.context!.selection) nmc.print(String((await nmc.readText(file)).length));
+}"#,
+    )
+    .unwrap();
+    let grants = home.path().join("config/plugin-grants.json");
+    std::fs::create_dir_all(grants.parent().unwrap()).unwrap();
+    std::fs::write(&grants, r#"{ "lens": { "read": ["$SELECTION"] } }"#).unwrap();
+    let shot = home.path().join("window.png");
+    let run = run(home.path(), "Ctrl+R", Some(&shot));
+    assert_no_qml_warnings(&run);
+    let left = &run.screen["panels"][0];
+    assert_eq!(left["plugin_heads"][0]["title"], "Chars", "{left}");
+    let notes = left["rows"].as_array().unwrap().iter().find(|r| r["name"] == "notes.txt").unwrap();
+    // "first line\nsecond line\n" is 23 characters.
+    assert_eq!(notes["cells"][0], "23");
 }

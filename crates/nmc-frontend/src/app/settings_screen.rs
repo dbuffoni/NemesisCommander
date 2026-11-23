@@ -199,9 +199,10 @@ impl App {
             .collect();
         dialog.cursor = names.iter().position(|n| n == current).unwrap_or(0);
         dialog.footer = if query.is_empty() {
-            "Type to filter   Enter: use   Esc: back".into()
+            crate::hints::list("choose", &["Type: filter"], "close")
         } else {
-            format!("Filter: {query}_   Enter: use   Backspace: erase")
+            let keys = crate::hints::list("choose", &["Backspace: erase"], "close");
+            format!("Filter: {query}_{}{keys}", crate::hints::SEP)
         };
         if let ChoosePurpose::Font { names: list, .. } = &mut dialog.purpose {
             *list = names;

@@ -42,7 +42,7 @@ impl App {
                         items,
                         ChoosePurpose::DiskUsage { folder, names },
                     );
-                    dialog.footer = "Enter: look into a folder   Backspace: up   Esc: close".into();
+                    dialog.footer = crate::hints::list("open", &["Backspace: up"], "close");
                     AppEvent::Show(Box::new(Overlay::Choose(dialog)))
                 }
                 Err(e) => done(Err(e), None),
@@ -174,7 +174,7 @@ impl App {
                 items,
                 ChoosePurpose::Duplicates(groups.into_iter().map(|(_, copies)| copies).collect()),
             );
-            dialog.footer = "Enter on a group shows the copy that is kept".into();
+            dialog.footer = crate::hints::list("show the kept copy", &[], "close");
             AppEvent::Show(Box::new(Overlay::Choose(dialog)))
         });
     }
@@ -195,7 +195,7 @@ impl App {
                         crate::disks::lines(&rows),
                         ChoosePurpose::Disks(rows.into_iter().map(|r| r.mount).collect()),
                     );
-                    dialog.footer = "Enter: open where it is mounted   Esc: close".into();
+                    dialog.footer = crate::hints::list("open", &[], "close");
                     AppEvent::Show(Box::new(Overlay::Choose(dialog)))
                 }
                 Ok(_) => AppEvent::TaskDone {

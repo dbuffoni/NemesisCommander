@@ -3717,7 +3717,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-agent"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3740,7 +3740,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-app"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -3763,7 +3763,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-archive"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3789,7 +3789,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-cli"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -3820,7 +3820,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-config"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "directories",
  "nmc-index",
@@ -3834,7 +3834,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-frontend"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3867,7 +3867,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-gui"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "cxx",
  "cxx-qt",
@@ -3885,7 +3885,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-hash"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "blake3",
  "hex",
@@ -3898,7 +3898,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-index"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "futures",
  "globset",
@@ -3915,7 +3915,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-mcp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "futures",
  "nmc-hash",
@@ -3933,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-ops"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -3953,7 +3953,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-panel"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "jiff",
  "nmc-archive",
@@ -3965,7 +3965,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-preview"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "calamine",
  "gltf",
@@ -3981,7 +3981,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-proto"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bytes",
  "hyper-util",
@@ -3997,7 +3997,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-providers"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4013,7 +4013,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-s3"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4041,7 +4041,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-script"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "deno_ast",
  "deno_core",
@@ -4058,7 +4058,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-sftp"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -4073,7 +4073,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-smb"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4089,7 +4089,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-ssh"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "nmc-vfs",
  "tokio",
@@ -4097,7 +4097,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-tls"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.22.1",
  "rcgen",
@@ -4113,7 +4113,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-transfer"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "nmc-ops",
@@ -4130,7 +4130,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-tui"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "crossterm",
@@ -4156,7 +4156,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-vfs"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bitflags 2.13.2",
@@ -4172,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "nmc-webdav"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "bytes",

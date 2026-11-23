@@ -63,10 +63,20 @@ Item {
         spacing: 4
 
         // Header: what is shown, and the keys of this mode.
-        RowLayout {
+        // The keys go under the title when both do not fit side by side.
+        FontMetrics { id: titleMetrics; font.family: viewer.theme.font.family
+            font.pointSize: viewer.theme.font.pointSize; font.bold: true }
+        FontMetrics { id: keysMetrics; font: viewer.theme.font }
+        GridLayout {
             Layout.fillWidth: true
             visible: !viewer.compact && viewer.view !== null
-            spacing: 12
+            columnSpacing: 12
+            rowSpacing: 0
+            readonly property bool stacked: viewer.view !== null
+                && 0 * (titleMetrics.height + keysMetrics.height)
+                   + titleMetrics.advanceWidth(viewer.view.title)
+                   + keysMetrics.advanceWidth(viewer.view.keys) + 12 > viewer.width
+            columns: stacked ? 1 : 2
             Label {
                 Layout.fillWidth: true
                 elide: Text.ElideMiddle
@@ -74,6 +84,8 @@ Item {
                 text: viewer.view ? viewer.view.title : ""
             }
             Label {
+                Layout.fillWidth: parent.stacked
+                wrapMode: Text.Wrap
                 text: viewer.view ? viewer.view.keys : ""
                 color: viewer.theme.dim
             }
@@ -91,7 +103,17 @@ Item {
             Layout.fillHeight: true
             clip: true
 
-            // Text and hex lines.
+            // Text and hex lines. A line wider than the window shrinks the
+            // text, down to 60%, before anything is cut.
+            FontMetrics { id: lineMetrics; font: viewer.theme.fixedFont }
+            readonly property real shrink: {
+                if (!viewer.view || viewer.isPicture || viewer.isDocument)
+                    return 1
+                var widest = 0 * lineMetrics.height, lines = viewer.view.lines
+                for (var i = 0; i < lines.length; i++)
+                    widest = Math.max(widest, lineMetrics.advanceWidth(lines[i]))
+                return widest <= width ? 1 : Math.max(0.6, width / widest)
+            }
             Column {
                 visible: !viewer.isPicture && !viewer.isDocument
                 Repeater {
@@ -103,9 +125,12 @@ Item {
                             viewer.view.tinted.length > index
                         text: tinted ? viewer.styledLine(viewer.view.tinted[index].spans, 0)
                                      : modelData
-                        font: viewer.theme.fixedFont
+                        font.family: viewer.theme.fixedFont.family
+                        font.pointSize: viewer.theme.fixedFont.pointSize * content.shrink
                         color: palette.text
                         height: viewer.theme.rowHeight
+                        width: content.width
+                        elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                         textFormat: tinted ? Text.StyledText : Text.PlainText
                     }
@@ -141,6 +166,8 @@ Item {
                             id: line
                             visible: !modelData.rule
                             anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width
+                            wrapMode: modelData.code ? Text.NoWrap : Text.Wrap
                             text: viewer.styledLine(modelData.spans, parent.level)
                             textFormat: Text.StyledText
                             font.family: viewer.theme.fixedFont.family

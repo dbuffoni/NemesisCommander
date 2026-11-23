@@ -94,6 +94,11 @@ pub struct PanelView {
     pub headers: [String; 3],
     /// The panel shows the flat (branch) view: rows carry a folder column.
     pub flat: bool,
+    /// The columns plugins add before the size, left to right.
+    pub plugin_heads: Vec<PluginHeadView>,
+    /// The text of the folder's `nmc_folder.md` as plain lines (the window
+    /// wraps and limits it); empty when the folder has none.
+    pub folder_text: String,
 }
 
 /// A tab of a panel.
@@ -135,6 +140,18 @@ pub struct RowView {
     /// The file as a `file://` URL, for dragging it to other programs;
     /// empty for anything that is not on this disk.
     pub url: String,
+    /// The text of the plugin columns, left to right (see
+    /// [`PanelView::plugin_heads`]).
+    pub cells: Vec<String>,
+}
+
+/// A column added by a plugin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PluginHeadView {
+    /// The heading.
+    pub title: String,
+    /// Width in characters.
+    pub width: usize,
 }
 
 /// The status line.
@@ -163,6 +180,8 @@ pub struct KeyLabel {
 pub enum OverlayView {
     /// F1: the main shortcuts, by category.
     Help {
+        /// The keys shown under the list.
+        hint: String,
         /// Groups of `(keys, label)` rows.
         groups: Vec<HelpGroup>,
     },
@@ -232,6 +251,8 @@ pub enum OverlayView {
     Viewer(ViewerView),
     /// Ctrl+J: the transfer queue.
     Jobs {
+        /// The keys shown under the list.
+        hint: String,
         /// One line per job.
         rows: Vec<JobRow>,
         /// Highlighted job.
@@ -436,6 +457,8 @@ pub struct ConflictView {
     pub existing: String,
     /// The file being copied.
     pub incoming: String,
+    /// The keys shown under the question.
+    pub hint: String,
 }
 
 impl Screen {
@@ -482,6 +505,7 @@ impl Screen {
             destination: display_location(&c.destination),
             existing: describe(&c.destination_entry),
             incoming: describe(&c.source_entry),
+            hint: crate::hints::CONFLICT.into(),
         });
         Screen {
             panels,
@@ -513,11 +537,18 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     let keymap = &app.context().keymap;
     let recording = palette.recording.then(|| palette.selected().map(|e| e.name())).flatten();
     let hint = if let Some(name) = &recording {
-        format!("Press the new shortcut for {name}    Esc: cancel")
+        format!("Press the new shortcut for {name}{}Esc: cancel", crate::hints::SEP)
     } else {
-        "Type to find    Left Right: category    Enter: run    F1: help    \
-         Ctrl+K: set shortcut    Del: remove shortcut    Esc: close"
-            .to_owned()
+        [
+            "Enter: run",
+            "←/→: category",
+            "Ctrl+K: set key",
+            "Delete: remove key",
+            "Type: find",
+            "F1: help",
+            "Esc: close",
+        ]
+        .join(crate::hints::SEP)
     };
     CommandsView {
         categories: palette.categories.clone(),
@@ -587,7 +618,11 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         .enumerate()
         .skip(offset)
         .take(rows)
-        .map(|(i, entry)| row_view(panel, entry, i == cursor, human, git.as_deref(), icons))
+        .map(|(i, entry)| {
+            let mut view = row_view(panel, entry, i == cursor, human, git.as_deref(), icons);
+            view.cells = app.plugin_cells(side, &entry.name);
+            view
+        })
         .collect();
     let view = PanelView {
         title: {
@@ -615,6 +650,24 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
         loading: panel.is_loading(),
         quick_view: None,
         headers: column_headers(panel.sort()),
+        plugin_heads: app
+            .plugin_columns(side)
+            .iter()
+            .map(|h| PluginHeadView { title: h.title.clone(), width: h.width })
+            .collect(),
+        folder_text: {
+            // A run of blank lines counts as one: the window shows little.
+            let mut lines: Vec<String> = Vec::new();
+            for line in
+                folder_text_lines(app, side, 100, 60).iter().map(nmc_preview::rich::line_text)
+            {
+                if line.trim().is_empty() && lines.last().is_none_or(|l| l.trim().is_empty()) {
+                    continue;
+                }
+                lines.push(line);
+            }
+            lines.join("\n")
+        },
     };
     app.scroll[index] = offset;
     view
@@ -700,6 +753,7 @@ fn row_view(
                 .map(|p| file_url(&p))
                 .unwrap_or_default()
         },
+        cells: Vec::new(),
     }
 }
 
@@ -760,12 +814,15 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         quick_view: Some(quick_view),
         headers: Default::default(),
         flat: false,
+        plugin_heads: Vec::new(),
+        folder_text: String::new(),
     }
 }
 
 fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
     Some(match app.overlay()? {
         Overlay::Help => OverlayView::Help {
+            hint: crate::hints::HELP.into(),
             groups: app
                 .context()
                 .keymap
@@ -791,7 +848,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         Overlay::Confirm(dialog) => OverlayView::Confirm {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
-            hint: app.with_back("Enter / y: yes    Esc / n: no".into()),
+            hint: app.with_back(dialog.hint()),
         },
         Overlay::Choose(dialog) => OverlayView::Choose {
             title: dialog.title.clone(),
@@ -811,6 +868,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         },
         Overlay::Viewer(viewer) => OverlayView::Viewer(viewer_view(viewer, viewer_rows)),
         Overlay::Jobs(view) => OverlayView::Jobs {
+            hint: crate::hints::JOBS.into(),
             rows: app
                 .jobs
                 .iter()
@@ -824,7 +882,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         },
         // The window's title and hint lines take some of the rows.
         Overlay::Settings(screen) => {
-            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(7)))
+            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(4)))
         }
     })
 }
@@ -858,27 +916,28 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
             changed: false,
         },
     };
-    let find = if screen.filter.is_empty() {
-        "Type to find   ".to_owned()
+    let (lead, esc) = if screen.filter.is_empty() {
+        (String::new(), "Esc: close")
     } else {
-        format!("Find: {}_   ", screen.filter)
+        (format!("Find: {}_{}", screen.filter, crate::hints::SEP), "Esc: clear")
     };
-    let esc = if screen.filter.is_empty() { "Esc: close" } else { "Esc: clear" };
-    let hint = match screen.current() {
+    let typing = if screen.filter.is_empty() { Some("Type: find") } else { None };
+    let mut parts: Vec<&str> = match screen.current() {
         Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
-                format!("{find}Enter / ← →: change   Del: default   {esc}")
+                vec!["Enter: change", "←/→: change", "Delete: default"]
             }
             FieldKind::Number(..) => {
-                format!("{find}Enter: type a value   ← →: one less / more   Del: default   {esc}")
+                vec!["Enter: type a value", "←/→: less / more", "Delete: default"]
             }
-            FieldKind::Text => format!("{find}Enter: type a value   Del: default   {esc}"),
-            FieldKind::Font => {
-                format!("{find}Enter: choose an installed font   Del: default   {esc}")
-            }
+            FieldKind::Text => vec!["Enter: type a value", "Delete: default"],
+            FieldKind::Font => vec!["Enter: choose", "Delete: default"],
         },
-        _ => format!("{find}Enter: run   {esc}"),
+        _ => vec!["Enter: run"],
     };
+    parts.extend(typing);
+    parts.push(esc);
+    let hint = format!("{lead}{}", parts.join(crate::hints::SEP));
     SettingsView {
         rows: screen.rows.iter().skip(offset).take(rows).map(row_view).collect(),
         cursor: screen.cursor - offset,
@@ -937,14 +996,14 @@ fn file_url(path: &std::path::Path) -> String {
 /// The keys that matter in the viewer's current mode.
 pub fn viewer_keys(viewer: &Viewer) -> &'static str {
     if viewer.diff.is_some() {
-        return "n/p: next/previous change   PgUp/PgDn: scroll   Esc: close";
+        return "n / p: next change    PgUp/PgDn: scroll    Esc: close";
     }
     match viewer.mode() {
-        "pdf" => "PgUp/PgDn: page   +/-: zoom   0: fit   F4: hex   Esc: close",
-        "model" => "Arrows: turn   +/-: zoom   0: reset   F4: hex   Esc: close",
-        "image" => "+/-: zoom   0: fit   arrows: move   F4: hex   Esc: close",
-        "document" => "PgUp/PgDn: scroll   F4: hex   Esc: close",
-        _ => "F2: wrap   F4: hex   Esc: close",
+        "pdf" => "PgUp/PgDn: page    +/-: zoom    0: fit    F4: hex    Esc: close",
+        "model" => "Arrows: turn    +/-: zoom    0: reset    F4: hex    Esc: close",
+        "image" => "Arrows: move    +/-: zoom    0: fit    F4: hex    Esc: close",
+        "document" => "PgUp/PgDn: scroll    F4: hex    Esc: close",
+        _ => "F2: wrap    F4: hex    Esc: close",
     }
 }
 

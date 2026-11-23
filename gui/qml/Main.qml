@@ -110,8 +110,16 @@ ApplicationWindow {
     Component.onCompleted: commander.start(Qt.fontFamilies().join("\n"))
 
     // Rows that fit: tell the application, which scrolls and pages with it.
+    // The settings list shrinks its text (down to 60%) in a small window so
+    // that more of its rows are in sight.
+    readonly property bool settingsOpen: screen !== null && screen.overlay !== null
+        && screen.overlay.kind === "settings"
+    readonly property real settingsScale: !settingsOpen ? 1
+        : Math.max(0.6, Math.min(1, body.height / (rowHeight * 16)))
+    onSettingsScaleChanged: reportSize()
     function reportSize() {
-        commander.resize(left.visibleRows, Math.max(1, Math.floor(body.height / rowHeight) - 4),
+        var unit = rowHeight * settingsScale
+        commander.resize(left.visibleRows, Math.max(1, Math.floor(body.height / unit) - 4),
                          Math.floor(body.width / fixedMetrics.averageCharacterWidth) - 4)
     }
 
@@ -207,9 +215,11 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Label {
                     Layout.fillWidth: true
-                    // An error keeps its beginning and its end (the host and
-                    // the reason); the rest of the line is cut in the middle.
-                    elide: Text.ElideMiddle
+                    // Whole words on two lines at most; an error keeps its
+                    // beginning (the host), the end is cut.
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                     text: window.screen ? window.screen.status.text : ""
                     color: window.screen && window.screen.status.error ? window.errorColor
                                                                        : palette.windowText
@@ -241,17 +251,63 @@ ApplicationWindow {
                 }
             }
 
-            // Function keys F1-F10.
+            // Function keys F1-F10. When the window is too narrow for every
+            // label, the least important keys show only their number (words
+            // are never cut): F10 and F9 keep their label longest.
+            FontMetrics { id: keyBold; font.family: window.font.family
+                font.pointSize: window.font.pointSize; font.bold: true }
+            FontMetrics { id: keyPlain; font: window.font }
+            readonly property var keyList: window.screen ? window.screen.keys : []
+            readonly property var keyPriority: [10, 9, 1, 3, 5, 6, 7, 8, 4, 2]
+            function fullWidth(key, labelled) {
+                // (the metrics change with the font: depend on them)
+                return 8 + 0 * (keyBold.height + keyPlain.height) + keyBold.advanceWidth("F" + key.number)
+                     + (labelled ? 4 + keyPlain.advanceWidth(key.label) : 0)
+            }
+            // The text shrinks, down to 70%, so that every label fits.
+            readonly property real keyScale: {
+                var all = 0, gaps = 2 * keyList.length
+                for (var i = 0; i < keyList.length; i++)
+                    all += fullWidth(keyList[i], true)
+                return all + gaps <= body.width ? 1
+                    : Math.max(0.4, (body.width - gaps - 4) / all)
+            }
+            function keyWidth(key, labelled) {
+                return fullWidth(key, labelled) * keyScale
+            }
+            // The numbers of the keys that keep their label.
+            readonly property var labelled: {
+                var avail = body.width - 2 * keyList.length, used = 0, i
+                for (i = 0; i < keyList.length; i++)
+                    used += keyWidth(keyList[i], false)
+                var shown = {}
+                for (var p = 0; p < keyPriority.length; p++) {
+                    for (i = 0; i < keyList.length; i++) {
+                        var k = keyList[i]
+                        if (k.number !== keyPriority[p])
+                            continue
+                        var extra = keyWidth(k, true) - keyWidth(k, false)
+                        if (used + extra <= avail) {
+                            used += extra
+                            shown[k.number] = true
+                        }
+                    }
+                }
+                return shown
+            }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 2
                 Repeater {
                     model: window.screen ? window.screen.keys : []
                     delegate: Rectangle {
+                        readonly property bool withLabel: !!body.labelled[modelData.number]
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 1
+                        Layout.preferredWidth: body.keyWidth(modelData, withLabel)
+                        Layout.minimumWidth: body.keyWidth(modelData, false)
                         implicitHeight: window.rowHeight
                         color: palette.button
+                        border.color: window.lineColor
                         radius: 2
                         // A click is the same as the key: F9 opens the
                         // Commands list.
@@ -269,10 +325,13 @@ ApplicationWindow {
                             Label {
                                 text: "F" + modelData.number
                                 font.bold: true
+                                font.pointSize: window.font.pointSize * body.keyScale
                             }
                             Label {
+                                visible: withLabel
                                 text: modelData.label
                                 color: palette.buttonText
+                                font.pointSize: window.font.pointSize * body.keyScale
                             }
                         }
                     }

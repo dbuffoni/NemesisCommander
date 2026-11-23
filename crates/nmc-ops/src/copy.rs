@@ -40,6 +40,12 @@ const PIPELINE_DEPTH: usize = 8;
 pub trait Throttle: Send + Sync {
     /// Waits until `bytes` may be sent.
     async fn acquire(&self, bytes: usize);
+
+    /// Whether a limit is set now. A copy done by the disk or the server
+    /// itself would ignore it, so a limited copy streams instead.
+    fn limited(&self) -> bool {
+        false
+    }
 }
 
 /// Options for [`copy_file`].
@@ -106,6 +112,7 @@ pub async fn copy_file(
         && dst_caps.contains(Capabilities::SERVER_COPY)
         && !options.force_streaming
         && options.hash.is_none()
+        && !options.throttle.as_ref().is_some_and(|t| t.limited())
     {
         let size = source_provider.stat(source).await?.size;
         destination_provider.copy_within(source, destination).await?;
@@ -426,6 +433,29 @@ mod tests {
         assert_eq!(std::fs::read(dir.path().join("b")).unwrap(), data(5000));
         let ok = verify_copy(&p, &a, &p, &b, VerifyMode::Fast, None).await.unwrap();
         assert!(ok);
+    }
+
+    struct Limit;
+
+    #[async_trait]
+    impl Throttle for Limit {
+        async fn acquire(&self, _bytes: usize) {}
+        fn limited(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn a_bandwidth_limit_makes_a_local_copy_stream() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a"), data(5000)).unwrap();
+        let p = LocalProvider::new();
+        let a = VfsPath::from_local(dir.path().join("a")).unwrap();
+        let b = VfsPath::from_local(dir.path().join("b")).unwrap();
+        let options = CopyFileOptions { throttle: Some(Arc::new(Limit)), ..Default::default() };
+        let out = copy_file(&p, &a, &p, &b, &options).await.unwrap();
+        assert!(!out.server_side, "the limit must apply, so the data goes through");
+        assert_eq!(std::fs::read(dir.path().join("b")).unwrap(), data(5000));
     }
 
     #[tokio::test]

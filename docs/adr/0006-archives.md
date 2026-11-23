@@ -13,9 +13,9 @@ read rar, and browse archives like folders, all natively.
 - **Browsing** is an `ArchiveProvider` per archive scheme (`zip`, `tar`,
   `7z`, `rar`, and `gz`/`xz`/`bz2`/`zst` for single compressed files, which
   appear as a folder with one file). The provider is read-only. Extracting
-  is an ordinary `sc-ops` copy out of the archive, so it gets conflict
+  is an ordinary `nmc-ops` copy out of the archive, so it gets conflict
   handling, progress, verification and the transfer queue for free.
-- **Packing** (`sc_archive::pack`) walks sources on any provider and feeds a
+- **Packing** (`nmc_archive::pack`) walks sources on any provider and feeds a
   blocking writer thread through bounded channels. The archive is written to
   a hidden part file next to the target and renamed at the end (or written
   to a temp file and uploaded for remote targets).

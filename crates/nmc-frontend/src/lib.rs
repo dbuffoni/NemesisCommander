@@ -30,6 +30,7 @@ pub mod export;
 pub mod frecency;
 pub mod fuzzy;
 pub mod git;
+pub mod hints;
 pub mod icons;
 mod input;
 pub mod install;

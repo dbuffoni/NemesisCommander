@@ -1,5 +1,5 @@
-//! "Open terminal here" (SC-36) and the folder the shell is left in when
-//! the terminal interface ends (SC-2).
+//! "Open terminal here" and the folder the shell is left in when
+//! the terminal interface ends.
 
 use std::path::PathBuf;
 

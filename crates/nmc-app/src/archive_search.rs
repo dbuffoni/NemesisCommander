@@ -1,4 +1,4 @@
-//! Lets a search look inside archives (SC-32).
+//! Lets a search look inside archives.
 
 use std::sync::Arc;
 

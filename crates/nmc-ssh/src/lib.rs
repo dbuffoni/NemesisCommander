@@ -12,7 +12,7 @@
 //!
 //! There is no key setting of its own: `ssh` finds the keys the same way it
 //! does for the user in a terminal (`~/.ssh/config`, the default key files,
-//! the SSH agent). See ADR 0033.
+//! the SSH agent).
 
 use std::process::Stdio;
 
@@ -50,6 +50,11 @@ impl Target {
         };
         if host.is_empty() {
             return Err("a host name is needed".into());
+        }
+        // A name starting with `-` would be read by `ssh` as an option
+        // (`-oProxyCommand=...` runs a command).
+        if host.starts_with('-') || user.as_deref().is_some_and(|u| u.starts_with('-')) {
+            return Err("a name cannot start with `-`".into());
         }
         Ok(Target { user, host, port })
     }
@@ -127,7 +132,9 @@ pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, Stri
             args.push(name.into());
         }
         Remote::Script(script) => {
-            debug_assert!(!script.contains('\''), "scripts are wrapped in single quotes");
+            if script.contains('\'') {
+                return Err("a remote script cannot contain a single quote".into());
+            }
             args.push(target.destination());
             args.push("--".into());
             // The remote login shell may not be POSIX (fish, ...).
@@ -227,6 +234,13 @@ pub fn spawn_env(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn names_starting_with_a_dash_are_refused() {
+        assert!(super::Target::parse("-oProxyCommand=x@host").is_err());
+        assert!(super::Target::parse("me@-oProxyCommand=x").is_err());
+        assert!(super::Target::parse("me@host:22").is_ok());
+    }
+
     use super::*;
 
     #[test]

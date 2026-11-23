@@ -5,7 +5,7 @@
 
 ## Context
 
-SuperCommander is open source and was started from a written architecture
+NemesisCommander is open source and was started from a written architecture
 (v0.1). Many smaller decisions are taken while coding, often without the
 project owner present. Contributors need to know *why* the code looks the
 way it does.

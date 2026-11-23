@@ -5,7 +5,7 @@
 
 ## Context
 
-Card SC-108 (the logo is not good). Daniele supplied a new N: two white
+The logo was not good enough. The maintainer supplied a new N: two white
 pills with a black outline, a black diagonal band and a band between them,
 first purple, then asked blue. He asked the logo to be used to rebrand the
 app and the same blue, transparent, for selected rows.
@@ -30,11 +30,11 @@ app and the same blue, transparent, for selected rows.
 ## Consequences
 
 The blue is only approximate to the supplied picture (hand-traced); the SVG is
-the master. Revisit if Daniele supplies vector artwork.
+the master. Revisit if the maintainer supplies vector artwork.
 
 ## Update (same day)
 
-Daniele found the S-shaped blue band too busy and asked for a simple bar. The
+The maintainer found the S-shaped blue band too busy and asked for a simple bar. The
 logo is now a straight blue bar (#1F6BFF, 38 units wide) centred on the black
 diagonal, inside a black frame that follows the outline of the N, passing
 under the two pills. Same files, same script.

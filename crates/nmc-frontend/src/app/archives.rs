@@ -57,7 +57,7 @@ impl App {
         let mut dialog =
             ChooseDialog::new(&title, rows, ChoosePurpose::PackFormat { paths, formats });
         dialog.cursor = start.unwrap_or(0);
-        dialog.footer = "Enter: choose the format   Esc: cancel".into();
+        dialog.footer = crate::hints::list("choose", &[], "cancel");
         self.overlay = Some(Overlay::Choose(dialog));
     }
 
@@ -74,7 +74,7 @@ impl App {
                         ChoosePurpose::PackLevel { paths, format },
                     );
                     dialog.cursor = 2;
-                    dialog.footer = "Enter: choose   Esc: cancel".into();
+                    dialog.footer = crate::hints::list("choose", &[], "cancel");
                     self.overlay = Some(Overlay::Choose(dialog));
                 } else {
                     self.ask_pack_password(paths, format, 6);

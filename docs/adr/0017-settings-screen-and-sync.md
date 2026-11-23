@@ -7,13 +7,13 @@
 
 Settings were a TOML file edited in an external editor (Ctrl+,), with
 export and import to a file. The architecture document ruled out syncing
-settings between machines. Daniele then asked for a screen to change
+settings between machines. The maintainer then asked for a screen to change
 shortcuts and options inside the program, and for a way to send the
 settings to remote instances when needed.
 
 ## Decision
 
-- **One screen, shared by both interfaces.** `sc-frontend::settings`
+- **One screen, shared by both interfaces.** `nmc-frontend::settings`
   describes every option (section, label, how it changes: toggle, choice,
   number, text) and builds the rows: options, then every command's
   shortcuts by category, then the commands that share settings. The window
@@ -28,8 +28,8 @@ settings to remote instances when needed.
   taken from another command is removed there, and the status line says
   so. Only keys that differ from the built-in ones are written to `[keys]`.
 - **Sending settings is explicit, not a sync.** "Send these settings to
-  another machine" (also `sc config push`) writes this machine's
-  settings to another one; "Get the settings of another machine" (`sc
+  another machine" (also `nmc config push`) writes this machine's
+  settings to another one; "Get the settings of another machine" (`nmc
   config pull`) reads them, then asks replace or merge. Nothing runs in
   the background and nothing is compared.
   - Through the agent (`agent://host`, `scs://host`) the location of the
@@ -47,6 +47,6 @@ settings to remote instances when needed.
 - An option added to `Config` must be added to `settings::Field` to appear
   on the screen (the file still accepts it otherwise).
 - Remote machines without the agent need the path of their settings file.
-- Update (SC-60): the settings screen no longer lists shortcuts. Keys are
+- Update: the settings screen no longer lists shortcuts. Keys are
   set in the Commands list (F9, Ctrl+K), which does the same; `[keys]` in the
   file is unchanged.

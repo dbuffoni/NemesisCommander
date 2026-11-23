@@ -5,13 +5,13 @@
 # * the agent: a static Linux `nmc` per architecture, built without the
 #   terminal UI and desktop features, that controllers copy to servers.
 #
-# Every push to dev builds them and keeps them as workflow artifacts; a
-# tag like v0.2.0 also publishes them as a GitHub release.
+# Every push to main builds them and keeps them as workflow artifacts; a
+# tag like v0.3.0 also publishes them as a GitHub release.
 name: Release
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 

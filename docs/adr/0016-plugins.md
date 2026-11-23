@@ -16,14 +16,14 @@ plugins add.
 
 - **Package.** A plugin is a folder with `plugin.json` (name, version,
   description, `main` script, commands, permissions, limits) and its
-  script. `sc plugin install FOLDER` copies it to the data folder
+  script. `nmc plugin install FOLDER` copies it to the data folder
   (`plugins/NAME`); `list`, `remove`, `allow`, `deny` and `run` manage it.
   Unknown manifest fields are refused, so a manifest asking for a
   permission that does not exist yet (network, processes) fails loudly
   instead of being ignored.
 - **Commands first.** This version lets plugins add commands. A command
-  runs the plugin's script with `sc.context` (command id, both panels'
-  folders, the selection). Alt+X ("Plugins and scripts…", in the Tools
+  runs the plugin's script with nmc.context (command id, both panels'
+  folders, the selection). Ctrl+X ("Plugins and scripts…", in the Tools
   menu of the TUI and the window) lists them, and also offers to run the
   `.ts`/`.js` file under the cursor. Providers, viewers, columns and search
   filters need a long-lived plugin with callbacks and are left for later.

@@ -1,4 +1,4 @@
-//! `nmc mcp`: NemesisCommander as a Model Context Protocol server (SC-56).
+//! `nmc mcp`: NemesisCommander as a Model Context Protocol server.
 //!
 //! An AI assistant (Claude Desktop, Claude Code...) starts `nmc mcp` as a
 //! child process and talks JSON-RPC 2.0 with it over standard input and

@@ -6,7 +6,7 @@
 //
 // A plugin is a folder with two files:
 //   plugin.json  what the plugin is called, which commands it adds to the
-//                Alt+X / F9 list, which locations it may touch (permissions)
+//                Ctrl+X / F9 list, which locations it may touch (permissions)
 //                and its limits.
 //   main.ts      this script. NemesisCommander runs it once per command, in
 //                its own isolate. There are no imports and no network: only
@@ -17,7 +17,7 @@
 //   nmc test examples/plugins/random-file
 // Install and use:
 //   nmc plugin install examples/plugins/random-file
-//   then press Alt+X (or F9) in a panel and pick "Create a file with random content".
+//   then press Ctrl+X (or F9) in a panel and pick "Create a file with random content".
 
 // ---- 1. What is this run about? -------------------------------------------
 // `nmc.context` says which command was picked (`command`, the `id` in
@@ -25,7 +25,7 @@
 // entries (`selection`). It is null when the script is run with `nmc run`.
 const context = nmc.context;
 if (context === null || context.panel === null) {
-  throw new Error("run this from a panel (Alt+X) or with `nmc plugin run`");
+  throw new Error("run this from a panel (Ctrl+X) or with `nmc plugin run`");
 }
 
 // TEMPLATE: plugins with several commands branch on `context.command` here:

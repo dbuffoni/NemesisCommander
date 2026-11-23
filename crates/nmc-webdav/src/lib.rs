@@ -95,6 +95,8 @@ impl WebDavProvider {
         let client = reqwest::Client::builder()
             .user_agent(concat!("NemesisCommander/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(30))
+            // A stalled request fails (and is retried) instead of hanging.
+            .read_timeout(Duration::from_secs(60))
             .build()
             .map_err(|e| VfsError::Other(format!("cannot start the HTTP client: {e}")))?;
         Ok(WebDavProvider {

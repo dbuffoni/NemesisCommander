@@ -1,4 +1,4 @@
-//! Side-by-side comparison of two text files (Alt+C on two files). The result
+//! Side-by-side comparison of two text files (Shift+F3 on two files). The result
 //! is shown in the viewer as formatted lines: line numbers, the two texts,
 //! and a mark for what changed.
 

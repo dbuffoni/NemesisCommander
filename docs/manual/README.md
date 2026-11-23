@@ -111,14 +111,14 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
   `sftp://host/dir`.
 - **Ctrl+F3 / Ctrl+F4 / Ctrl+F5** sort by name, extension or date; pressing
   the same one again reverses the order. (There is no "sort by size": use
-  the disk usage list, **Alt+U**, below.)
-- **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
+  the disk usage list, **Ctrl+F7**, below.)
+- **Ctrl+F2** shows or hides hidden files, **Ctrl+R** reloads.
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`). While a
   filter is on, the line under the panel says `filter: … (Esc clears)`.
 - **Esc** clears the filter; with no filter it clears the selection (and,
-  right after **Alt+C** compared two folders, the differences it selected in
+  right after **Shift+F3** compared two folders, the differences it selected in
   both panels).
-- **Ctrl+↓** (or **Ctrl+U**) swaps the panels, **Ctrl+↑** (or **Alt+O**) opens
+- **Ctrl+↓** (or **Ctrl+U**) swaps the panels, **Ctrl+↑** opens
   this folder in the other one.
   **Ctrl+←** and **Ctrl+→** open the folder under the cursor in the left or
   right panel (on a file, this panel's folder). With "← goes up, → enters a
@@ -146,14 +146,14 @@ trees. To see what takes the space, use the disk usage list below.
 Files are drawn on the same scale as the folders, so you see at a glance
 what takes the space.
 
-**Alt+U** (Disk usage) lists the items of this folder by size, biggest first,
+**Ctrl+F7** (Disk usage) lists the items of this folder by size, biggest first,
 with a bar relative to the biggest, its share of the total and its size. Enter
 looks into a folder, Backspace goes up, Esc closes. It works on any location,
 including remote ones.
 
 ### Disks and partitions
 
-**Alt+K** (Disks and partitions) shows the disks of this computer with their
+**Ctrl+F8** (Disks and partitions) shows the disks of this computer with their
 partitions: name, type (disk, partition, LVM, removable…), size, partition table
 (GPT or MBR), file system, a bar with the space used, the free space, where each
 one is mounted and its label or model. Enter opens the mount point in the
@@ -171,9 +171,11 @@ runs that combination). In the terminal it works only where the terminal
 reports Ctrl, Alt and Shift on their own (terminals with the "kitty keyboard
 protocol" turned on by the program; NemesisCommander does not turn it on).
 
-The Alt+F keys are not used: desktops such as GNOME keep Alt+F1, Alt+F5, Alt+F7 and
-Alt+F8 for themselves, so the window would never receive them. The extra
-commands are on **Shift+F** instead.
+No built-in command uses Alt: desktops (GNOME keeps Alt+F1, Alt+F5, Alt+F7 and
+Alt+F8) and macOS terminals (Option types characters) take those keys for
+themselves. The extra commands are on **Shift+F** and **Ctrl+F** keys or on
+**Ctrl** and a letter, and no two commands share a key. You can still bind
+Alt keys yourself (F9, then Ctrl+K).
 
 ### The mouse
 
@@ -188,7 +190,7 @@ drag a row out to your desktop or another application.
 
 ### The flat view
 
-**Alt+V** lists every file below the current folder in one list, with the
+**Ctrl+F6** lists every file below the current folder in one list, with the
 subfolder of each file in a *Folder* column, so you can see, sort, select and
 copy files from a whole tree at once. Press it again, or Backspace, to come
 back to the folder. Hidden files follow the usual setting, folders are not
@@ -199,7 +201,7 @@ listed, and listings stop at 100 000 files (the footer says so).
 Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:
 one commit to push, two to pull) and a mark before each name: **M** changed or
 staged, **?** untracked, **!** ignored. A folder carries the mark of what is
-inside it. The marks are not the result of **Alt+C** (Compare): they are what
+inside it. The marks are not the result of **Shift+F3** (Compare): they are what
 `git status` says now, read again every time the folder is listed, so they
 disappear when the file is committed or ignored. With the cursor on a marked
 entry, the line under the panel says what the mark means (for example
@@ -220,13 +222,13 @@ default; the destination can be edited before you confirm.
 | F5 | Copy |
 | F6 | Move |
 | Shift+F6 or F2 | Rename |
-| Ctrl+M | Rename many files with a template ([below](#renaming-many-files)) |
+| Shift+F2 | Rename many files with a template ([below](#renaming-many-files)) |
 | F9, Files/Multi-rename with AI… | Describe the new names; Claude writes the rule ([below](#renaming-many-files)) |
 | F7 | New folder |
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
 | Shift+F5 / Shift+F9 | Pack into an archive / unpack one |
-| Alt+Enter | Properties, and change the dates and permissions |
+| Ctrl+E | Properties, and change the dates and permissions |
 | F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
 | Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
@@ -246,6 +248,18 @@ systems with Unix permissions, Enter changes them (octal mode).
 
 ![Properties](images/properties.png)
 
+### The keys of a dialog
+
+Every dialog has one row of keys at the bottom, the same in the window and
+in the terminal, always in this order: the main action first (`Enter: OK`,
+`Enter: open`, `Enter: run`), then the keys this dialog adds (`Ctrl+U: clear`,
+`Ctrl+T: test`, `Ctrl+O: more options`, `Delete: remove`…), then
+`Shift+Tab: back` when there is a question before this one, `F1: help` when
+the dialog explains itself, and last **Esc**: `Esc: cancel` for questions and
+confirmations, `Esc: close` for lists, messages and viewers. A question that
+cannot be undone, such as deleting for good, answers **no** to Enter: only
+**y** says yes (its row says so).
+
 ### Typing and pasting
 
 Every question (new folder, go to, a connection's address, a password…) is a
@@ -257,7 +271,7 @@ into the panels does nothing, so a paste can never run a command.
 
 ### Renaming many files
 
-**Ctrl+M** renames the selected files (or the one under the cursor) with a
+**Shift+F2** renames the selected files (or the one under the cursor) with a
 template. While you type it, the dialog previews the first new names as
 `old → new`, or says why the template cannot be used. The template is
 copied for each file, with these placeholders:
@@ -305,13 +319,13 @@ it is closed (for example `code --wait`) in Settings first.
 
 ### Links
 
-**Alt+L** makes a symbolic link (relative or absolute) or a hard link, in the
+**Shift+F4** makes a symbolic link (relative or absolute) or a hard link, in the
 other panel's folder, to the selected items, with the same names. Only local
 folders can hold links; an existing name is never replaced.
 
 ### Copying paths, exporting a listing
 
-**Alt+P** copies to the system clipboard the full path, the name, the URI or
+**Ctrl+P** copies to the system clipboard the full path, the name, the URI or
 the folder of the selected items (one per line). In a terminal this uses the
 OSC 52 escape sequence, which most terminals accept, also over SSH (tmux needs
 `set -g set-clipboard on`).
@@ -326,9 +340,9 @@ leave the name empty to copy it to the clipboard.
 ### The basket
 
 The basket collects items from several folders and drives to act on together.
-**Alt+B** adds the selection; **Ctrl+B** opens the basket. In it, **Enter**
+**Ctrl+G** adds the selection; **Ctrl+B** opens the basket. In it, **Enter**
 shows an item in the panel, **F5** copies, **F6** moves, **F8** deletes,
-**Shift+F5** packs (into `basket.zip` unless you type another name) and **Ctrl+M** renames everything in the basket, **Delete**
+**Shift+F5** packs (into `basket.zip` unless you type another name) and **Shift+F2** renames everything in the basket, **Delete**
 removes one item from the list (the file stays) and **Shift+Delete** empties it.
 Moved and deleted items leave the basket by themselves. The basket is kept
 until you quit.
@@ -337,9 +351,10 @@ until you quit.
 
 ### A text for the folder
 
-A file called `nmc_folder.md` (or `sc_folder.md`) in a folder is shown, as
-Markdown, at the top of its panel in the terminal interface (up to a third of
-the panel; files over 64 KiB are ignored): notes on what the folder is for.
+A file called `nmc_folder.md` in a folder is shown at the top of its panel,
+in the terminal interface as Markdown and in the window as plain wrapped
+text (up to a third of the panel; files over 64 KiB are ignored): notes on
+what the folder is for.
 
 ## Selecting files
 
@@ -372,7 +387,7 @@ and names (keys, types, tags, variables). Shell scripts, YAML, JSON, XML and
 HTML, SQL, TypeScript and JavaScript, Rust and Python are recognised by the
 file name, or by the `#!` line when the name does not say. The language shows
 in the footer. The same colours appear in the quick view and, for unchanged
-lines, in a comparison (Alt+C). Files over 50 000 lines stay plain.
+lines, in a comparison (Shift+F3). Files over 50 000 lines stay plain.
 
 ![Text](images/viewer-text.png)
 
@@ -472,7 +487,7 @@ inside archives, up to three levels). Found files are listed with the archive
 in their path. On the command line it is
 `nmc find --archives`.
 
-**Alt+C** compares: two files (one under the cursor in each panel) by
+**Shift+F3** compares: two files (one under the cursor in each panel) by
 content, or two folders, selecting the entries that differ. Two different
 text files open side by side, with the file of the panel you are in on the
 left: `-` marks lines only on the left, `+` lines only on the right and `~`
@@ -485,7 +500,7 @@ The search asks three things: the names, the text inside the files, and
 `newer:7d` (changed in the last 7 days), `older:2w`; units for ages are `h`,
 `d`, `w`, `m` (30 days) and `y`. Leave it empty for no conditions.
 
-In the list of results, **Alt+B** puts all of them in the [basket](#the-basket),
+In the list of results, **Ctrl+G** puts all of them in the [basket](#the-basket),
 so you can copy, pack, rename or delete them together.
 
 ### Saved searches
@@ -807,9 +822,9 @@ starts. `nmc desktop remove` takes it away. From the AppImage:
   one, the command goes away. Move with the arrows, or just type: only the
   bookmarks whose name or folder contains the text (case does not matter)
   stay, and the five most recent folders that match are listed below them.
-- **Ctrl+Alt+D** bookmarks the current folder together with the folder
+- **Ctrl+Shift+B** bookmarks the current folder together with the folder
   shown in the other panel, its *target*. Opening the bookmark then sets
-  both panels at once. Press Ctrl+Alt+D again on the same folder with
+  both panels at once. Press Ctrl+Shift+B again on the same folder with
   another folder on the other side to add more targets: opening a bookmark
   with several targets shows a quick list to pick the one for the other
   panel (Esc leaves the other panel as it is). The list of bookmarks shows
@@ -825,7 +840,7 @@ starts. `nmc desktop remove` takes it away. From the AppImage:
   ```
 - **Ctrl+T** opens a tab, **Ctrl+W** closes it, **Ctrl+Tab** and
   **Ctrl+Shift+Tab** move between tabs. Each panel has its own tabs.
-- **Alt+Left** and **Alt+Right** go back and forward in the folders visited.
+- **Ctrl+O** and **Ctrl+Y** go back and forward in the folders visited.
 
 ![Bookmarks](images/bookmarks.png)
 
@@ -833,9 +848,7 @@ starts. `nmc desktop remove` takes it away. From the AppImage:
 
 Every folder you open is remembered, local or remote. The bookmarks list
 (Ctrl+D) shows the most recent ones under the bookmarks, five at a time, so a
-folder you use often is a few keys away without bookmarking it. The old
-"frequent folders" command (Alt+J) is gone: its shortcut, if you set one, now
-opens the bookmarks list.
+folder you use often is a few keys away without bookmarking it.
 
 ## Plugins and scripts
 
@@ -868,7 +881,7 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   file there is a command in the **Scripts** category, which can have a
   shortcut too. It runs on the active panel like a script from a panel, with
   no question, since you put it there.
-- **Alt+X** in either interface lists the plugin commands, and offers to run
+- **Ctrl+X** in either interface lists the plugin commands, and offers to run
   the script under the cursor, after a confirmation.
 - The window has no script engine of its own: it runs scripts and plugins
   with the `nmc` program installed next to it (the AppImage has both), so
@@ -895,8 +908,9 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   `preview:csv` with the file in `nmc.context.selection` and prints Markdown,
   which F3 and the quick view show. Both run only for plugins you have
   already allowed (run one of their commands, or answer the question of
-  `nmc plugin list`); a plugin may have only columns and previewers. The
-  terminal interface shows the columns before the size; the window shows the
+  `nmc plugin list`); a plugin may have only columns and previewers. Both
+  interfaces show the columns before the size (the window leaves out the ones
+  that do not fit when a panel is narrow or the font is large) and the
   viewers.
 
 See [docs/scripting.md](../scripting.md) for the API and the examples in
@@ -956,7 +970,7 @@ jobs. Every command accepts the same locations as the panels.
 **`nmc pick`** turns the terminal interface into a file chooser for scripts:
 the interface is drawn on the terminal (standard error) and what you choose
 is printed on standard output, one path per line (`-0` ends each with a NUL
-byte for names with newlines). Enter chooses the file under the cursor, **Alt+Y**
+byte for names with newlines). Enter chooses the file under the cursor, **Ctrl+F10**
 chooses the marked files, or the current folder with `--dir`; **Esc** quits
 with exit code 1 and prints nothing. Every other command still works while
 choosing.
@@ -1054,7 +1068,7 @@ on the settings screen (Ctrl+,).
 | F5 | Copy |
 | F6 | Move |
 | Shift+F6, F2 | Rename |
-| Ctrl+M | Multi-rename (with a preview) |
+| Shift+F2 | Multi-rename (with a preview) |
 | (F9 only) | Multi-rename with AI |
 | F7 | New folder |
 | F8, Delete | Delete (to trash) |
@@ -1062,11 +1076,11 @@ on the settings screen (Ctrl+,).
 | Shift+F5 | Pack into archive |
 | Ctrl+O (in the Pack question) | More options: format, level, password |
 | Shift+F9 | Unpack archive (asks the password of an encrypted one) |
-| Alt+Enter | Properties, dates and permissions |
+| Ctrl+E | Properties, dates and permissions |
 | Ctrl+K | Checksum |
-| Alt+P | Copy path to clipboard |
-| Alt+L | Create symlink or hard link |
-| Alt+B | Add to basket |
+| Ctrl+P | Copy path to clipboard |
+| Shift+F4 | Create symlink or hard link |
+| Ctrl+G | Add to basket |
 | (F9 only) | Export listing, Rename in the editor |
 
 | Select | |
@@ -1083,15 +1097,15 @@ on the settings screen (Ctrl+,).
 | Backspace | Parent folder |
 | Tab | Other panel |
 | Ctrl+L | Go to location |
-| Alt+Left, Alt+Right | Back, forward |
+| Ctrl+O, Ctrl+Y | Back, forward |
 | D, Shift+F1, Ctrl+N | Drives and connections (on a connection: F2 rename) |
 | Ctrl+D | Bookmarks and recent folders (type to filter) |
 | Ctrl+Shift+D | Bookmark this folder |
-| Ctrl+Alt+D | Bookmark this folder with the other panel's |
+| Ctrl+Shift+B | Bookmark this folder with the other panel's |
 | Ctrl+T, Ctrl+W | New tab, close tab |
 | Ctrl+Tab, Ctrl+PageDown | Next tab |
 | Ctrl+Shift+Tab, Ctrl+PageUp | Previous tab |
-| Ctrl+↑, Alt+O | Open this folder in the other panel |
+| Ctrl+↑ | Open this folder in the other panel |
 | Ctrl+↓, Ctrl+U | Swap panels |
 | Ctrl+B | Basket |
 | Ctrl+←, Ctrl+→ | Open the folder under the cursor in the left / right panel |
@@ -1099,7 +1113,7 @@ on the settings screen (Ctrl+,).
 | View | |
 |---|---|
 | Ctrl+R | Refresh |
-| Ctrl+H | Show hidden files |
+| Ctrl+F2 | Show hidden files |
 | Ctrl+S | Quick filter |
 | Ctrl+F3, Ctrl+F4, Ctrl+F5 | Sort by name, extension, date |
 | Ctrl+Q | Quick view in the other panel |
@@ -1107,19 +1121,20 @@ on the settings screen (Ctrl+,).
 | Tools | |
 |---|---|
 | Shift+F7 | Search |
-| Alt+C | Compare files or folders |
-| Alt+U | Disk usage of this folder |
-| Alt+K | Disks and partitions |
+| Shift+F3 | Compare files or folders |
+| Ctrl+F6 | Flat (branch) view |
+| Ctrl+F7 | Disk usage of this folder |
+| Ctrl+F8 | Disks and partitions |
 | (F9 only) | Compare folders by content, Synchronize folders, Find duplicate files, Find similar pictures, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
-| Alt+X | Plugins and scripts |
+| Ctrl+X | Plugins and scripts |
 | (F9 only) | Write a script with AI |
 
 | NemesisCommander | |
 |---|---|
 | F1 | Show main shortcuts |
 | F9 | Commands: find and run any command, give it a shortcut |
-| Ctrl+, | Settings (options and shortcuts) |
+| Ctrl+, or Ctrl+F1 | Settings (options and shortcuts) |
 | (F9 only) | Export / import settings to a file |
 | F10 | Quit |
 

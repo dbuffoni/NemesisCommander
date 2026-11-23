@@ -98,7 +98,8 @@ pub async fn hash_reader<R: AsyncRead + Unpin + ?Sized>(
 ///
 /// BLAKE3 uses its memory-mapped, multi-threaded mode for large files.
 pub fn hash_local_file(path: &Path, algorithm: HashAlgorithm) -> std::io::Result<String> {
-    if algorithm == HashAlgorithm::Blake3 {
+    // Memory mapping only suits regular files (a pipe or device cannot be mapped).
+    if algorithm == HashAlgorithm::Blake3 && std::fs::metadata(path)?.is_file() {
         let mut hasher = blake3::Hasher::new();
         hasher.update_mmap_rayon(path)?;
         return Ok(hasher.finalize().to_hex().to_string());

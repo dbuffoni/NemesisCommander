@@ -1,4 +1,4 @@
-//! Commands of release 0.1.0 that work on lists of paths: copy a path,
+//! Commands that work on lists of paths: copy a path,
 //! export a listing, links, renaming in the editor, the bookmark list with recent
 //! folders, saved searches, the basket, similar pictures, comparing by
 //! content and synchronizing folders.
@@ -353,13 +353,14 @@ impl App {
         dialog.purpose = ChoosePurpose::Bookmarks(rows);
         // The command to bookmark this folder is offered only while the
         // folder is not a bookmark.
-        let add =
-            if self.here_can_be_bookmarked() { "   Ctrl+D: bookmark this folder" } else { "" };
-        dialog.footer = if query.is_empty() {
-            format!("Type to filter   Enter: open   Delete: remove bookmark{add}")
-        } else {
-            format!("Filter: {query}_   Enter: open   Backspace: erase{add}")
-        };
+        let add = self.here_can_be_bookmarked().then_some("Ctrl+D: bookmark this folder");
+        let mut keys = vec!["Delete: remove bookmark"];
+        keys.extend(add);
+        keys.push(if query.is_empty() { "Type: filter" } else { "Backspace: erase" });
+        dialog.footer = crate::hints::list("open", &keys, "close");
+        if !query.is_empty() {
+            dialog.footer = format!("Filter: {query}_{}{}", crate::hints::SEP, dialog.footer);
+        }
     }
 
     /// Typing, Backspace and Delete in the bookmarks list; `None` for the
@@ -439,7 +440,7 @@ impl App {
         }
         let items = self.context.config.searches.iter().map(crate::searches::describe).collect();
         let mut dialog = ChooseDialog::new("Saved searches", items, ChoosePurpose::SavedSearches);
-        dialog.footer = "Enter: search in this folder   Delete: forget it".into();
+        dialog.footer = crate::hints::list("search", &["Delete: forget"], "close");
         self.overlay = Some(Overlay::Choose(dialog));
     }
 
@@ -459,7 +460,7 @@ impl App {
 
     /// What the search results list says about the basket.
     pub(super) fn basket_hint(&self) -> String {
-        format!("{}: all to the basket", self.context.keymap.shortcut_text(Action::BasketAdd))
+        format!("{}: add all to the basket", self.context.keymap.shortcut_text(Action::BasketAdd))
     }
 
     pub(super) fn basket_add(&mut self, paths: Vec<VfsPath>) -> usize {
@@ -506,14 +507,17 @@ impl App {
             self.basket.iter().map(display_location).collect(),
             ChoosePurpose::Basket(self.basket.clone()),
         );
-        dialog.footer = format!(
-            "{} copy   {} move   {} delete   {} pack   {} rename   Delete: remove one   Shift+Delete: empty",
-            key(Action::Copy),
-            key(Action::Move),
-            key(Action::Delete),
-            key(Action::Pack),
-            key(Action::MultiRename),
-        );
+        dialog.footer = [
+            format!("{}: copy", key(Action::Copy)),
+            format!("{}: move", key(Action::Move)),
+            format!("{}: delete", key(Action::Delete)),
+            format!("{}: pack", key(Action::Pack)),
+            format!("{}: rename", key(Action::MultiRename)),
+            "Delete: remove one".to_owned(),
+            "Shift+Delete: empty".to_owned(),
+            "Esc: close".to_owned(),
+        ]
+        .join(crate::hints::SEP);
         dialog.cursor = cursor.min(self.basket.len().saturating_sub(1));
         dialog
     }
@@ -780,7 +784,7 @@ impl App {
                 items,
                 ChoosePurpose::Similar(groups),
             );
-            dialog.footer = "Enter on a group shows its best copy".into();
+            dialog.footer = crate::hints::list("show the best copy", &[], "close");
             AppEvent::Show(Box::new(Overlay::Choose(dialog)))
         });
     }

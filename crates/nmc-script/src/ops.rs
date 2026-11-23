@@ -71,20 +71,20 @@ impl Invocation {
 deno_core::extension!(
     nmc_script,
     ops = [
-        op_sc_version,
-        op_sc_args,
-        op_sc_context,
-        op_sc_print,
-        op_sc_list,
-        op_sc_stat,
-        op_sc_exists,
-        op_sc_read_text,
-        op_sc_write_text,
-        op_sc_write_bytes,
-        op_sc_mkdir,
-        op_sc_rename,
-        op_sc_remove,
-        op_sc_copy,
+        op_nmc_version,
+        op_nmc_args,
+        op_nmc_context,
+        op_nmc_print,
+        op_nmc_list,
+        op_nmc_stat,
+        op_nmc_exists,
+        op_nmc_read_text,
+        op_nmc_write_text,
+        op_nmc_write_bytes,
+        op_nmc_mkdir,
+        op_nmc_rename,
+        op_nmc_remove,
+        op_nmc_copy,
     ],
     options = { state: ScriptState },
     state = |op_state, options| op_state.put(options.state),
@@ -197,30 +197,30 @@ async fn open(
 
 #[op2]
 #[string]
-fn op_sc_version() -> String {
+fn op_nmc_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
 #[op2]
 #[serde]
-fn op_sc_args(state: &mut OpState) -> Vec<String> {
+fn op_nmc_args(state: &mut OpState) -> Vec<String> {
     state.borrow::<ScriptState>().args.clone()
 }
 
 #[op2]
 #[serde]
-fn op_sc_context(state: &mut OpState) -> Option<Invocation> {
+fn op_nmc_context(state: &mut OpState) -> Option<Invocation> {
     state.borrow::<ScriptState>().invocation.clone()
 }
 
 #[op2(fast)]
-fn op_sc_print(state: &mut OpState, #[string] text: &str) {
+fn op_nmc_print(state: &mut OpState, #[string] text: &str) {
     (state.borrow::<ScriptState>().output)(text);
 }
 
 #[op2]
 #[serde]
-async fn op_sc_list(
+async fn op_nmc_list(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
 ) -> Result<Vec<ScriptEntry>, JsErrorBox> {
@@ -231,7 +231,7 @@ async fn op_sc_list(
 
 #[op2]
 #[serde]
-async fn op_sc_stat(
+async fn op_nmc_stat(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
 ) -> Result<ScriptEntry, JsErrorBox> {
@@ -241,7 +241,7 @@ async fn op_sc_stat(
 }
 
 #[op2]
-async fn op_sc_exists(
+async fn op_nmc_exists(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
 ) -> Result<bool, JsErrorBox> {
@@ -255,7 +255,7 @@ async fn op_sc_exists(
 
 #[op2]
 #[string]
-async fn op_sc_read_text(
+async fn op_nmc_read_text(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
 ) -> Result<String, JsErrorBox> {
@@ -271,7 +271,7 @@ async fn op_sc_read_text(
 }
 
 #[op2]
-async fn op_sc_write_text(
+async fn op_nmc_write_text(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
     #[string] text: String,
@@ -285,7 +285,7 @@ async fn op_sc_write_text(
 }
 
 #[op2]
-async fn op_sc_write_bytes(
+async fn op_nmc_write_bytes(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
     #[buffer(copy)] bytes: Vec<u8>,
@@ -299,7 +299,7 @@ async fn op_sc_write_bytes(
 }
 
 #[op2]
-async fn op_sc_mkdir(
+async fn op_nmc_mkdir(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
 ) -> Result<(), JsErrorBox> {
@@ -308,7 +308,7 @@ async fn op_sc_mkdir(
 }
 
 #[op2]
-async fn op_sc_rename(
+async fn op_nmc_rename(
     state: Rc<RefCell<OpState>>,
     #[string] from: String,
     #[string] to: String,
@@ -324,7 +324,7 @@ async fn op_sc_rename(
 }
 
 #[op2]
-async fn op_sc_remove(
+async fn op_nmc_remove(
     state: Rc<RefCell<OpState>>,
     #[string] path: String,
 ) -> Result<(), JsErrorBox> {
@@ -340,7 +340,7 @@ async fn op_sc_remove(
 
 #[op2]
 #[serde]
-async fn op_sc_copy(
+async fn op_nmc_copy(
     state: Rc<RefCell<OpState>>,
     #[serde] sources: Vec<String>,
     #[string] destination: String,
