@@ -215,7 +215,7 @@ Item {
             title: "Commands"
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
-            width: Math.min(dialogs.theme.width * 0.9, 860)
+            width: Math.min(dialogs.theme.width * 0.9, 1000)
             fixedHeight: Math.min(dialogs.theme.height * 0.9, 26 * dialogs.theme.rowHeight + 60)
             Flow {
                 Layout.fillWidth: true
@@ -407,7 +407,23 @@ Item {
         Box {
             title: dialogs.view.title
             hint: dialogs.view.hint
-            Lines { model: dialogs.view.lines }
+            // Text taller than the dialog scrolls (wheel), from its top.
+            Flickable {
+                id: confirmScroll
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: confirmLines.implicitHeight
+                contentWidth: width
+                contentHeight: confirmLines.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                ColumnLayout {
+                    id: confirmLines
+                    width: confirmScroll.width
+                    Lines { model: dialogs.view.lines }
+                }
+            }
         }
     }
 
@@ -447,7 +463,6 @@ Item {
             // A log (the steps of an install, a connection test) keeps one
             // size while lines are added, and shows its end.
             readonly property bool log: dialogs.view.busy
-                || (dialogs.view.lines.length > 8 && !dialogs.view.logo_url)
             fixedHeight: log ? dialogs.height * 0.7 : 0
             // About: the logo above the text.
             Image {
@@ -526,7 +541,7 @@ Item {
             title: "Transfer queue"
             hint: dialogs.view.hint
             fixedHeight: dialogs.height * 0.8
-            width: Math.min(dialogs.theme.width * 0.9, 1100)
+            width: Math.min(dialogs.theme.width * 0.9, 1000)
             Label {
                 visible: dialogs.view.rows.length === 0
                 text: "No transfers"

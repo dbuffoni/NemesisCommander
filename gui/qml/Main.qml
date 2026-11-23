@@ -261,7 +261,7 @@ ApplicationWindow {
                 var all = 2 * keyList.length
                 for (var i = 0; i < keyList.length; i++)
                     all += fullWidth(keyList[i], true)
-                return all <= body.width ? 1 : Math.max(0.7, (body.width) / all)
+                return all <= body.width ? 1 : Math.max(0.5, (body.width) / all)
             }
             function keyWidth(key, labelled) {
                 return fullWidth(key, labelled) * keyScale

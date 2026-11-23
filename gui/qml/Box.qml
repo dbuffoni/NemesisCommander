@@ -59,9 +59,13 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 8
         width: parent.width - 32
-        text: box.hint
+        // Each "Key: verb" part stays whole: a break falls between parts.
+        text: box.hint.split("    ").map(function (part) {
+            return part.replace(/ /g, "\u00a0")
+        }).join("    ")
         visible: text !== ""
         wrapMode: Text.Wrap
+        font.pointSize: box.theme.font.pointSize * 0.9
         color: box.hintColor
     }
 }

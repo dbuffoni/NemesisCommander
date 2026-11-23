@@ -49,6 +49,7 @@ that still names it.
 | 0044 | [Adaptive transfer parallelism, job indicators, random file generator](0044-adaptive-transfer-parallelism.md) | Accepted |
 | 0047 | [Dialogs: one row of keys, one order, one text for both interfaces](0047-dialogs.md) | Accepted |
 | 0048 | [Default keys: no Alt, no key shared by two commands](0048-default-keys.md) | Accepted |
+| 0049 | [Dialog sizing and the window at large fonts](0049-dialog-sizing.md) | Accepted |
 
 Template:
 

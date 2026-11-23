@@ -187,6 +187,8 @@ impl App {
         }
         let dialog =
             ChooseDialog::new("Plugins and scripts", items, ChoosePurpose::Plugin(choices));
+        let mut dialog = dialog;
+        dialog.footer = crate::hints::list("run", &[], "close");
         self.overlay = Some(Overlay::Choose(dialog));
     }
 

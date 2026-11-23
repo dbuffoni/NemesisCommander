@@ -3481,3 +3481,51 @@ async fn the_conflict_question_has_the_shared_key_row() {
     let parts: Vec<&str> = hint.split(nmc_frontend::hints::SEP).collect();
     assert!(screen.contains(parts[0]) && screen.contains(parts[parts.len() - 1]), "{screen}");
 }
+
+/// The install, connection-test and advanced-pack dialogs, and the plugin
+/// list and its permission question, follow the key-row convention.
+#[tokio::test]
+async fn install_test_pack_and_plugin_dialogs_follow_the_convention() {
+    let mut h = Harness::new().await;
+    let plugin = h.app.context().paths.plugins_dir().join("lens");
+    fs::create_dir_all(&plugin).unwrap();
+    fs::write(
+        plugin.join("plugin.json"),
+        r#"{ "name": "lens", "version": "1.0.0",
+             "commands": [{ "id": "hi", "title": "Say hi" }],
+             "permissions": { "read": ["$SELECTION"] } }"#,
+    )
+    .unwrap();
+    fs::write(plugin.join("main.ts"), "nmc.print('hi');").unwrap();
+    let steps: &[(&str, &[&str])] = &[
+        ("install-question", &["F9", "i", "n", "s", "t", "a", "l", "l", "Enter"]),
+        ("install-help", &["F1"]),
+        ("plugins", &["Ctrl+X"]),
+        ("plugin-allow", &["Ctrl+X", "Enter"]),
+        ("pack-format", &["Shift+F5", "Ctrl+O"]),
+        ("pack-level", &["Shift+F5", "Ctrl+O", "Enter"]),
+        ("pack-password", &["Shift+F5", "Ctrl+O", "Enter", "Enter"]),
+    ];
+    for (name, keys) in steps {
+        // The install help is a step on from the install question.
+        if *name != "install-help" {
+            h.focus("a.txt");
+        }
+        for key in *keys {
+            h.key(key);
+            h.settle().await;
+        }
+        let Some(hint) = dialog_hint(&mut h) else { continue };
+        let screen = h.screen();
+        save_screen(&format!("dialog-{name}"), &screen);
+        if cfg!(feature = "scripting") || !name.starts_with("plugin") {
+            nmc_frontend::hints::check(&hint).unwrap_or_else(|e| panic!("{name}: {e}"));
+        }
+        if *name != "install-question" {
+            for _ in 0..4 {
+                h.key("Esc");
+                h.settle().await;
+            }
+        }
+    }
+}
