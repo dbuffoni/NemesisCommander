@@ -3398,6 +3398,15 @@ fn default_editor(graphical: bool) -> &'static str {
     }
 }
 
+/// The question before a list entry is removed (see [`Forget`]).
+fn forget_question(what: Forget, question: String) -> Overlay {
+    Overlay::Confirm(ConfirmDialog {
+        title: "Remove".into(),
+        lines: vec![question],
+        purpose: ConfirmPurpose::Forget(what),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3416,13 +3425,4 @@ mod tests {
         assert_eq!(abbreviate_home(Path::new("/etc"), Some(Path::new("/"))), "/etc", "not for /");
         assert_eq!(abbreviate_home(Path::new("/etc"), None), "/etc");
     }
-}
-
-/// The question before a list entry is removed (see [`Forget`]).
-fn forget_question(what: Forget, question: String) -> Overlay {
-    Overlay::Confirm(ConfirmDialog {
-        title: "Remove".into(),
-        lines: vec![question],
-        purpose: ConfirmPurpose::Forget(what),
-    })
 }

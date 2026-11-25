@@ -116,9 +116,14 @@ impl Entry {
     /// The extension after the last dot, lowercased, without the dot.
     /// Hidden files like `.bashrc` have no extension.
     pub fn extension(&self) -> Option<String> {
+        self.extension_str().map(str::to_ascii_lowercase)
+    }
+
+    /// The extension as written (no allocation, for sorting).
+    pub fn extension_str(&self) -> Option<&str> {
         let stem_start = usize::from(self.name.starts_with('.'));
         let name = &self.name[stem_start..];
-        name.rfind('.').filter(|&i| i + 1 < name.len()).map(|i| name[i + 1..].to_ascii_lowercase())
+        name.rfind('.').filter(|&i| i + 1 < name.len()).map(|i| &name[i + 1..])
     }
 }
 
