@@ -7,14 +7,14 @@
 //! terminal. So the command runs in `security -i`, which reads its commands
 //! from the standard input.
 
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+
 use std::path::PathBuf;
 
 use super::{SERVICE, find_command, run_command};
 use crate::netrc::Login;
 
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(super) const STORE_NAME: &str = "the macOS Keychain";
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(super) const MISSING: &str = "needs the security command: not found";
 
 /// The `security` to run (macOS ships it as /usr/bin/security).

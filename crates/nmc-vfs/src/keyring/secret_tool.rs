@@ -32,7 +32,7 @@ fn run(args: &[&str], input: Option<&str>) -> std::io::Result<std::process::Outp
 pub(super) fn store(host: &str, user: &str, password: &str) -> std::io::Result<()> {
     let label = format!("NemesisCommander: {user}@{host}");
     let out = run(
-        &["store", "--label", &label, "service", SERVICE, "host", &host, "user", user],
+        &["store", "--label", &label, "service", SERVICE, "host", host, "user", user],
         Some(password),
     )?;
     if out.status.success() {
@@ -50,7 +50,7 @@ pub(super) fn store(host: &str, user: &str, password: &str) -> std::io::Result<(
 /// Removes the stored login of `user` on `host` (nothing happens when there
 /// is none).
 pub(super) fn clear(host: &str, user: &str) -> std::io::Result<()> {
-    run(&["clear", "service", SERVICE, "host", &host, "user", user], None).map(|_| ())
+    run(&["clear", "service", SERVICE, "host", host, "user", user], None).map(|_| ())
 }
 
 /// The stored login for `host`. With `user` only that user's password is
@@ -58,12 +58,12 @@ pub(super) fn clear(host: &str, user: &str) -> std::io::Result<()> {
 pub(super) fn lookup(host: &str, user: Option<&str>) -> Option<Login> {
     command()?;
     if let Some(user) = user {
-        let out = run(&["lookup", "service", SERVICE, "host", &host, "user", user], None).ok()?;
+        let out = run(&["lookup", "service", SERVICE, "host", host, "user", user], None).ok()?;
         let password = String::from_utf8(out.stdout).ok()?;
         return (out.status.success() && !password.is_empty())
             .then(|| Login { user: user.to_owned(), password });
     }
-    let out = run(&["search", "--all", "service", SERVICE, "host", &host], None).ok()?;
+    let out = run(&["search", "--all", "service", SERVICE, "host", host], None).ok()?;
     parse_search(&String::from_utf8_lossy(&out.stdout))
 }
 
