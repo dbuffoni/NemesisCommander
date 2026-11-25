@@ -57,6 +57,21 @@ fn native(path: &VfsPath) -> Result<PathBuf> {
     })
 }
 
+/// The native path of a file or folder about to be created or renamed to. On
+/// Windows its name must be one Windows accepts (no `CON`, no trailing dot,
+/// no `:`), so a name that came from another system fails with a clear
+/// message instead of creating something else or an odd error. Nothing is
+/// checked on other systems.
+fn native_new(path: &VfsPath) -> Result<PathBuf> {
+    #[cfg(windows)]
+    if let Some(name) = path.file_name()
+        && let Err(reason) = nmc_vfs::winpath::check_name(name)
+    {
+        return Err(VfsError::InvalidPath { input: path.to_string(), reason });
+    }
+    native(path)
+}
+
 /// Builds an [`Entry`] from `lstat` metadata. For symlinks, `target_meta`
 /// is the metadata of what the link points to (if it resolves).
 fn entry_from_metadata(
@@ -213,7 +228,7 @@ impl Provider for LocalProvider {
     }
 
     async fn write(&self, path: &VfsPath, options: WriteOptions) -> Result<WriteSink> {
-        let native = native(path)?;
+        let native = native_new(path)?;
         let io_err = |e| VfsError::from_io(path, e);
         let mut open = tokio::fs::OpenOptions::new();
         open.write(true);
@@ -233,13 +248,24 @@ impl Provider for LocalProvider {
     }
 
     async fn create_dir(&self, path: &VfsPath) -> Result<()> {
-        let native = native(path)?;
+        let native = native_new(path)?;
         tokio::fs::create_dir(native).await.map_err(|e| VfsError::from_io(path, e))
     }
 
     async fn remove_file(&self, path: &VfsPath) -> Result<()> {
         let native = native(path)?;
-        tokio::fs::remove_file(native).await.map_err(|e| VfsError::from_io(path, e))
+        let result = tokio::fs::remove_file(&native).await;
+        // On Windows a link to a folder (a directory symlink or a junction)
+        // is removed like a folder, without touching what it points to.
+        #[cfg(windows)]
+        if result.is_err()
+            && tokio::fs::symlink_metadata(&native).await.is_ok_and(|m| {
+                m.file_type().is_symlink() && std::fs::metadata(&native).is_ok_and(|t| t.is_dir())
+            })
+        {
+            return tokio::fs::remove_dir(&native).await.map_err(|e| VfsError::from_io(path, e));
+        }
+        result.map_err(|e| VfsError::from_io(path, e))
     }
 
     async fn remove_dir(&self, path: &VfsPath) -> Result<()> {
@@ -248,7 +274,7 @@ impl Provider for LocalProvider {
     }
 
     async fn rename(&self, from: &VfsPath, to: &VfsPath) -> Result<()> {
-        let (src, dst) = (native(from)?, native(to)?);
+        let (src, dst) = (native(from)?, native_new(to)?);
         tokio::fs::rename(src, dst).await.map_err(|e| VfsError::from_io(from, e))
     }
 
@@ -274,7 +300,7 @@ impl Provider for LocalProvider {
     }
 
     async fn copy_within(&self, from: &VfsPath, to: &VfsPath) -> Result<()> {
-        let (src, dst) = (native(from)?, native(to)?);
+        let (src, dst) = (native(from)?, native_new(to)?);
         // reflink_or_copy clones the extents when possible (btrfs, xfs, APFS)
         // and otherwise falls back to std::fs::copy, which uses
         // copy_file_range / sendfile on Linux. It refuses to replace an
@@ -301,13 +327,26 @@ impl Provider for LocalProvider {
     }
 
     async fn create_symlink(&self, path: &VfsPath, target: &str) -> Result<()> {
-        let native = native(path)?;
+        let native = native_new(path)?;
         let target = PathBuf::from(target);
         blocking(path, move || {
             #[cfg(unix)]
             return std::os::unix::fs::symlink(target, native);
             #[cfg(windows)]
-            return std::os::windows::fs::symlink_file(target, native);
+            {
+                // Windows has two kinds of link: one to a file, one to a
+                // folder. Pick by what the target is (relative to the link).
+                let resolved = if target.is_absolute() {
+                    target.clone()
+                } else {
+                    native.parent().map(|dir| dir.join(&target)).unwrap_or_else(|| target.clone())
+                };
+                return if resolved.is_dir() {
+                    std::os::windows::fs::symlink_dir(target, native)
+                } else {
+                    std::os::windows::fs::symlink_file(target, native)
+                };
+            }
         })
         .await
     }
@@ -495,5 +534,88 @@ mod tests {
     async fn non_local_paths_are_rejected() {
         let err = LocalProvider.stat(&VfsPath::parse("sftp://h/x").unwrap()).await.unwrap_err();
         assert!(matches!(err, VfsError::InvalidPath { .. }));
+    }
+
+    // ---- Windows only: the real file system (run by the nightly CI) ----
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_refuses_reserved_names_and_trailing_dots() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = LocalProvider::new();
+        for name in ["CON", "nul.txt", "a.", "a:b"] {
+            let path = vfs(&dir.path().join(name));
+            let error = p.create_dir(&path).await.unwrap_err();
+            assert!(matches!(error, VfsError::InvalidPath { .. }), "{name}: {error}");
+        }
+        p.create_dir(&vfs(&dir.path().join("fine"))).await.unwrap();
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_paths_over_260_characters_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = LocalProvider::new();
+        let mut path = vfs(dir.path());
+        for _ in 0..12 {
+            path = path.join(&"d".repeat(30));
+            p.create_dir(&path).await.unwrap();
+        }
+        let file = path.join("deep.txt");
+        assert!(file.to_local_path().unwrap().to_string_lossy().len() > 260);
+        let mut sink = p.write(&file, WriteOptions::create_new()).await.unwrap();
+        sink.write_all(b"deep").await.unwrap();
+        sink.shutdown().await.unwrap();
+        assert_eq!(p.stat(&file).await.unwrap().size, 4);
+        assert_eq!(nmc_vfs::collect_listing(&p, &path).await.unwrap().len(), 1);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_unc_shares_are_listed_and_written() {
+        // The administrative share of this machine's own drive: the runner
+        // is an administrator.
+        let dir = tempfile::tempdir().unwrap();
+        let local = dir.path().to_string_lossy().into_owned();
+        let (drive, rest) = local.split_at(2);
+        let unc = format!(r"\\localhost\{}${}", &drive[..1], rest);
+        let path = VfsPath::parse(&unc).unwrap();
+        assert!(path.path().starts_with("/UNC/localhost/"), "{path}");
+        std::fs::write(dir.path().join("seen.txt"), b"x").unwrap();
+        let p = LocalProvider::new();
+        let names: Vec<String> = nmc_vfs::collect_listing(&p, &path)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|e| e.name)
+            .collect();
+        assert_eq!(names, ["seen.txt"]);
+        let new = path.join("through-unc.txt");
+        let mut sink = p.write(&new, WriteOptions::create_new()).await.unwrap();
+        sink.write_all(b"hello").await.unwrap();
+        sink.shutdown().await.unwrap();
+        assert_eq!(std::fs::read(dir.path().join("through-unc.txt")).unwrap(), b"hello");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_directory_symlinks_are_created_listed_and_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = LocalProvider::new();
+        let target = vfs(&dir.path().join("target"));
+        p.create_dir(&target).await.unwrap();
+        std::fs::write(dir.path().join("target").join("f.txt"), b"x").unwrap();
+        let link = vfs(&dir.path().join("link"));
+        // Needs the symlink privilege (the runner has it); skip without.
+        if let Err(error) = p.create_symlink(&link, "target").await {
+            eprintln!("skipping: no symlink privilege ({error})");
+            return;
+        }
+        assert!(dir.path().join("link").is_dir());
+        let entry = p.stat(&link).await.unwrap();
+        assert_eq!(entry.symlink_target.as_deref(), Some("target"));
+        p.remove_file(&link).await.unwrap();
+        assert!(!dir.path().join("link").exists());
+        assert!(dir.path().join("target").join("f.txt").exists(), "the target is untouched");
     }
 }

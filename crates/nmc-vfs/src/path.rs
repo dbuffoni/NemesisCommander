@@ -135,6 +135,15 @@ impl VfsPath {
     }
 
     fn local_from_str(input: &str) -> Option<Self> {
+        // A UNC path (a share on another machine) lives under `/UNC/`.
+        if let Some(inner) = crate::winpath::unc_to_inner(input) {
+            return Some(VfsPath {
+                scheme: "file".into(),
+                authority: String::new(),
+                container: None,
+                path: normalize(&inner),
+            });
+        }
         let mut unified = input.replace('\\', "/");
         // Windows' "verbatim" form of a drive path (`\\?\C:\dir`, which
         // canonicalizing returns) is the plain drive path.
@@ -259,6 +268,10 @@ impl VfsPath {
             return None;
         }
         let trimmed = &self.path[1..];
+        #[cfg(windows)]
+        if let Some(native) = crate::winpath::native_from_inner(&self.path) {
+            return Some(PathBuf::from(native));
+        }
         if is_windows_drive(trimmed) {
             Some(PathBuf::from(trimmed.replace('/', "\\")))
         } else {

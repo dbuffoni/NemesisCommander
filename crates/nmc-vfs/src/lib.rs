@@ -27,6 +27,7 @@ mod provider;
 mod registry;
 mod upload;
 mod walk;
+pub mod winpath;
 
 pub use capabilities::Capabilities;
 pub use entry::{Entry, EntryKind};
