@@ -114,6 +114,13 @@ jobs:
           sudo scripts/smb-test-server.sh /var/tmp/nmc-smb >> "$GITHUB_ENV"
           sudo mkdir -p /run/sshd
           scripts/ssh-test-server.sh /var/tmp/nmc-ssh >> "$GITHUB_ENV"
+      # A throwaway keychain, so the Keychain tests do not need the login one.
+      - if: runner.os == 'macOS'
+        run: |
+          security create-keychain -p ci "$RUNNER_TEMP/nmc.keychain"
+          security set-keychain-settings "$RUNNER_TEMP/nmc.keychain"
+          security unlock-keychain -p ci "$RUNNER_TEMP/nmc.keychain"
+          security default-keychain -s "$RUNNER_TEMP/nmc.keychain"
       - run: cargo test --workspace --exclude nmc-gui
       # RAR is read with the bundled libarchive (feature `rar`, on in releases).
       - run: cargo test -p nmc-archive --features rar

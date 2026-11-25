@@ -1,54 +1,20 @@
-//! Saved logins in the system keyring (the Secret Service of the desktop:
-//! GNOME Keyring, KWallet, KeePassXC), reached through `secret-tool`, the
-//! command that ships with libsecret.
-//!
-//! A login is stored with the attributes `service nemesiscommander`, `host`
-//! and `user`, so any Secret Service viewer (Seahorse, KWalletManager) shows
-//! and removes it. The password travels on the standard input of
-//! `secret-tool`, never on a command line.
-//!
-//! Without `secret-tool` (or without a Secret Service on the bus) nothing is
-//! found and nothing can be saved; callers fall back to asking.
+//! The Secret Service of the desktop (GNOME Keyring, KWallet, KeePassXC),
+//! through `secret-tool`, the command that ships with libsecret. A login has
+//! the attributes `service nemesiscommander`, `host` and `user`.
 
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::sync::{Mutex, MutexGuard, OnceLock};
-
+use super::{SERVICE, find_command, run_command};
 use crate::netrc::Login;
+use std::path::PathBuf;
 
-/// Environment variable naming the command to use instead of `secret-tool`
-/// found on `PATH`.
-pub const COMMAND_VAR: &str = "NMC_SECRET_TOOL";
-
-/// The value of the `service` attribute of every stored login.
-const SERVICE: &str = "nemesiscommander";
-
-fn command_override() -> MutexGuard<'static, Option<PathBuf>> {
-    static COMMAND: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
-    COMMAND.get_or_init(Mutex::default).lock().unwrap_or_else(|e| e.into_inner())
-}
-
-/// Uses `path` as the `secret-tool` of this process (before `NMC_SECRET_TOOL`
-/// and `PATH`); `None` goes back to them. For tests and embedding.
-pub fn set_command(path: Option<PathBuf>) {
-    *command_override() = path;
-}
+pub(super) const STORE_NAME: &str = "the system keyring (GNOME Keyring, KWallet)";
+pub(super) const MISSING: &str = "needs secret-tool: not found";
 
 /// The `secret-tool` to run, if there is one.
 fn command() -> Option<PathBuf> {
-    let explicit =
-        command_override().clone().or_else(|| std::env::var_os(COMMAND_VAR).map(Into::into));
-    if let Some(path) = explicit {
-        return path.is_file().then_some(path);
-    }
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|dir| dir.join("secret-tool")).find(|p| p.is_file())
+    find_command("secret-tool", None)
 }
 
-/// Whether logins can be saved here (`secret-tool` is installed). It does not
-/// know whether a Secret Service is running: [`store`] reports that.
-pub fn available() -> bool {
+pub(super) fn available() -> bool {
     command().is_some()
 }
 
@@ -59,30 +25,12 @@ fn run(args: &[&str], input: Option<&str>) -> std::io::Result<std::process::Outp
             "secret-tool is not installed (package libsecret-tools or libsecret)",
         )
     })?;
-    let mut child = Command::new(tool)
-        .args(args)
-        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    if let Some(text) = input
-        && let Some(mut stdin) = child.stdin.take()
-    {
-        stdin.write_all(text.as_bytes())?;
-    }
-    child.wait_with_output()
+    run_command(tool, args, input)
 }
 
 /// Saves the password of `user` on `host`, replacing the one stored before.
-pub fn store(host: &str, user: &str, password: &str) -> std::io::Result<()> {
-    if host.is_empty() || user.is_empty() || password.is_empty() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "a host, a user and a password are needed",
-        ));
-    }
+pub(super) fn store(host: &str, user: &str, password: &str) -> std::io::Result<()> {
     let label = format!("NemesisCommander: {user}@{host}");
-    let host = host.to_lowercase();
     let out = run(
         &["store", "--label", &label, "service", SERVICE, "host", &host, "user", user],
         Some(password),
@@ -101,16 +49,14 @@ pub fn store(host: &str, user: &str, password: &str) -> std::io::Result<()> {
 
 /// Removes the stored login of `user` on `host` (nothing happens when there
 /// is none).
-pub fn clear(host: &str, user: &str) -> std::io::Result<()> {
-    let host = host.to_lowercase();
+pub(super) fn clear(host: &str, user: &str) -> std::io::Result<()> {
     run(&["clear", "service", SERVICE, "host", &host, "user", user], None).map(|_| ())
 }
 
 /// The stored login for `host`. With `user` only that user's password is
 /// looked for; without, the first login saved for the host.
-pub fn lookup(host: &str, user: Option<&str>) -> Option<Login> {
+pub(super) fn lookup(host: &str, user: Option<&str>) -> Option<Login> {
     command()?;
-    let host = host.to_lowercase();
     if let Some(user) = user {
         let out = run(&["lookup", "service", SERVICE, "host", &host, "user", user], None).ok()?;
         let password = String::from_utf8(out.stdout).ok()?;
@@ -140,11 +86,9 @@ fn parse_search(text: &str) -> Option<Login> {
 
 #[cfg(all(test, unix))]
 mod tests {
+    use super::super::{ONE_AT_A_TIME, set_command};
     use super::*;
     use std::os::unix::fs::PermissionsExt;
-
-    /// The command is process-wide: tests that set it run one at a time.
-    static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
     /// A fake `secret-tool` that keeps secrets in files of `dir`, named by
     /// the host and user attributes.
@@ -184,7 +128,7 @@ esac
         let dir = tempfile_dir("keyring-roundtrip");
         set_command(Some(fake(&dir)));
         assert!(available());
-        store("Files.Example.ORG", "anna", "s3 cret").unwrap();
+        store("files.example.org", "anna", "s3 cret").unwrap();
         let login = lookup("files.example.org", Some("anna")).unwrap();
         assert_eq!((login.user.as_str(), login.password.as_str()), ("anna", "s3 cret"));
         assert_eq!(lookup("files.example.org", Some("bob")), None);

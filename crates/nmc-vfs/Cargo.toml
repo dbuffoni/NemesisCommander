@@ -18,6 +18,10 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 tokio-util.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+# The Credential Manager (credential API only).
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+
 [dev-dependencies]
 proptest.workspace = true
 tokio = { workspace = true, features = ["full"] }
