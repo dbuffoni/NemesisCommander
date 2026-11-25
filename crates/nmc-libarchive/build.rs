@@ -40,6 +40,11 @@ fn main() {
     ] {
         config.define(option, "OFF");
     }
+    // Windows has no POSIX regex in its C library, and CMake would then
+    // look for PCRE (and fail): the regex support is only for `bsdtar`.
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        config.define("POSIX_REGEX_LIB", "NONE");
+    }
     let out = config.build_target("archive_static").build();
     let build = out.join("build");
     // Makefile and Ninja put the library in `libarchive/`, Visual Studio in
