@@ -35,3 +35,4 @@ User-visible texts are plain, short English; dialogs and key hints follow
 the wording of the existing ones.
 
 By contributing you agree that your work is released under the MIT license.
+No CLA or sign-off is required.

@@ -32,6 +32,10 @@ for size in 16 24 32 48 64 128 256 512; do
         "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/nemesiscommander.png"
 done
 
+# Licence and third-party notices (Qt, libarchive, crates).
+install -Dm644 "$here/../../LICENSE" "$appdir/usr/share/doc/nemesiscommander/LICENSE"
+python3 "$here/../../scripts/third_party.py" -o "$appdir/usr/share/doc/nemesiscommander/THIRD-PARTY-NOTICES.md"
+
 # Downloads a linuxdeploy tool unless its variable names one already.
 fetch() {
     local file="$work/$1-$arch.AppImage"

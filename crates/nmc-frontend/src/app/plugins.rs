@@ -511,6 +511,8 @@ pub(super) async fn run_choice(
         PluginChoice::Script(script) | PluginChoice::UserScript(script) => {
             script.file_name().unwrap_or_default().to_string_lossy().into_owned()
         }
+        // Opens the plugin list, it runs nothing.
+        PluginChoice::Store => return ("Plugins".into(), Ok(())),
     };
     let script = matches!(choice, PluginChoice::Script(_) | PluginChoice::UserScript(_));
     let folder = if script { panel.to_local_path() } else { None };

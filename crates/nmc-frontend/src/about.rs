@@ -77,12 +77,12 @@ pub fn lines() -> Vec<String> {
         format!("NemesisCommander {VERSION}  (commit {COMMIT})"),
         "A fast dual-pane file manager for local and remote files.".into(),
         String::new(),
-        "License: MIT, \u{a9} 2026 escursionista2k".into(),
+        "License: MIT, \u{a9} 2026 Daniele Buffoni".into(),
         format!("Source:  {REPOSITORY}"),
         String::new(),
         "Built with Rust and Qt 6 (LGPL v3, linked dynamically).".into(),
-        "Release builds read RAR archives with RARLAB's unRAR library, which".into(),
-        "has its own license. The third-party notices of a release list them all.".into(),
+        "Release builds read RAR archives with libarchive (BSD-2-Clause). The".into(),
+        "third-party notices of a release list every library and its license.".into(),
     ]
 }
 

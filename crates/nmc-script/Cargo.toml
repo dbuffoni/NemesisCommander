@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
+authors.workspace = true
 
 # V8 adds about 60 MB to a program: only `nmc` turns on `engine` (with its
 # `scripting` feature, which agent builds leave out); the window runs

@@ -79,6 +79,8 @@ jobs:
         shell: bash
         run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
       - run: cargo fmt --all --check
+      # Every dependency has a licence we may ship, and its notice is known.
+      - run: python3 scripts/third_party.py --check
       # The desktop interface needs Qt: it is checked in the `gui` job.
       - run: cargo clippy --workspace --exclude nmc-gui --all-targets
 
