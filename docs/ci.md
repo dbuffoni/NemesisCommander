@@ -76,3 +76,20 @@ modules of `nmc-providers` (Windows attributes, long and UNC paths, xattr),
 CLI integration tests (`nmc-agent`, `nmc-cli`) run there too and act as the
 smoke test of the binaries. Missing features are not tested; installers have
 their own job (SC-168).
+
+## Installers (Windows and macOS)
+
+`.github/workflows/installers.yml` builds the Windows zip
+(`packaging/windows/build-zip.ps1`, Qt bundled by `windeployqt`) and the macOS
+disk image (`packaging/macos/build-dmg.sh`, an app bundle with Qt bundled by
+`macdeployqt`), each with `LICENSE` and `THIRD-PARTY-NOTICES.md`, and tests
+them: unpack or mount into a temporary place and run `nmc --version` and
+`nmc-gui --version`. The full CI tier (nightly) runs it; the release workflow
+runs it too and publishes the files on a `v*` tag.
+
+Without signing secrets the files are named `-unsigned` (macOS: signed ad hoc,
+so it runs on the Mac that built it; other Macs ask in Gatekeeper). Secrets,
+all optional: `WINDOWS_CERT_PFX` (base64 .pfx) and `WINDOWS_CERT_PASSWORD`;
+`MACOS_SIGN_IDENTITY`, `MACOS_CERT_P12` (base64) and `MACOS_CERT_PASSWORD`;
+for notarization also `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`.
+Certificates and the Apple developer account are the owner's decision and cost.

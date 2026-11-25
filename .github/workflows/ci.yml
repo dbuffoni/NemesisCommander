@@ -202,6 +202,14 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
 
+  # Installers for Windows and macOS (unsigned here), installed into a
+  # temporary folder and started: the full tier only.
+  installers:
+    name: Installers
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
+    uses: ./.github/workflows/installers.yml
+
   # ---- The full tier: heavy checks against real servers ----------------------
   # Everything below runs only when `plan` says `full` (nightly, Run workflow,
   # or a pull request labelled `full-ci`). A missing server fails the test
@@ -315,7 +323,7 @@ jobs:
   # A failed nightly must be seen: it opens (or comments on) one issue.
   nightly-alert:
     name: Alert on a failed nightly
-    needs: [lint, test, gui, gui-other, s3-webdav-faults, webdav-nextcloud, smb, ssh]
+    needs: [lint, test, gui, gui-other, installers, s3-webdav-faults, webdav-nextcloud, smb, ssh]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     permissions:

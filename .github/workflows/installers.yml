@@ -1,0 +1,131 @@
+# Installers for Windows (zip) and macOS (dmg), built and smoke tested:
+# install into a temporary folder, run `--version`, remove again.
+#
+# Called by the release workflow (which publishes them on a `v*` tag) and by
+# the full CI tier (nightly). Without signing secrets the files are named
+# `-unsigned`: Windows needs WINDOWS_CERT_PFX (base64 .pfx) and
+# WINDOWS_CERT_PASSWORD, macOS MACOS_SIGN_IDENTITY plus the certificate in
+# MACOS_CERT_P12 (base64) and MACOS_CERT_PASSWORD, and for notarization
+# APPLE_ID, APPLE_TEAM_ID and APPLE_APP_PASSWORD.
+name: Installers
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    name: Installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    env:
+      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: installer
+      # rust-cache can restore v8's build output without the prebuilt
+      # library its build script downloaded; make the script run again.
+      - name: Let v8 fetch its library
+        shell: bash
+        run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.3"
+          cache: true
+      # Qt's qyieldcpu.h calls the ARM intrinsic __yield without including
+      # its header, which the current Xcode's clang rejects.
+      - if: runner.os == 'macOS'
+        run: echo "CXXFLAGS=-include arm_acle.h" >> "$GITHUB_ENV"
+      - name: The version in the file names
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME//[^A-Za-z0-9._-]/-}" >> "$GITHUB_ENV"
+      # Two builds: built together, Cargo would unify features and give
+      # nmc-gui nmc's script engine (V8) as well.
+      - name: Build nmc and nmc-gui
+        shell: bash
+        run: |
+          cargo build --release --locked -p nmc-cli --features rar
+          cargo build --release --locked -p nmc-gui --features rar
+
+      # ---- Windows ----
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: packaging/windows/build-zip.ps1 target/release $env:VERSION
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem NemesisCommander-*-windows-*.zip | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP "nmc-install"
+          Expand-Archive $zip.FullName $dir
+          $app = Join-Path $dir "NemesisCommander"
+          & (Join-Path $app "nmc.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "nmc.exe --version failed" }
+          $env:QT_QPA_PLATFORM = "offscreen"
+          & (Join-Path $app "nmc-gui.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "nmc-gui.exe --version failed" }
+          if (-not (Test-Path (Join-Path $app "THIRD-PARTY-NOTICES.md"))) { throw "no notices" }
+          Remove-Item -Recurse -Force $dir
+      - name: Upload (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-windows
+          path: NemesisCommander-*-windows-*.zip
+          if-no-files-found: error
+
+      # ---- macOS ----
+      - name: Import the signing certificate
+        if: runner.os == 'macOS' && env.MACOS_SIGN_IDENTITY != ''
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p ci "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p ci "$keychain"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: packaging/macos/build-dmg.sh target/release "$VERSION"
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dmg=$(ls NemesisCommander-*-macos-*.dmg | head -1)
+          mount="$RUNNER_TEMP/nmc-mount"
+          mkdir -p "$mount"
+          hdiutil attach "$dmg" -mountpoint "$mount" -nobrowse -readonly
+          app="$mount/NemesisCommander.app/Contents"
+          "$app/MacOS/nmc" --version
+          QT_QPA_PLATFORM=offscreen "$app/MacOS/nmc-gui" --version
+          test -f "$app/Resources/THIRD-PARTY-NOTICES.md"
+          hdiutil detach "$mount"
+      - name: Upload (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-macos
+          path: NemesisCommander-*-macos-*.dmg
+          if-no-files-found: error
