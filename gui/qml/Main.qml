@@ -39,7 +39,16 @@ ApplicationWindow {
     // The fonts of the settings; empty or 0 keeps the system's.
     readonly property var fonts: screen ? screen.fonts : null
     font.family: fonts && fonts.family ? fonts.family : Qt.application.font.family
-    font.pointSize: fonts && fonts.size > 0 ? fonts.size : Qt.application.font.pointSize
+    // The size of the settings, but never more than the window can show:
+    // About and the long install questions are about 14 lines of 50 to 60
+    // characters, which fit when a line is at most height / 28 points and
+    // the width allows 48 characters per line at that size (an 800x500
+    // window shows 24 pt as 17 pt). The setting itself is not changed.
+    readonly property real wantedPointSize:
+        fonts && fonts.size > 0 ? fonts.size : Qt.application.font.pointSize
+    readonly property real fittingPointSize:
+        Math.max(8, Math.min(height / 28, width / 48))
+    font.pointSize: Math.min(wantedPointSize, fittingPointSize)
     readonly property font fixedFont: Qt.font({
         family: fonts && fonts.fixed_family ? fonts.fixed_family : "monospace",
         pointSize: font.pointSize
