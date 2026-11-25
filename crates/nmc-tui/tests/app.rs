@@ -2836,8 +2836,10 @@ async fn advanced_pack_without_a_password_skips_the_questions_that_do_not_apply(
 }
 
 /// The login questions of a connection with a password; `dir` holds a fake
-/// `secret-tool` that keeps what the "save" answer stores in files.
-#[cfg(unix)]
+/// `secret-tool` that keeps what the "save" answer stores in files. (Not on
+/// macOS: there the backend is `security`, whose arguments this script would
+/// loop on, and the override would leak into every other test.)
+#[cfg(all(unix, not(target_os = "macos")))]
 async fn webdav_harness(dir: &std::path::Path) -> Harness {
     use std::os::unix::fs::PermissionsExt;
     let script = dir.join("secret-tool");
@@ -2879,7 +2881,7 @@ async fn the_new_connection_prompt_lists_one_example_per_line() {
     assert!(dialog.hint().contains("Ctrl+T: test"));
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 #[tokio::test]
 async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let dir = TempDir::new().unwrap();
