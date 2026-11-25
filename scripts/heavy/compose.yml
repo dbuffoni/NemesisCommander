@@ -1,25 +1,11 @@
 # Real servers for the heavy tests (the full tier of the CI, docs/ci.md).
 # Start them with scripts/heavy/up.sh, which also prints the variables the
-# tests read. Image versions are pinned so the nightly stays stable.
+# tests read. Image versions are pinned so the nightly stays stable. MinIO
+# and toxiproxy run as plain programs (scripts/heavy/install-binaries.sh):
+# MinIO no longer publishes container images.
 name: nmc-heavy
 
 services:
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data
-    environment:
-      MINIO_ROOT_USER: nmc-access
-      MINIO_ROOT_PASSWORD: nmc-secret-key
-    ports: ["9000:9000"]
-
-  minio-setup:
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
-    depends_on: [minio]
-    restart: "no"
-    entrypoint: >
-      sh -c "until mc alias set local http://minio:9000 nmc-access nmc-secret-key; do sleep 1; done;
-             mc mb --ignore-existing local/nmc-test"
-
   apache:
     image: httpd:2.4.62
     command: >
@@ -40,9 +26,3 @@ services:
       NEXTCLOUD_ADMIN_PASSWORD: nmc-test-pass-2026
       NEXTCLOUD_TRUSTED_DOMAINS: 127.0.0.1
     ports: ["8082:80"]
-
-  toxiproxy:
-    image: ghcr.io/shopify/toxiproxy:2.9.0
-    ports: ["8474:8474", "9001:9001"]
-    # Reaches the other servers through the host's published ports.
-    extra_hosts: ["host.docker.internal:host-gateway"]

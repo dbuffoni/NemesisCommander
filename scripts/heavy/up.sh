@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Starts the real servers the heavy tests need (MinIO, Apache mod_dav,
-# toxiproxy; Nextcloud with NEXTCLOUD=1) with Docker Compose and prints the
-# variables the tests read:
+# Starts the real servers the heavy tests need: Apache mod_dav (and Nextcloud
+# with NEXTCLOUD=1) with Docker Compose, MinIO and toxiproxy as programs (not
+# with ONLY_DAV=1), and prints the variables the tests read:
 #
 #   set -a; eval "$(scripts/heavy/up.sh)"; set +a
 #   NMC_REQUIRE_SERVERS=1 cargo test -p nmc-s3 -p nmc-webdav --test real_server
 #
-# Stop them with `docker compose -f scripts/heavy/compose.yml down -v`.
+# Stop them with `docker compose -f scripts/heavy/compose.yml down -v` and
+# `pkill -f 'bin/minio|toxiproxy-server'`.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -26,20 +27,25 @@ wait_for() { # url, description
     docker compose -f compose.yml logs >&2
     exit 1
 }
-wait_for http://127.0.0.1:9000/minio/health/live MinIO
-# The bucket is created by the setup container.
-for _ in $(seq 60); do
-    [ "$(docker compose -f compose.yml ps -a --format '{{.State}}' minio-setup)" = exited ] && break
-    sleep 1
-done
+
+# Nextcloud's job needs neither MinIO nor toxiproxy.
+if [ "${ONLY_DAV:-0}" != 1 ]; then
+    ./install-binaries.sh >&2
+    data=$(mktemp -d)
+    # A bucket is a folder in MinIO's data folder.
+    mkdir -p "$data/nmc-test"
+    MINIO_ROOT_USER=nmc-access MINIO_ROOT_PASSWORD=nmc-secret-key \
+        setsid nohup bin/minio server "$data" --address 127.0.0.1:9000 >"$data.log" 2>&1 &
+    wait_for http://127.0.0.1:9000/minio/health/live MinIO
+    # toxiproxy: 127.0.0.1:9001 forwards to MinIO.
+    setsid nohup bin/toxiproxy-server -host 127.0.0.1 -port 8474 >"$data.toxiproxy.log" 2>&1 &
+    wait_for http://127.0.0.1:8474/version toxiproxy
+    curl -fs -X POST http://127.0.0.1:8474/proxies \
+        -d '{"name":"minio","listen":"127.0.0.1:9001","upstream":"127.0.0.1:9000"}' >/dev/null
+fi
 curl -s -o /dev/null -u "nmc:$dav_password" http://127.0.0.1:8081/dav/ -w '%{http_code}' | grep -q 200 || {
     sleep 3
 }
-
-# toxiproxy: 127.0.0.1:9001 forwards to MinIO.
-wait_for http://127.0.0.1:8474/version toxiproxy
-curl -fs -X POST http://127.0.0.1:8474/proxies \
-    -d '{"name":"minio","listen":"0.0.0.0:9001","upstream":"host.docker.internal:9000"}' >/dev/null
 
 if [ "${NEXTCLOUD:-0}" = 1 ]; then
     for _ in $(seq 240); do

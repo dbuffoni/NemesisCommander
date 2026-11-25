@@ -227,7 +227,9 @@ jobs:
       - name: S3 with network faults (toxiproxy)
         run: cargo test -p nmc-s3 --test faults
       - if: failure()
-        run: docker compose -f scripts/heavy/compose.yml logs --tail 200
+        run: |
+          docker compose -f scripts/heavy/compose.yml logs --tail 200
+          tail -n 100 /tmp/tmp.*.log || true
 
   webdav-nextcloud:
     name: WebDAV (Nextcloud)
@@ -244,7 +246,7 @@ jobs:
           key: heavy
       # Nextcloud takes one to two minutes to install itself.
       - name: Start Nextcloud
-        run: NEXTCLOUD=1 scripts/heavy/up.sh >> "$GITHUB_ENV"
+        run: ONLY_DAV=1 NEXTCLOUD=1 scripts/heavy/up.sh >> "$GITHUB_ENV"
       - name: WebDAV against Nextcloud
         run: |
           NMC_TEST_DAV_ORIGIN=$NMC_TEST_NEXTCLOUD_ORIGIN \

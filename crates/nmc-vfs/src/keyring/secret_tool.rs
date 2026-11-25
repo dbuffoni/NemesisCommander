@@ -2,6 +2,8 @@
 //! through `secret-tool`, the command that ships with libsecret. A login has
 //! the attributes `service nemesiscommander`, `host` and `user`.
 
+#![cfg_attr(target_os = "macos", allow(dead_code))]
+
 use super::{SERVICE, find_command, run_command};
 use crate::netrc::Login;
 use std::path::PathBuf;
