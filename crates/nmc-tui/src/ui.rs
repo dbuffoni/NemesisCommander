@@ -18,7 +18,7 @@ use nmc_frontend::icons::icon_for;
 use nmc_frontend::preview::Zoom;
 use nmc_frontend::view::{
     column_headers, commands_view, describe, entry_details, git_mark, git_of, job_how, job_line,
-    job_route, jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset, size_text,
+    job_route, jobs_progress, jobs_summary, key_bar_action, panel_footer, scroll_offset, size_text,
     tab_title,
 };
 use nmc_frontend::{
@@ -439,28 +439,24 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// A label that fits five columns: the short word for the long ones, else
-/// the text is cut by `fit` with a `…`.
-fn narrow_label(label: &str) -> &str {
-    match label {
-        "Commands" => "Cmds",
-        "Rename" => "Ren",
-        "Delete" => "Del",
-        "Search" => "Find",
-        "Unpack" => "Unpk",
-        "Drives" => "Disks",
-        "Multi-rename" | "Multi-rename…" => "MRen",
-        other => other,
-    }
+/// The columns of each label on the key bar: as many as fit (up to the 8 of
+/// the longest short name), five on a narrow screen where the shorter
+/// `narrow` names are used. With the "F" and the number in front, ten
+/// labels of six letters fit 91 columns.
+fn key_bar_width(columns: usize) -> usize {
+    let fits = |width: usize| 9 * (2 + width + 1) + (3 + width + 1) <= columns;
+    (6..=8).rev().find(|w| fits(*w)).unwrap_or(5)
 }
 
 fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans = Vec::new();
     for n in 1..=10u8 {
-        let label = key_bar_label(app, n);
-        // With the "F" in front, ten labels fit 80 columns at five letters.
-        let width = if area.width < 90 { 5 } else { 6 };
-        let label = if width < 6 { narrow_label(label) } else { label };
+        let width = key_bar_width(area.width as usize);
+        let label = match key_bar_action(app, n) {
+            Some(action) if width < 6 => action.narrow(),
+            Some(action) => action.short(),
+            None => "",
+        };
         let label = fit(label, width).trim_end().to_owned();
         spans.push(Span::raw(format!("F{n}")));
         spans.push(Span::styled(

@@ -176,6 +176,9 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                 }
             };
             crate::out!("installed {} {}", plugin.name(), plugin.manifest.version);
+            for warning in plugin.warnings() {
+                eprintln!("nmc: {warning}");
+            }
             if !grants.is_granted(&plugin) {
                 eprintln!(
                     "nmc: it asks to {}; allow it with `nmc plugin allow {}` or at first use",

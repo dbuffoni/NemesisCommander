@@ -79,7 +79,7 @@ nmc test ./my-plugin --select photo.JPG --json
   "min_nmc": "0.4.0",
   "main": "main.ts",
   "commands": [
-    { "id": "sort", "title": "Sort selected files by type", "category": "Files" }
+    { "id": "sort", "title": "Sort selected files by type", "short": "SortType", "category": "Files" }
   ],
   "permissions": { "write": ["$PANEL"], "run": ["bsdtar"] },
   "limits": { "memory": 64, "timeout": 120 }
@@ -91,8 +91,11 @@ nmc test ./my-plugin --select photo.JPG --json
   (an SPDX name), `homepage`, `min_nmc` are optional.
 - `main`: the script, inside the plugin folder (default `main.ts`).
 - `commands`: each has an `id` (given to the script as `nmc.context.command`),
-  a `title` and an optional `category` (`Files`, `Select`, `Navigate`, `View`,
+  a `title`, a `short` name and an optional `category` (`Files`, `Select`, `Navigate`, `View`,
   `Tools`, `NemesisCommander`; anything else goes under `Plugins`).
+- `short`: 1 to 8 characters, no control characters: what the command's
+  button says on the bottom bar and in the command list. Without it the first
+  word of the title is used, and `nmc plugin install` and `nmc test` warn.
 - `columns` and `previewers`: panel columns and viewers for kinds of files
   (see the manual, "Panel columns and viewers from plugins").
 - `limits`: memory in MiB and time in seconds.

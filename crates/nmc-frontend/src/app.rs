@@ -49,7 +49,7 @@ mod terminal;
 
 pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
-pub use plugins::PluginChoice;
+pub use plugins::{PluginChoice, plugin_short_name};
 
 /// Results of background work, delivered to [`App::handle_event`].
 #[derive(Debug)]

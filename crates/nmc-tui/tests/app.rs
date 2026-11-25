@@ -1190,7 +1190,10 @@ async fn plugin_commands_ask_once_then_run_on_the_selection() {
     h.focus("a.txt");
     h.key("Ctrl+X");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
-    assert_eq!(dialog.items, ["upper: Uppercase copy to the other panel"]);
+    assert_eq!(
+        dialog.items,
+        ["upper: Uppercase copy to the other panel", "Browse and install plugins…"]
+    );
     h.key("Enter");
     let Some(Overlay::Confirm(confirm)) = h.app.overlay() else { panic!("a permission question") };
     assert!(confirm.lines.iter().any(|l| l.contains("the selected files")), "{:?}", confirm.lines);
@@ -1209,12 +1212,12 @@ async fn plugin_commands_ask_once_then_run_on_the_selection() {
 }
 
 #[tokio::test]
-async fn without_plugins_alt_x_says_how_to_add_one() {
+async fn without_plugins_ctrl_x_offers_the_plugin_list() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
     h.key("Ctrl+X");
-    assert!(h.app.overlay().is_none());
-    assert!(h.status().contains("plugin") || h.status().contains("Plugins"), "{}", h.status());
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert_eq!(dialog.items, ["Browse and install plugins…"]);
 }
 
 /// Moves the settings screen's cursor to the row whose label starts with

@@ -1105,34 +1105,19 @@ pub fn entry_details(panel: &Panel, git: Option<&crate::git::GitStatus>) -> Stri
     parts.join("  ")
 }
 
-/// What F`number` does with the modifiers held now, for the function key
-/// bar: empty when nothing is bound to that combination.
-pub fn key_bar_label(app: &App, number: u8) -> &'static str {
+/// The command F`number` runs with the modifiers held now, for the function
+/// key bar: `None` when nothing is bound to that combination.
+pub fn key_bar_action(app: &App, number: u8) -> Option<Action> {
     // Alt is left out: desktops use it themselves (GNOME shows its own
     // window menu and moves windows with it), and no command is on Alt+F.
     let (ctrl, _alt, shift) = app.modifiers();
-    app.context()
-        .keymap
-        .action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
-        .map(short_label)
-        .unwrap_or("")
+    app.context().keymap.action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
 }
 
-/// A short label for the function key bar.
-pub fn short_label(action: Action) -> &'static str {
-    match action {
-        Action::Help => "Help",
-        Action::Rename => "Rename",
-        Action::View => "View",
-        Action::Edit => "Edit",
-        Action::Copy => "Copy",
-        Action::Move => "Move",
-        Action::MakeDir => "Mkdir",
-        Action::Delete => "Delete",
-        Action::Menu => "Commands",
-        Action::Quit => "Quit",
-        other => other.label().split_whitespace().next().unwrap_or("").trim_end_matches('…'),
-    }
+/// What F`number` says on the function key bar: the command's short name
+/// (empty when nothing is bound).
+pub fn key_bar_label(app: &App, number: u8) -> &'static str {
+    key_bar_action(app, number).map(Action::short).unwrap_or("")
 }
 
 /// `done` as a percentage of `total` (`None` when the total is unknown).

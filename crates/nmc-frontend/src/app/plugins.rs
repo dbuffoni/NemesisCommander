@@ -343,6 +343,22 @@ fn rename_answer(text: &str) -> Result<(nmc_ops::RenameRule, String), String> {
     Ok((answer.rule, answer.explanation))
 }
 
+/// The short name of a plugin command, for the bottom bar and the command
+/// list (derived from its title when the manifest has none).
+#[cfg(feature = "scripting")]
+pub fn plugin_short_name(dir: &Path, command: &str) -> String {
+    nmc_script::plugin::Plugin::load(dir)
+        .ok()
+        .and_then(|p| p.command(command).map(|c| c.short_name()))
+        .unwrap_or_default()
+}
+
+/// Without the plugin engine there are no plugin commands.
+#[cfg(not(feature = "scripting"))]
+pub fn plugin_short_name(_dir: &Path, _command: &str) -> String {
+    String::new()
+}
+
 /// A plugin's folder, name and commands (id, title, category).
 type PluginRow = (PathBuf, String, Vec<(String, String, Option<String>)>);
 

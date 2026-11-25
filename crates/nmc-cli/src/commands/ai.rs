@@ -221,7 +221,8 @@ mod engine {
              `nmc.context` (panel folder, other folder, selection) when it is not null, and \
              fall back to `nmc.args[0]` as the folder otherwise.\n\
              - for a plugin: `plugin.json` and its script (`main.ts`); ask in the manifest \
-             only for `$PANEL`, `$OTHER` or `$SELECTION`.\n\
+             only for `$PANEL`, `$OTHER` or `$SELECTION`, and give every command a \
+             \"short\" name of at most 8 characters for the bottom bar.\n\
              Paths are relative, without folders other than the plugin's own. Use only the \
              `nmc` API below and standard JavaScript. Print a short line about what was done.\n\n\
              <guide>\n{}\n</guide>\n\n<api file=\"nmc.d.ts\">\n{}\n</api>",

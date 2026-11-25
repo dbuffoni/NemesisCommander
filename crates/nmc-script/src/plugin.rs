@@ -142,6 +142,53 @@ pub struct CommandSpec {
     /// name puts the command under `Plugins`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    /// A name of 1 to 8 characters for a function-key button (shown on the
+    /// bottom bar and in the command list). Missing: the title's first word.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short: Option<String>,
+}
+
+/// The longest short name of a command.
+pub const SHORT_MAX: usize = 8;
+
+impl CommandSpec {
+    /// The short name: the declared one, or the first word of the title cut
+    /// at [`SHORT_MAX`] characters.
+    pub fn short_name(&self) -> String {
+        match &self.short {
+            Some(short) => short.clone(),
+            None => self
+                .title
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('…')
+                .chars()
+                .take(SHORT_MAX)
+                .collect(),
+        }
+    }
+}
+
+impl Plugin {
+    /// Warnings about the manifest that do not stop it from loading: the
+    /// commands that have no short name yet.
+    pub fn warnings(&self) -> Vec<String> {
+        self.manifest
+            .commands
+            .iter()
+            .filter(|c| c.short.is_none())
+            .map(|c| {
+                format!(
+                    "command {:?} of {} has no \"short\" name (used on the bottom bar); \
+                     {:?} is derived from its title",
+                    c.id,
+                    self.manifest.name,
+                    c.short_name()
+                )
+            })
+            .collect()
+    }
 }
 
 /// A panel column a plugin fills.
@@ -480,6 +527,18 @@ fn validate(manifest: &Manifest) -> Result<(), String> {
     if ids.iter().any(|id| id.is_empty()) {
         return Err("a command needs an id".into());
     }
+    for command in &manifest.commands {
+        if let Some(short) = &command.short {
+            let length = short.chars().count();
+            if length == 0 || length > SHORT_MAX || short.chars().any(char::is_control) {
+                return Err(format!(
+                    "command {:?}: \"short\" {short:?} must be 1 to {SHORT_MAX} characters \
+                     without control characters",
+                    command.id
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -603,6 +662,33 @@ mod tests {
         let manifest: Manifest = serde_json::from_str(json).map_err(|e| e.to_string())?;
         validate(&manifest)?;
         Ok(manifest)
+    }
+
+    #[test]
+    fn a_command_may_name_its_button() {
+        let ok = manifest(
+            r#"{"name":"x","version":"1","commands":[
+                {"id":"a","title":"Create a file with random content","short":"NewRnd"},
+                {"id":"b","title":"Tidy up this folder now"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(ok.commands[0].short_name(), "NewRnd");
+        assert_eq!(ok.commands[1].short_name(), "Tidy", "derived from the title");
+        let plugin = Plugin { dir: PathBuf::from("/p/x"), manifest: ok };
+        let warnings = plugin.warnings();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("\"b\"") && warnings[0].contains("no \"short\""));
+        let long = manifest(
+            r#"{"name":"x","version":"1","commands":[{"id":"a","title":"A","short":"TooLong99"}]}"#,
+        )
+        .unwrap_err();
+        assert!(long.contains("1 to 8 characters"), "{long}");
+        assert!(
+            manifest(
+                r#"{"name":"x","version":"1","commands":[{"id":"a","title":"A","short":""}]}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]

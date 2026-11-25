@@ -261,8 +261,12 @@ ApplicationWindow {
             readonly property var keyPriority: [10, 9, 1, 3, 5, 6, 7, 8, 4, 2]
             function fullWidth(key, labelled) {
                 // (the metrics change with the font: depend on them)
-                return 8 + 0 * (keyBold.height + keyPlain.height) + keyBold.advanceWidth("F" + key.number)
-                     + (labelled ? 4 + keyPlain.advanceWidth(key.label) : 0)
+                // Every key is as wide as F10 with "Commands" (the longest
+                // standard label) and only a longer label stretches its own
+                // button, so the bar does not look uneven.
+                return 8 + 0 * (keyBold.height + keyPlain.height) + keyBold.advanceWidth("F10")
+                     + (labelled ? 4 + Math.max(keyPlain.advanceWidth(key.label),
+                                                keyPlain.advanceWidth("Commands")) : 0)
             }
             // The text shrinks, down to 70%, so that every label fits.
             readonly property real keyScale: {
