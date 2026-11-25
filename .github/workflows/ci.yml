@@ -194,6 +194,8 @@ jobs:
       # its header, which the current Xcode's clang rejects.
       - if: runner.os == 'macOS'
         run: echo "CXXFLAGS=-include arm_acle.h" >> "$GITHUB_ENV"
+      # The window runs plugins through the `nmc` program next to it.
+      - run: cargo build -p nmc-cli
       - run: cargo test -p nmc-gui
         env:
           QT_QPA_PLATFORM: offscreen
