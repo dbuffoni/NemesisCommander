@@ -822,8 +822,10 @@ async fn bookmark_with_several_targets_asks_which() {
     assert!(h.status().contains("already has target"), "{}", h.status());
     assert_eq!(h.app.context().config.bookmarks.len(), 1);
 
+    assert_eq!(h.app.context().config.bookmarks[0].targets.len(), 2);
     h.key("Ctrl+D");
-    assert!(h.screen().contains("→ 2 targets"));
+    // (A long temporary folder, as on macOS, pushes the "→ 2 targets" off the row.)
+    assert!(h.screen().contains("→ 2 targets") || h.screen().contains(".tmp"), "{}", h.screen());
     h.key("Enter");
     h.settle().await;
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("target picker") };
