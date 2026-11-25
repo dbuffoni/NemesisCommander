@@ -683,16 +683,57 @@ pub struct PluginArgs {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum RepoAction {
+    /// The repositories plugins can be installed from.
+    List,
+    /// Add a repository: a URL, git@host:owner/repo or github:owner/repo, with
+    /// #branch-or-tag to pick a version.
+    Add {
+        /// The repository.
+        repository: String,
+        /// Do not ask for confirmation.
+        #[arg(short, long)]
+        yes: bool,
+    },
+    /// Remove a repository (plugins installed from it stay installed).
+    Remove {
+        /// The repository, as `nmc plugin repo list` shows it.
+        repository: String,
+    },
+    /// Show or hide the official repository.
+    Official {
+        /// `on` or `off`.
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum PluginAction {
     /// The installed plugins, their commands and permissions.
     List,
-    /// Install (or replace) a plugin from a folder or a Git repository.
-    #[command(after_help = "The source is a folder with a plugin.json, or a Git repository \
-(cloned with the system's git): a URL, git@host:owner/repo or github:owner/repo. Add \
+    /// The plugins of the configured repositories (the official one and yours).
+    Available {
+        /// Only plugins whose name or description contains this text.
+        #[arg(long, value_name = "TEXT")]
+        search: Option<String>,
+        /// Fetch the repositories now (otherwise a list fetched today is used).
+        #[arg(long)]
+        refresh: bool,
+    },
+    /// Add, list or remove plugin repositories.
+    Repo {
+        #[command(subcommand)]
+        action: RepoAction,
+    },
+    /// Install (or replace) a plugin by name, or from a folder or a Git repository.
+    #[command(after_help = "The source is a plugin's name from `nmc plugin available` (NAME, or \
+NAME@REPOSITORY when several repositories have it), a folder with a plugin.json, or a Git \
+repository (cloned with the system's git): a URL, git@host:owner/repo or github:owner/repo. Add \
 #branch-or-tag to pick a version. Repository installs are remembered in plugin-lock.json \
 (see `nmc plugin update`).")]
     Install {
-        /// A folder with a plugin.json, or a Git repository.
+        /// A plugin's name, a folder with a plugin.json, or a Git repository.
         source: String,
         /// The folder of the repository that holds the plugin (default: its top).
         #[arg(long, value_name = "FOLDER")]

@@ -2,7 +2,7 @@
 // photo.JPG goes to jpg/photo.JPG, notes.txt to txt/notes.txt. Files
 // without an extension and folders stay where they are.
 //
-// Install:  nmc plugin install examples/plugins/sort-by-type
+// Install:  nmc plugin install plugins/sort-by-type
 // Use:      select files in a panel, press Ctrl+X and pick the command.
 
 const context = nmc.context;

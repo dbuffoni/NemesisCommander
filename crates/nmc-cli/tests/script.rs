@@ -119,7 +119,8 @@ fn plugins_are_installed_allowed_and_run() {
 /// The examples in the repository keep working.
 #[test]
 fn the_examples_work() {
-    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let examples = repository.join("examples");
     let dir = TempDir::new().unwrap();
     fs::create_dir_all(dir.path().join("work/deep")).unwrap();
     fs::write(dir.path().join("work/big.bin"), vec![0u8; 3 * 1024 * 1024]).unwrap();
@@ -136,7 +137,7 @@ fn the_examples_work() {
 
     nmc(&dir)
         .args(["plugin", "install"])
-        .arg(examples.join("plugins/sort-by-type"))
+        .arg(repository.join("plugins/sort-by-type"))
         .assert()
         .success();
     nmc(&dir).args(["plugin", "allow", "sort-by-type"]).assert().success();
@@ -153,7 +154,7 @@ fn the_examples_work() {
     // The template plugin creates one file of a known format, several times.
     nmc(&dir)
         .args(["plugin", "install"])
-        .arg(examples.join("plugins/random-file"))
+        .arg(repository.join("plugins/random-file"))
         .assert()
         .success();
     nmc(&dir).args(["plugin", "allow", "random-file"]).assert().success();
@@ -238,12 +239,12 @@ fn test_reports_what_a_script_did() {
 /// in with the test folders.
 #[test]
 fn test_runs_plugin_commands() {
-    let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let dir = TempDir::new().unwrap();
     nmc(&dir)
         .env("NMC_TSC", "no-such-tsc")
         .arg("test")
-        .arg(examples.join("plugins/sort-by-type"))
+        .arg(repository.join("plugins/sort-by-type"))
         .args(["--select", "photo.JPG", "--select", "notes.txt"])
         .assert()
         .success()
@@ -389,4 +390,54 @@ fn a_plugin_installs_from_git_and_updates() {
         .assert()
         .failure()
         .stderr(contains("git clone"));
+}
+
+#[test]
+fn plugin_repositories_are_added_listed_and_installed_by_name() {
+    if std::process::Command::new("git").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = TempDir::new().unwrap();
+    let repo = dir.path().join("repo");
+    let plugin_dir = repo.join("plugins/hello");
+    fs::create_dir_all(&plugin_dir).unwrap();
+    fs::write(
+        plugin_dir.join("plugin.json"),
+        r#"{"name":"hello","version":"1.0.0","description":"Says hello",
+            "commands":[{"id":"hi","title":"Hi"}]}"#,
+    )
+    .unwrap();
+    fs::write(plugin_dir.join("main.ts"), "nmc.print('hello');").unwrap();
+    for args in [vec!["init", "-q"], vec!["add", "."], vec!["commit", "-q", "-m", "x"]] {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .current_dir(&repo)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    let url = format!("file://{}", repo.display()).replace('\\', "/");
+
+    // Nothing is added without a confirmation.
+    nmc(&dir).args(["plugin", "repo", "add", &url]).assert().failure().stderr(contains("--yes"));
+    nmc(&dir).args(["plugin", "repo", "add", &url, "--yes"]).assert().success();
+    nmc(&dir).args(["plugin", "repo", "list"]).assert().success().stdout(contains(&url));
+    // The official repository is switched off so the test needs no network.
+    nmc(&dir).args(["plugin", "repo", "official", "off"]).assert().success();
+    nmc(&dir)
+        .args(["plugin", "available"])
+        .assert()
+        .success()
+        .stdout(contains("hello 1.0.0  [Unofficial").and(contains("Says hello")));
+    nmc(&dir).args(["plugin", "install", "hello"]).assert().success();
+    nmc(&dir)
+        .args(["plugin", "available", "--search", "hello"])
+        .assert()
+        .success()
+        .stdout(contains("installed 1.0.0"));
+    nmc(&dir).args(["plugin", "repo", "remove", &url]).assert().success();
+    nmc(&dir).args(["plugin", "available"]).assert().success().stdout(contains("no plugin found"));
+    // Installed plugins stay.
+    nmc(&dir).args(["plugin", "list"]).assert().success().stdout(contains("hello 1.0.0"));
 }

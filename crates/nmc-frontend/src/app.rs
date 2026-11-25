@@ -40,12 +40,14 @@ mod features;
 mod generate;
 mod logins;
 mod palette;
+mod plugin_store;
 mod plugin_views;
 mod plugins;
 mod pointer;
 mod settings_screen;
 mod terminal;
 
+pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
 pub use plugins::PluginChoice;
 
@@ -148,6 +150,20 @@ pub enum AppEvent {
         /// The result for the status line.
         message: String,
     },
+    /// The plugin list was loaded.
+    PluginStore {
+        /// The rows and their text.
+        rows: Vec<(String, StoreRow)>,
+        /// What went wrong with some repositories.
+        problems: Vec<String>,
+    },
+    /// A plugin repository to add was checked.
+    PluginRepoChecked {
+        /// The repository.
+        repository: nmc_config::PluginRepository,
+        /// How many plugins it lists, or why it cannot be used.
+        result: Result<usize, String>,
+    },
     /// A plugin command or script ended.
     ScriptDone {
         /// What ran, for messages.
@@ -178,6 +194,8 @@ impl AppEvent {
                 | AppEvent::Loaded { .. }
                 | AppEvent::Rendered { .. }
                 | AppEvent::ScriptDone { .. }
+                | AppEvent::PluginStore { .. }
+                | AppEvent::PluginRepoChecked { .. }
                 | AppEvent::AiRenameDone { .. }
                 | AppEvent::SyncCopies { .. }
                 | AppEvent::Compared { .. }
@@ -1125,6 +1143,10 @@ impl App {
                 Ok((rule, explanation)) => self.confirm_renames(paths, &rule, Some(explanation)),
                 Err(error) => self.set_error(format!("Multi-rename with AI: {error}")),
             },
+            AppEvent::PluginStore { rows, problems } => self.show_plugin_store(rows, problems),
+            AppEvent::PluginRepoChecked { repository, result } => {
+                self.plugin_repo_checked(repository, result)
+            }
             AppEvent::ScriptDone { title, lines, error } => {
                 self.reload_panels(None);
                 match (&error, lines.len()) {
@@ -2154,6 +2176,7 @@ impl App {
                 self.confirm_renames(paths, &rule, None);
             }
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
+            InputPurpose::AddPluginRepo => self.plugin_repo_typed(&text),
             InputPurpose::NewConnection => match crate::connections::check(&text) {
                 Ok(checked) => self.ask_name(
                     "New connection",
@@ -2430,6 +2453,8 @@ impl App {
                 });
             }
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
+            ConfirmPurpose::UninstallPlugin(name) => self.uninstall_plugin(&name),
+            ConfirmPurpose::AddPluginRepo(repository) => self.add_plugin_repo(repository),
             ConfirmPurpose::InstallServe(text) => self.start_install(&text),
             ConfirmPurpose::OfferInstall(host) => {
                 let mut dialog = InputDialog::new(
@@ -2493,6 +2518,8 @@ impl App {
                     self.load_opt(request);
                 }
             }
+            ChoosePurpose::PluginStore(rows) => self.plugin_store_chosen(&rows, cursor),
+            ChoosePurpose::PluginRepos(rows) => self.plugin_repo_chosen(&rows, cursor),
             ChoosePurpose::Plugin(mut choices) => {
                 if cursor < choices.len() {
                     self.plugin_chosen(choices.swap_remove(cursor));

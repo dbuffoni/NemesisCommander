@@ -14,9 +14,9 @@
 //                (`nmc run --types` prints every function with its comments).
 //
 // Try it without touching your files:
-//   nmc test examples/plugins/random-file
+//   nmc test plugins/random-file
 // Install and use:
-//   nmc plugin install examples/plugins/random-file
+//   nmc plugin install plugins/random-file
 //   then press Ctrl+X (or F9) in a panel and pick "Create a file with random content".
 
 // ---- 1. What is this run about? -------------------------------------------

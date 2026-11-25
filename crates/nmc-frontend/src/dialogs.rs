@@ -72,6 +72,8 @@ pub enum S3Next {
 /// What an [`InputDialog`] is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputPurpose {
+    /// The address of a plugin repository to add.
+    AddPluginRepo,
     /// Copy these items to the typed location.
     CopyTo(Vec<VfsPath>),
     /// Move these items to the typed location.
@@ -394,6 +396,10 @@ pub enum ConfirmPurpose {
     },
     /// Run a plugin command or a script (allowing it first).
     RunPlugin(crate::app::PluginChoice),
+    /// Uninstall the plugin with this name.
+    UninstallPlugin(String),
+    /// Add this plugin repository.
+    AddPluginRepo(nmc_config::PluginRepository),
     /// Install `nmc serve` as typed in the question (server and options).
     InstallServe(String),
     /// A server of a saved `scs://` location does not answer: offer to
@@ -452,6 +458,10 @@ pub enum ChoosePurpose {
     ImportMode(Box<ExportBundle>),
     /// Run one of these plugin commands or scripts.
     Plugin(Vec<crate::app::PluginChoice>),
+    /// The plugins of the repositories (Enter installs or updates).
+    PluginStore(Vec<crate::app::StoreRow>),
+    /// The plugin repositories (Enter switches the official one).
+    PluginRepos(Vec<crate::app::RepoRow>),
     /// Copy these items' paths in the chosen form.
     CopyPath(Vec<VfsPath>),
     /// Advanced pack: the format.

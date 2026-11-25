@@ -58,6 +58,62 @@ impl Default for GeneralSettings {
     }
 }
 
+/// A plugin repository added by the user (ADR 0054).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PluginRepository {
+    /// What `git clone` accepts.
+    pub url: String,
+    /// A branch or tag (the default branch when absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+}
+
+/// Where plugins can be installed from by name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PluginSettings {
+    /// List the official repository (built in; it cannot be removed).
+    pub official: bool,
+    /// Repositories added by the user, in list order.
+    pub repositories: Vec<PluginRepository>,
+}
+
+impl Default for PluginSettings {
+    fn default() -> Self {
+        PluginSettings { official: true, repositories: Vec::new() }
+    }
+}
+
+impl PluginRepository {
+    /// `url` or `url#reference`, as typed and listed.
+    pub fn label(&self) -> String {
+        match &self.reference {
+            Some(reference) => format!("{}#{reference}", self.url),
+            None => self.url.clone(),
+        }
+    }
+}
+
+impl PluginSettings {
+    /// Adds a repository; `false` when the list already has it.
+    pub fn add(&mut self, repository: PluginRepository) -> bool {
+        if self.repositories.contains(&repository) {
+            return false;
+        }
+        self.repositories.push(repository);
+        true
+    }
+
+    /// Removes the repository written as `label` (`url` or `url#reference`);
+    /// `false` when there is none.
+    pub fn remove(&mut self, label: &str) -> bool {
+        let before = self.repositories.len();
+        self.repositories.retain(|r| r.label() != label);
+        self.repositories.len() != before
+    }
+}
+
 /// Fonts of the window (the terminal interface uses the terminal's font).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -271,6 +327,8 @@ pub struct Config {
     pub viewer: ViewerSettings,
     /// Fonts of the window.
     pub appearance: AppearanceSettings,
+    /// Plugin repositories.
+    pub plugins: PluginSettings,
     /// Shortcut overrides: action id → key chords (empty list unbinds).
     pub keys: BTreeMap<String, Vec<String>>,
     /// Bookmarks, in menu order.
@@ -325,6 +383,23 @@ pub(crate) fn write_atomically(path: &Path, text: &str) -> Result<(), ConfigErro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plugin_repositories_are_added_once_and_removed_by_label() {
+        let mut settings = PluginSettings::default();
+        assert!(settings.official);
+        let repo = PluginRepository { url: "https://x/y.git".into(), reference: Some("v1".into()) };
+        assert!(settings.add(repo.clone()) && !settings.add(repo));
+        assert!(!settings.remove("https://x/y.git"), "the label includes the reference");
+        assert!(settings.remove("https://x/y.git#v1") && settings.repositories.is_empty());
+        let config = Config::from_toml(
+            "[plugins]\nofficial = false\n[[plugins.repositories]]\nurl = \"https://a/b.git\"\n",
+            "t",
+        )
+        .unwrap();
+        assert!(!config.plugins.official && config.plugins.repositories.len() == 1);
+        assert_eq!(Config::from_toml(&config.to_toml(), "t").unwrap(), config);
+    }
 
     #[test]
     fn empty_file_gives_defaults() {

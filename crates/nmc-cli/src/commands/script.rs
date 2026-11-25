@@ -68,6 +68,7 @@ pub async fn run(context: &AppContext, args: RunArgs) -> CmdResult {
 pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
     use std::sync::Arc;
 
+    use nmc_script::catalog;
     use nmc_script::plugin::{self, Context, Grants};
 
     use crate::cli::PluginAction;
@@ -111,6 +112,34 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                 }
             }
         }
+        PluginAction::Available { search, refresh } => {
+            let specs = repository_specs(&context.config);
+            let (entries, problems) =
+                catalog::available(&context.paths.plugin_catalog_dir(), &specs, refresh);
+            for problem in problems {
+                eprintln!("nmc: {problem}");
+            }
+            let rows = catalog::rows(&entries, search.as_deref().unwrap_or(""), &plugins_dir);
+            if rows.is_empty() {
+                crate::out!("no plugin found");
+            }
+            for row in rows {
+                let state = row.state();
+                crate::out!(
+                    "{} {}  [{}]{}{}",
+                    row.entry.name,
+                    row.entry.version,
+                    row.origin(),
+                    if state.is_empty() { String::new() } else { format!(" ({state})") },
+                    if row.entry.description.is_empty() {
+                        String::new()
+                    } else {
+                        format!("  {}", row.entry.description)
+                    },
+                );
+            }
+        }
+        PluginAction::Repo { action } => return repo(context, action),
         PluginAction::Install { source, subdir } => {
             let plugin = match nmc_script::source::parse_repository(&source) {
                 Some(repository) => {
@@ -121,6 +150,20 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                         &plugins_dir,
                         &mut lock,
                     )?
+                }
+                None if !named_folder(&source) => {
+                    if subdir.is_some() {
+                        return Err("--subdir applies to a Git repository only".into());
+                    }
+                    let specs = repository_specs(&context.config);
+                    let (entries, problems) =
+                        catalog::available(&context.paths.plugin_catalog_dir(), &specs, false);
+                    for problem in problems {
+                        eprintln!("nmc: {problem}");
+                    }
+                    let entry = catalog::find(&entries, &source)?;
+                    eprintln!("nmc: fetching {}…", entry.repository);
+                    catalog::install(entry, &plugins_dir, &mut lock)?
                 }
                 None => {
                     if subdir.is_some() {
@@ -234,4 +277,94 @@ pub async fn plugin(_context: &AppContext, _args: PluginArgs) -> CmdResult {
 #[cfg(not(feature = "scripting"))]
 pub async fn run(_context: &AppContext, _args: RunArgs) -> CmdResult {
     Err("scripts are not part of this build (server builds leave them out)".into())
+}
+
+/// The repositories in use: the official one (unless switched off) and the
+/// user's.
+#[cfg(feature = "scripting")]
+fn repository_specs(config: &nmc_config::Config) -> Vec<nmc_script::catalog::RepositorySpec> {
+    let extra: Vec<_> = config
+        .plugins
+        .repositories
+        .iter()
+        .map(|r| nmc_script::catalog::RepositorySpec {
+            url: r.url.clone(),
+            reference: r.reference.clone(),
+        })
+        .collect();
+    nmc_script::catalog::repositories(config.plugins.official, &extra)
+}
+
+/// Whether `text` names something on disk (a folder to install from), as
+/// opposed to a plugin's name.
+#[cfg(feature = "scripting")]
+fn named_folder(text: &str) -> bool {
+    std::path::Path::new(text).exists() || text.contains(['/', '\\']) || text.starts_with('.')
+}
+
+/// `nmc plugin repo ...`.
+#[cfg(feature = "scripting")]
+fn repo(context: &AppContext, action: crate::cli::RepoAction) -> CmdResult {
+    use nmc_config::PluginRepository;
+    use nmc_script::catalog::RepositorySpec;
+
+    use crate::cli::RepoAction;
+
+    let mut config = context.config.clone();
+    match action {
+        RepoAction::List => {
+            if config.plugins.official {
+                crate::out!("{}  (official)", nmc_script::catalog::OFFICIAL_URL);
+            } else {
+                crate::out!("official repository is off (nmc plugin repo official on)");
+            }
+            for repository in &config.plugins.repositories {
+                crate::out!("{}", repository.label());
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        RepoAction::Add { repository, yes } => {
+            let spec = RepositorySpec::parse(&repository)
+                .ok_or_else(|| format!("{repository:?} is not a Git repository address"))?;
+            if spec.is_official() {
+                return Err("the official repository is built in".into());
+            }
+            if !yes {
+                let question = format!(
+                    "Add {}? Its plugins run code on your files once you allow them",
+                    spec.label()
+                );
+                if !crate::prompt::interactive() || !crate::prompt::confirm(&question) {
+                    return Err("not added (confirm with --yes)".into());
+                }
+            }
+            eprintln!("nmc: checking {}…", spec.url);
+            let (entries, problems) =
+                nmc_script::catalog::refresh(&context.paths.plugin_catalog_dir(), &spec)?;
+            if entries.is_empty() {
+                return Err(format!(
+                    "{} has no plugins in a plugins/ folder{}",
+                    spec.url,
+                    problems.first().map(|p| format!(" ({p})")).unwrap_or_default()
+                )
+                .into());
+            }
+            if !config.plugins.add(PluginRepository { url: spec.url, reference: spec.reference }) {
+                crate::out!("already in the list");
+                return Ok(ExitCode::SUCCESS);
+            }
+            crate::out!("added: {} plugin(s) available", entries.len());
+        }
+        RepoAction::Remove { repository } => {
+            if !config.plugins.remove(&repository) {
+                return Err(
+                    format!("{repository:?} is not in the list (nmc plugin repo list)").into()
+                );
+            }
+            crate::out!("removed (plugins installed from it stay installed)");
+        }
+        RepoAction::Official { state } => config.plugins.official = state == "on",
+    }
+    config.save(&context.paths.config_file())?;
+    Ok(ExitCode::SUCCESS)
 }

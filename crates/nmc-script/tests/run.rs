@@ -240,3 +240,27 @@ fn plain_javascript_is_not_transpiled() {
     assert!(ts.contains("const a = 1"), "{ts}");
     assert!(nmc_script::TYPES.contains("declare"));
 }
+
+#[tokio::test]
+async fn a_program_that_was_not_granted_does_not_start() {
+    let s = Sandbox::new();
+    let error =
+        s.run(r#"await nmc.run("git", ["--version"]);"#, Permissions::all()).await.unwrap_err();
+    assert!(error.to_string().contains("no permission to run"), "{error}");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_granted_program_gets_its_arguments_unchanged() {
+    let s = Sandbox::new();
+    let mut permissions = s.own_folder();
+    permissions.allow_run("printf");
+    let source = r#"
+        const r = await nmc.run("printf", ["[%s]", "a b  'c' \"d\" $HOME"]);
+        nmc.print(`${r.code}:${r.stdout}`);
+        try { await nmc.run("printf", ["x"], { cwd: "/" }); } catch (e) { nmc.print("outside"); }
+        try { await nmc.run("/usr/bin/printf", ["x"]); } catch (e) { nmc.print("path refused"); }
+    "#;
+    s.run(source, permissions).await.unwrap();
+    assert_eq!(s.printed(), ["0:[a b  'c' \"d\" $HOME]", "outside", "path refused"]);
+}

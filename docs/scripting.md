@@ -46,8 +46,8 @@ conflict policy, through the copy engine), `join`, `basename`, `dirname`,
 ## Plugins
 
 A plugin is a folder with a `plugin.json` and a script. See
-[`examples/plugins/sort-by-type`](../examples/plugins/sort-by-type).
-To start your own, copy [`examples/plugins/random-file`](../examples/plugins/random-file):
+[`plugins/sort-by-type`](../plugins/sort-by-type).
+To start your own, copy [`plugins/random-file`](../plugins/random-file):
 a template that creates a file with random content (json, xml, txt or png)
 and explains every part in comments, with `TEMPLATE` marking what to replace.
 
@@ -71,7 +71,7 @@ run: `$PANEL` (the active panel's folder), `$OTHER` (the other panel's
 folder), `$SELECTION` (each selected entry) and `$HOME`.
 
 ```sh
-nmc plugin install examples/plugins/sort-by-type
+nmc plugin install plugins/sort-by-type
 nmc plugin list
 nmc plugin allow sort-by-type      # or answer the question at first use
 nmc plugin run sort-by-type sort --panel ~/Downloads ~/Downloads/*.jpg
@@ -114,7 +114,7 @@ plugin command, and reports:
 ```sh
 nmc test tidy.ts                                  # nmc.args = [the test panel]
 nmc test tidy.ts --fixture ./samples -- '$PANEL' --dry-run
-nmc test examples/plugins/sort-by-type --select photo.JPG --json
+nmc test plugins/sort-by-type --select photo.JPG --json
 ```
 
 A script may change anything in the test folder. A plugin gets what its

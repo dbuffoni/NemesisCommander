@@ -860,6 +860,9 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
 
 - `nmc run script.ts` runs a script from the command line, with
   `--allow-read` and `--allow-write` for the paths it may use.
+- Installing, writing and publishing plugins, repositories included, is in
+  [plugins.md](../plugins.md). In short: `nmc plugin available`, `nmc plugin
+  install NAME`, `nmc plugin repo add URL`.
 - Plugins are folders with a `plugin.json` that names their commands and the
   permissions they need (for example `$SELECTION` or `$OTHER`). Install one
   with `nmc plugin install DIR`; the first run asks you to allow its

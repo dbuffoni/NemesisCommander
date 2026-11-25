@@ -532,6 +532,9 @@ impl App {
         let key = press.plain();
         let shift_delete = press.chord.shift && press.chord.key == Key::Delete;
         let action = self.context.keymap.action_for(&press.chord);
+        if let Some(handled) = self.plugin_store_key(dialog, press) {
+            return Some(handled);
+        }
         match &dialog.purpose {
             ChoosePurpose::Drives(drives) if key == Some(Key::F(2)) => {
                 match drives.get(dialog.cursor).filter(|d| d.saved) {

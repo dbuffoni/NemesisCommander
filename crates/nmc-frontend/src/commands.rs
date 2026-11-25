@@ -72,6 +72,10 @@ impl CommandEntry {
                 "Runs your script {} on the folders and the selection of the panels.",
                 path.file_name().unwrap_or_default().to_string_lossy()
             ),
+            Target::Plugin(PluginChoice::Store) => {
+                "Lists the plugins of the plugin repositories, to install, update or uninstall."
+                    .to_owned()
+            }
             Target::Plugin(PluginChoice::Script(_)) => {
                 "Runs the script under the cursor on the folders and the selection of the panels."
                     .to_owned()

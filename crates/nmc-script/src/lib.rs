@@ -18,6 +18,7 @@
 //! plugin manifests, grants and permissions, for an interface that runs
 //! scripts through the `nmc` program (the desktop window does).
 
+pub mod catalog;
 #[cfg(feature = "engine")]
 mod engine;
 #[cfg(feature = "engine")]

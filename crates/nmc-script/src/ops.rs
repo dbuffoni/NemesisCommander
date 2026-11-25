@@ -85,6 +85,7 @@ deno_core::extension!(
         op_nmc_rename,
         op_nmc_remove,
         op_nmc_copy,
+        op_nmc_run,
     ],
     options = { state: ScriptState },
     state = |op_state, options| op_state.put(options.state),
@@ -384,4 +385,63 @@ fn conflict_policy(name: &str) -> Result<ConflictPolicy, JsErrorBox> {
         _ => return Err(JsErrorBox::type_error(format!("unknown conflict policy {name:?}"))),
     };
     Ok(policy)
+}
+
+/// What `run` reports.
+#[derive(Serialize)]
+struct RunReport {
+    code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+/// Largest output kept from a program; the rest is dropped.
+const RUN_OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
+
+/// Starts a program the plugin was granted, without a shell: the arguments
+/// reach it unchanged.
+#[op2]
+#[serde]
+async fn op_nmc_run(
+    state: Rc<RefCell<OpState>>,
+    #[string] program: String,
+    #[serde] args: Vec<String>,
+    #[string] cwd: Option<String>,
+) -> Result<RunReport, JsErrorBox> {
+    let (base, allowed) = {
+        let state = state.borrow();
+        let script = state.borrow::<ScriptState>();
+        (script.base.clone(), script.permissions.check_run(&program))
+    };
+    allowed.map_err(|e| JsErrorBox::new("PermissionDenied", e))?;
+    let dir = match cwd {
+        Some(text) => {
+            let path = locate(&state, &text, Access::Read)?.1;
+            path.to_local_path()
+                .ok_or_else(|| JsErrorBox::type_error("cwd must be a local folder"))?
+        }
+        None => base,
+    };
+    let output = tokio::process::Command::new(&program)
+        .args(&args)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .output()
+        .await
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                JsErrorBox::generic(format!("{program} is not installed (not found on the PATH)"))
+            } else {
+                JsErrorBox::generic(format!("cannot run {program}: {e}"))
+            }
+        })?;
+    let text = |bytes: &[u8]| {
+        String::from_utf8_lossy(&bytes[..bytes.len().min(RUN_OUTPUT_LIMIT)]).into_owned()
+    };
+    Ok(RunReport {
+        code: output.status.code().unwrap_or(-1),
+        stdout: text(&output.stdout),
+        stderr: text(&output.stderr),
+    })
 }

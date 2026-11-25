@@ -81,6 +81,17 @@ declare namespace nmc {
   function rename(from: string, to: string): Promise<void>;
   /** Removes a file or an empty folder. */
   function remove(path: string): Promise<void>;
+  /** What a program started with `run` did. */
+  interface RunReport {
+    /** Exit code (-1 when the program was ended by a signal). */
+    code: number;
+    stdout: string;
+    stderr: string;
+  }
+  /** Starts a program named in the plugin's `permissions.run` (a bare name
+   *  looked up on the PATH, no shell: `args` reach it unchanged) and waits
+   *  for it. Throws when the program is not granted or not installed. */
+  function run(program: string, args?: string[], options?: { cwd?: string }): Promise<RunReport>;
   /** Copies files and folders into the folder `destination`, with the
    *  same engine as the panels (resume, verification, any location). */
   function copy(

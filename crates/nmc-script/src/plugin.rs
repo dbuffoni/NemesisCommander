@@ -93,6 +93,18 @@ pub struct Manifest {
     /// One line shown to the user.
     #[serde(default)]
     pub description: String,
+    /// Who wrote it (shown in the catalogue).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// Where to read about it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    /// Its licence, as an SPDX name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// The oldest `nmc` version it works with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_nmc: Option<String>,
     /// The script, relative to the plugin folder.
     #[serde(default = "default_main")]
     pub main: String,
@@ -202,11 +214,23 @@ pub struct Requested {
     /// Everything the user can reach.
     #[serde(default)]
     pub all: bool,
+    /// Programs the plugin may start from the PATH, by bare name
+    /// (`nmc.run`); never through a shell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub run: Vec<String>,
 }
 
 impl Requested {
     /// The request in words, one line per grant, for confirmation dialogs.
     pub fn describe(&self) -> Vec<String> {
+        let mut lines = self.describe_files();
+        if !self.run.is_empty() {
+            lines.push(format!("may run: {}", self.run.join(", ")));
+        }
+        lines
+    }
+
+    fn describe_files(&self) -> Vec<String> {
         if self.all {
             return vec!["read and change every file you can".into()];
         }
@@ -220,7 +244,7 @@ impl Requested {
         let mut lines: Vec<String> =
             self.read.iter().map(|l| format!("read {}", words(l))).collect();
         lines.extend(self.write.iter().map(|l| format!("read and change {}", words(l))));
-        if lines.is_empty() {
+        if lines.is_empty() && self.run.is_empty() {
             lines.push("no access to files".into());
         }
         lines
@@ -310,10 +334,13 @@ impl Plugin {
     /// nothing.
     pub fn permissions(&self, context: &Context) -> Result<Permissions, PluginError> {
         let requested = &self.manifest.permissions;
-        if requested.all {
-            return Ok(Permissions::all());
+        let mut permissions = if requested.all { Permissions::all() } else { Permissions::none() };
+        for program in &requested.run {
+            permissions.allow_run(program);
         }
-        let mut permissions = Permissions::none();
+        if requested.all {
+            return Ok(permissions);
+        }
         for location in &requested.read {
             for path in self.expand(location, context)? {
                 permissions.allow_read(path);
