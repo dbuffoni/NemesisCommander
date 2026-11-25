@@ -635,7 +635,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = LocalProvider::new();
         for name in ["CON", "nul.txt", "a.", "a:b"] {
-            let path = vfs(&dir.path().join(name));
+            // A colon is refused already when the path is built.
+            let path = match VfsPath::from_local(dir.path().join(name)) {
+                Ok(path) => path,
+                Err(error) => {
+                    assert!(matches!(error, VfsError::InvalidPath { .. }), "{name}: {error}");
+                    continue;
+                }
+            };
             let error = p.create_dir(&path).await.unwrap_err();
             assert!(matches!(error, VfsError::InvalidPath { .. }), "{name}: {error}");
         }

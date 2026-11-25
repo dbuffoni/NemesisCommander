@@ -22,6 +22,7 @@ permissions:
 jobs:
   installer:
     name: Installer (${{ matrix.os }})
+    timeout-minutes: 60
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -39,6 +40,7 @@ jobs:
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-on-failure: true
           key: installer
       # rust-cache can restore v8's build output without the prebuilt
       # library its build script downloaded; make the script run again.
