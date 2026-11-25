@@ -15,6 +15,7 @@ use nmc_transfer::{JobKind, JobSpec};
 use nmc_vfs::{Capabilities, HashAlgorithm, ProviderRegistry, VfsPath};
 
 use super::{App, AppEvent, External, display_location, done, resolve_location};
+use crate::dialogs::Forget;
 use crate::dialogs::{ChooseDialog, ChoosePurpose, InputPurpose, JumpRow, Overlay};
 use crate::export::{Format, PathVariant};
 use crate::input::KeyPress;
@@ -383,9 +384,14 @@ impl App {
             (Some(Key::Delete), _) => {
                 let ChoosePurpose::Bookmarks(rows) = &dialog.purpose else { return None };
                 if let Some(JumpRow::Bookmark(index)) = rows.get(dialog.cursor) {
-                    self.context.config.bookmarks.remove(*index);
-                    self.save_settings();
+                    let name = self.context.config.bookmarks[*index].name.clone();
+                    self.overlay = Some(super::forget_question(
+                        Forget::Bookmark(*index),
+                        format!("Remove the bookmark \"{name}\"?"),
+                    ));
+                    return Some(false);
                 }
+                return Some(true);
             }
             (Some(Key::Backspace), _) => {
                 query.pop();
@@ -594,13 +600,16 @@ impl App {
             ChoosePurpose::Font { .. } => self.fonts_key(dialog, press),
             ChoosePurpose::SavedSearches if key == Some(Key::Delete) => {
                 let index = dialog.cursor;
-                if index < self.context.config.searches.len() {
-                    self.context.config.searches.remove(index);
-                    dialog.items.remove(index);
-                    dialog.move_cursor(0);
-                    self.save_settings();
+                match self.context.config.searches.get(index) {
+                    Some(search) => {
+                        self.overlay = Some(super::forget_question(
+                            Forget::Search(index),
+                            format!("Forget the saved search \"{}\"?", search.name),
+                        ));
+                        Some(false)
+                    }
+                    None => Some(true),
                 }
-                Some(!dialog.items.is_empty())
             }
             ChoosePurpose::SearchResults(paths) if action == Some(Action::BasketAdd) => {
                 let paths = paths.clone();
@@ -613,8 +622,10 @@ impl App {
                 Some(false)
             }
             ChoosePurpose::Basket(_) if shift_delete => {
-                self.basket.clear();
-                self.set_status("The basket is empty");
+                let count = self.basket.len();
+                let question =
+                    format!("Empty the basket ({count} paths)? The files stay where they are.");
+                self.overlay = Some(super::forget_question(Forget::Basket, question));
                 Some(false)
             }
             ChoosePurpose::Basket(_) if key == Some(Key::Delete) => {

@@ -402,15 +402,39 @@ pub enum ConfirmPurpose {
     AddPluginRepo(nmc_config::PluginRepository),
     /// Install `nmc serve` as typed in the question (server and options).
     InstallServe(String),
+    /// Forget something the user saved (the list it came from opens again).
+    Forget(Forget),
     /// A server of a saved `scs://` location does not answer: offer to
     /// install `nmc serve` there (its host).
     OfferInstall(String),
 }
 
+/// What the user saved that a list can remove. Policy for destructive
+/// questions: whatever cannot be undone asks first, and Enter means no when
+/// it also touches files or secrets (permanent delete, a saved connection,
+/// which may hold a login); for the rest Enter means yes. Taking one path out
+/// of the basket asks nothing (the files are untouched, adding it again is
+/// one key).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Forget {
+    /// A bookmark, by its index in the settings.
+    Bookmark(usize),
+    /// A saved search, by its index in the settings.
+    Search(usize),
+    /// A saved connection (name and location).
+    Connection(String, String),
+    /// Every path in the basket.
+    Basket,
+}
+
 impl ConfirmDialog {
     /// Enter says no: what cannot be undone is never one key away.
     pub fn default_no(&self) -> bool {
-        matches!(self.purpose, ConfirmPurpose::Delete { trash: false, .. })
+        matches!(
+            self.purpose,
+            ConfirmPurpose::Delete { trash: false, .. }
+                | ConfirmPurpose::Forget(Forget::Connection(..))
+        )
     }
 
     /// The keys shown under the question.

@@ -1533,6 +1533,18 @@ async fn a_new_connection_is_saved_in_the_drive_list() {
         h.key("Down");
     }
     h.key("Delete");
+    // A saved connection may hold a login: Enter says no, y says yes.
+    let Some(Overlay::Confirm(question)) = h.app.overlay() else { panic!("no question") };
+    assert!(question.default_no(), "{question:?}");
+    h.key("Enter");
+    assert!(h.app.overlay().is_none());
+    assert!(h.app.context().config.connections.iter().any(|c| c.name == "backup"));
+    h.key("Shift+F1");
+    for _ in 0..row {
+        h.key("Down");
+    }
+    h.key("Delete");
+    h.key("y");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("list closed") };
     assert!(!dialog.items.iter().any(|r| r.contains(" backup ")));
     // Local drives cannot be removed.
@@ -2080,6 +2092,9 @@ async fn searches_are_saved_run_from_the_command_list_and_forgotten() {
     h.key("Esc");
     h.app.perform(Action::SavedSearches);
     h.key("Delete");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))), "asks first");
+    assert_eq!(h.app.context().config.searches.len(), 1);
+    h.key("Enter");
     assert!(h.app.context().config.searches.is_empty());
     assert!(h.app.overlay().is_none(), "the list closes when empty");
 }
@@ -2140,6 +2155,12 @@ async fn the_basket_can_be_emptied_and_shows_an_item() {
     assert_eq!(h.current(), "notes.txt");
     h.key("Ctrl+B");
     h.key("Shift+Delete");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))), "asks first");
+    h.key("Esc");
+    assert!(!h.app.basket.is_empty(), "No keeps the basket");
+    h.key("Ctrl+B");
+    h.key("Shift+Delete");
+    h.key("Enter");
     assert!(h.app.basket.is_empty());
 }
 

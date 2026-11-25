@@ -28,7 +28,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use crate::dialogs::{
-    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
+    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, Forget, InputDialog, InputPurpose,
     JobsView, JumpRow, MessageDialog, Overlay, PendingConflict, Secret,
 };
 use crate::input::KeyPress;
@@ -1501,16 +1501,13 @@ impl App {
                         if matches!(&dialog.purpose, ChoosePurpose::Drives(drives)
                             if drives.get(dialog.cursor).is_some_and(|d| d.saved)) =>
                     {
-                        if let ChoosePurpose::Drives(drives) = &mut dialog.purpose {
-                            let drive = drives.remove(dialog.cursor);
-                            self.context
-                                .config
-                                .connections
-                                .retain(|c| !(c.name == drive.name && c.uri == drive.location));
+                        if let ChoosePurpose::Drives(drives) = &dialog.purpose {
+                            let drive = &drives[dialog.cursor];
+                            return Some(forget_question(
+                                Forget::Connection(drive.name.clone(), drive.location.clone()),
+                                format!("Remove the saved connection \"{}\"?", drive.name),
+                            ));
                         }
-                        dialog.items.remove(dialog.cursor);
-                        dialog.move_cursor(0);
-                        self.save_settings();
                     }
                     _ => {}
                 }
@@ -2429,6 +2426,36 @@ impl App {
         });
     }
 
+    /// Removes what the user saved, after the question, and opens its list
+    /// again.
+    fn forget(&mut self, what: Forget) {
+        match what {
+            Forget::Bookmark(index) => {
+                if index < self.context.config.bookmarks.len() {
+                    self.context.config.bookmarks.remove(index);
+                    self.save_settings();
+                }
+                self.open_bookmarks();
+            }
+            Forget::Search(index) => {
+                if index < self.context.config.searches.len() {
+                    self.context.config.searches.remove(index);
+                    self.save_settings();
+                }
+                self.open_saved_searches();
+            }
+            Forget::Connection(name, uri) => {
+                self.context.config.connections.retain(|c| !(c.name == name && c.uri == uri));
+                self.save_settings();
+                self.perform(Action::Drives);
+            }
+            Forget::Basket => {
+                self.basket.clear();
+                self.set_status("The basket is empty");
+            }
+        }
+    }
+
     fn confirmed(&mut self, purpose: ConfirmPurpose) {
         let registry = self.context.registry.clone();
         match purpose {
@@ -2452,6 +2479,7 @@ impl App {
                     done(result.map(|()| format!("{verb}: {count} {noun}")), None)
                 });
             }
+            ConfirmPurpose::Forget(what) => self.forget(what),
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
             ConfirmPurpose::UninstallPlugin(name) => self.uninstall_plugin(&name),
             ConfirmPurpose::AddPluginRepo(repository) => self.add_plugin_repo(repository),
@@ -3388,4 +3416,13 @@ mod tests {
         assert_eq!(abbreviate_home(Path::new("/etc"), Some(Path::new("/"))), "/etc", "not for /");
         assert_eq!(abbreviate_home(Path::new("/etc"), None), "/etc");
     }
+}
+
+/// The question before a list entry is removed (see [`Forget`]).
+fn forget_question(what: Forget, question: String) -> Overlay {
+    Overlay::Confirm(ConfirmDialog {
+        title: "Remove".into(),
+        lines: vec![question],
+        purpose: ConfirmPurpose::Forget(what),
+    })
 }
