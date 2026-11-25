@@ -172,7 +172,8 @@ async fn folder_operations() {
     assert_eq!(link.symlink_target.as_deref(), Some("g"));
 
     let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_234_567_890);
-    let attributes = SetAttributes { permissions: Some(0o640), modified: Some(when) };
+    let attributes =
+        SetAttributes { permissions: Some(0o640), modified: Some(when), ..Default::default() };
     provider.set_attributes(&folder.join("g"), &attributes).await.unwrap();
     let entry = provider.stat(&folder.join("g")).await.unwrap();
     assert_eq!((entry.permissions, entry.modified), (Some(0o640), Some(when)));

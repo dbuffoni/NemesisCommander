@@ -143,7 +143,8 @@ async fn folder_operations() {
     assert_eq!(fs::read(f.local.join("new/g")).unwrap(), b"2", "rename replaces a file");
 
     let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_234_567_890);
-    let attributes = SetAttributes { permissions: None, modified: Some(when) };
+    let attributes =
+        SetAttributes { permissions: None, modified: Some(when), ..Default::default() };
     f.provider.set_attributes(&folder.join("g"), &attributes).await.unwrap();
     assert_eq!(f.provider.stat(&folder.join("g")).await.unwrap().modified, Some(when));
 

@@ -18,6 +18,14 @@ reflink-copy.workspace = true
 tokio = { workspace = true, features = ["fs", "sync", "rt"] }
 trash = { workspace = true, optional = true }
 
+# Extended attributes (macOS quarantine and tags, Linux user.*).
+[target.'cfg(unix)'.dependencies]
+xattr = "1.3"
+
+# Windows file attributes: the one call std lacks (hidden, system).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
 [features]
 default = ["trash"]
 # Moving files to the desktop recycle bin. Off for server builds.

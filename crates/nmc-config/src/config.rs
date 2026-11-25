@@ -89,6 +89,8 @@ pub struct PanelSettings {
     pub git_status: bool,
     /// Draw a small outline icon for the kind of each file before its name.
     pub icons: bool,
+    /// Never list macOS `.DS_Store` files, even with hidden files shown.
+    pub hide_ds_store: bool,
 }
 
 impl Default for PanelSettings {
@@ -101,6 +103,7 @@ impl Default for PanelSettings {
             arrow_navigation: false,
             git_status: true,
             icons: true,
+            hide_ds_store: false,
         }
     }
 }
@@ -154,6 +157,10 @@ pub struct TransferSettings {
     pub bandwidth_limit_kib: u64,
     /// Retries for transient errors.
     pub retries: u32,
+    /// When copying, do not carry over the macOS "downloaded from the
+    /// internet" flag (`com.apple.quarantine`). Other extended attributes
+    /// are always copied.
+    pub strip_quarantine: bool,
 }
 
 impl Default for TransferSettings {
@@ -169,6 +176,7 @@ impl Default for TransferSettings {
             conflict: ConflictPolicy::Ask,
             bandwidth_limit_kib: 0,
             retries: 3,
+            strip_quarantine: false,
         }
     }
 }

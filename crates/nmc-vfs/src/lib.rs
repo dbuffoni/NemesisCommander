@@ -21,6 +21,7 @@ mod capabilities;
 mod entry;
 mod error;
 pub mod keyring;
+pub mod names;
 pub mod netrc;
 mod path;
 mod provider;
@@ -30,7 +31,7 @@ mod walk;
 pub mod winpath;
 
 pub use capabilities::Capabilities;
-pub use entry::{Entry, EntryKind};
+pub use entry::{Entry, EntryKind, os_flags};
 pub use error::{Result, VfsError};
 pub use path::{ARCHIVE_SCHEMES, VfsPath};
 pub use provider::{

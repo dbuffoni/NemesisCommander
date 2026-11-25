@@ -613,6 +613,7 @@ impl App {
 
         let panels = &context.config.panels;
         let sort = SortSpec { key: panels.sort, descending: panels.descending };
+        nmc_panel::set_hide_ds_store(panels.hide_ds_store);
         let (workspace, requests) = Workspace::new(left, right, sort, panels.show_hidden);
         let status = (!context.warnings.is_empty())
             .then(|| Status { text: context.warnings.join("; "), error: true });
@@ -2899,6 +2900,11 @@ impl App {
                 mode & 0o7777
             ));
             suggestion = format!("mode={:o}", mode & 0o7777);
+        }
+        if let Some(flags) = entry.os_flags {
+            let names = nmc_vfs::os_flags::describe(flags);
+            let shown = if names.is_empty() { "none".to_owned() } else { names.join(", ") };
+            lines.push(format!("Attributes:  {shown}"));
         }
         let then = Some(InputDialog::new(
             "Dates and permissions",

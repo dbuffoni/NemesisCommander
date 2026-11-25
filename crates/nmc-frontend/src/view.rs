@@ -1092,6 +1092,9 @@ pub fn entry_details(panel: &Panel, git: Option<&crate::git::GitStatus>) -> Stri
     if let Some(mode) = entry.permissions {
         parts.push(permissions(mode));
     }
+    if let Some(flags) = entry.os_flags.map(nmc_vfs::os_flags::describe).filter(|f| !f.is_empty()) {
+        parts.push(flags.join(" "));
+    }
     if let Some(target) = &entry.symlink_target {
         parts.push(format!("→ {target}"));
     }

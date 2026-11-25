@@ -347,6 +347,7 @@ impl Agent for AgentService {
         let attributes = SetAttributes {
             permissions: request.permissions,
             modified: request.modified_ns.map(ns_to_time),
+            ..Default::default()
         };
         self.local.set_attributes(&path, &attributes).await.map_err(status)?;
         Ok(Response::new(pb::Empty {}))

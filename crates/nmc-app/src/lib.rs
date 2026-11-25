@@ -103,7 +103,14 @@ impl AppContext {
                 Some(destination) => effective_verify(settings, destination),
                 None => settings.verify,
             },
-            plan: PlanOptions { preserve_mtime: true, preserve_permissions: true },
+            plan: PlanOptions {
+                xattrs: if settings.strip_quarantine {
+                    nmc_ops::XattrPolicy::StripQuarantine
+                } else {
+                    nmc_ops::XattrPolicy::Keep
+                },
+                ..Default::default()
+            },
             parallelism: settings.parallel_files.max(1),
             auto_parallelism: settings.auto_parallelism,
             retry: RetryPolicy { attempts: settings.retries, ..Default::default() },

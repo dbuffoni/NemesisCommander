@@ -50,7 +50,11 @@ pub async fn copy_or_move(context: &AppContext, args: TransferArgs, is_move: boo
     let verify = verify_mode(args.verify, nmc_app::effective_verify(settings, &destination));
     let parallelism = args.parallel.unwrap_or(settings.parallel_files).max(1);
     let preserve = !args.no_preserve;
-    let plan_options = PlanOptions { preserve_mtime: preserve, preserve_permissions: preserve };
+    let plan_options = PlanOptions {
+        preserve_mtime: preserve,
+        preserve_permissions: preserve,
+        ..Default::default()
+    };
     let limit = match &args.limit {
         Some(text) => nmc_panel::format::parse_size(text)
             .ok_or_else(|| format!("invalid --limit {text:?}"))?,

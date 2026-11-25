@@ -72,6 +72,27 @@ fn native_new(path: &VfsPath) -> Result<PathBuf> {
     native(path)
 }
 
+/// Sets the read-only, hidden and system bits of `path` to `flags`, leaving
+/// its other attributes alone.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn set_windows_flags(path: &Path, flags: u32) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::fs::MetadataExt;
+    use windows_sys::Win32::Storage::FileSystem::SetFileAttributesW;
+    let current = std::fs::symlink_metadata(path)?.file_attributes();
+    let wanted = (current & !nmc_vfs::os_flags::ALL) | (flags & nmc_vfs::os_flags::ALL);
+    if wanted == current {
+        return Ok(());
+    }
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: `wide` is a NUL-terminated UTF-16 path.
+    if unsafe { SetFileAttributesW(wide.as_ptr(), wanted) } == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 /// Builds an [`Entry`] from `lstat` metadata. For symlinks, `target_meta`
 /// is the metadata of what the link points to (if it resolves).
 fn entry_from_metadata(
@@ -100,8 +121,18 @@ fn entry_from_metadata(
         }
     }
     unix_fields(&mut entry, meta);
+    windows_fields(&mut entry, meta);
     entry
 }
+
+#[cfg(windows)]
+fn windows_fields(entry: &mut Entry, meta: &Metadata) {
+    use std::os::windows::fs::MetadataExt;
+    entry.os_flags = Some(meta.file_attributes() & nmc_vfs::os_flags::ALL);
+}
+
+#[cfg(not(windows))]
+fn windows_fields(_: &mut Entry, _: &Metadata) {}
 
 #[cfg(unix)]
 fn unix_fields(entry: &mut Entry, meta: &Metadata) {
@@ -154,7 +185,10 @@ impl Provider for LocalProvider {
             | Capabilities::SERVER_COPY
             | Capabilities::SYMLINKS;
         if cfg!(unix) {
-            caps |= Capabilities::POSIX_PERMISSIONS;
+            caps |= Capabilities::POSIX_PERMISSIONS | Capabilities::XATTRS;
+        }
+        if cfg!(windows) {
+            caps |= Capabilities::OS_FLAGS;
         }
         if cfg!(feature = "trash") {
             caps |= Capabilities::TRASH;
@@ -294,6 +328,43 @@ impl Provider for LocalProvider {
                     filetime::FileTime::from_system_time(modified),
                 )?;
             }
+            // Last: a read-only file cannot be opened to change its time.
+            #[cfg(windows)]
+            if let Some(flags) = attributes.os_flags {
+                set_windows_flags(&native, flags)?;
+            }
+            Ok(())
+        })
+        .await
+    }
+
+    #[cfg(unix)]
+    async fn read_xattrs(&self, path: &VfsPath) -> Result<Vec<(String, Vec<u8>)>> {
+        let native = native(path)?;
+        blocking(path, move || {
+            let mut found = Vec::new();
+            for name in xattr::list(&native)? {
+                // A value that cannot be read (a security label, a race with
+                // a delete) is left out: it could not be set elsewhere either.
+                if let Ok(Some(value)) = xattr::get(&native, &name) {
+                    found.push((name.to_string_lossy().into_owned(), value));
+                }
+            }
+            Ok(found)
+        })
+        .await
+    }
+
+    #[cfg(unix)]
+    async fn write_xattrs(&self, path: &VfsPath, attributes: &[(String, Vec<u8>)]) -> Result<()> {
+        let native = native(path)?;
+        let attributes = attributes.to_vec();
+        blocking(path, move || {
+            for (name, value) in attributes {
+                // The destination file system may refuse some (no xattr
+                // support, a reserved namespace): the copy is still good.
+                let _ = xattr::set(&native, &name, &value);
+            }
             Ok(())
         })
         .await
@@ -377,6 +448,25 @@ mod tests {
         let mut out = Vec::new();
         p.read(path, offset).await.unwrap().read_to_end(&mut out).await.unwrap();
         out
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn xattrs_round_trip_when_the_file_system_has_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = LocalProvider::new();
+        let (a, b) = (vfs(&dir.path().join("a")), vfs(&dir.path().join("b")));
+        write_file(&p, &a, b"x", WriteOptions::create_new()).await;
+        write_file(&p, &b, b"x", WriteOptions::create_new()).await;
+        // tmpfs and some containers refuse user.* attributes: nothing to test.
+        if xattr::set(a.to_local_path().unwrap(), "user.nmc.test", b"tag").is_err() {
+            return;
+        }
+        let found = p.read_xattrs(&a).await.unwrap();
+        assert!(found.iter().any(|(n, v)| n == "user.nmc.test" && v == b"tag"));
+        p.write_xattrs(&b, &found).await.unwrap();
+        let copied = p.read_xattrs(&b).await.unwrap();
+        assert!(copied.iter().any(|(n, v)| n == "user.nmc.test" && v == b"tag"));
     }
 
     #[tokio::test]
@@ -514,7 +604,8 @@ mod tests {
         let a = vfs(&dir.path().join("a"));
         write_file(&p, &a, b"x", WriteOptions::create_new()).await;
         let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
-        let attrs = SetAttributes { permissions: Some(0o600), modified: Some(when) };
+        let attrs =
+            SetAttributes { permissions: Some(0o600), modified: Some(when), ..Default::default() };
         p.set_attributes(&a, &attrs).await.unwrap();
         let entry = p.stat(&a).await.unwrap();
         assert_eq!(entry.modified, Some(when));

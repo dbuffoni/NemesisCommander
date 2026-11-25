@@ -355,6 +355,8 @@ mod tests {
             size,
             modified: None,
             permissions: None,
+            os_flags: None,
+            xattrs: Default::default(),
         };
         Plan {
             steps: vec![

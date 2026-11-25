@@ -278,6 +278,7 @@ impl App {
 
     /// Applies the current settings to what is running.
     pub(super) fn apply_settings(&mut self) {
+        nmc_panel::set_hide_ds_store(self.context.config.panels.hide_ds_store);
         self.apply_key_overrides();
         let transfers = &self.context.config.transfers;
         self.manager.set_max_concurrent_jobs(transfers.parallel_jobs);

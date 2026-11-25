@@ -29,6 +29,12 @@ pub enum Step {
         modified: Option<SystemTime>,
         /// Permission bits to restore on the copy, if preserved.
         permissions: Option<u32>,
+        /// Windows attributes (read-only, hidden, system) to restore.
+        #[serde(default)]
+        os_flags: Option<u32>,
+        /// What to do with extended attributes (macOS tags, quarantine).
+        #[serde(default)]
+        xattrs: XattrPolicy,
     },
     /// Recreate a symbolic link. If the destination provider does not
     /// support links, the file the link points to is copied instead.
@@ -109,6 +115,20 @@ pub struct Plan {
     pub warnings: Vec<String>,
 }
 
+/// What a copy does with extended attributes (macOS tags and the quarantine
+/// flag, Linux `user.*`), between file systems that have them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum XattrPolicy {
+    /// Copy them all.
+    #[default]
+    Keep,
+    /// Copy them, except the macOS quarantine flag
+    /// (`com.apple.quarantine`: "downloaded from the internet").
+    StripQuarantine,
+    /// Copy none.
+    Drop,
+}
+
 /// Choices that shape a copy plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanOptions {
@@ -116,11 +136,14 @@ pub struct PlanOptions {
     pub preserve_mtime: bool,
     /// Keep POSIX permission bits.
     pub preserve_permissions: bool,
+    /// Extended attributes.
+    #[serde(default)]
+    pub xattrs: XattrPolicy,
 }
 
 impl Default for PlanOptions {
     fn default() -> Self {
-        PlanOptions { preserve_mtime: true, preserve_permissions: true }
+        PlanOptions { preserve_mtime: true, preserve_permissions: true, xattrs: XattrPolicy::Keep }
     }
 }
 
@@ -251,15 +274,16 @@ impl Builder {
         Builder { options, plan: Plan::default(), files: Vec::new(), dir_attributes: Vec::new() }
     }
 
-    fn attributes(&self, modified: Option<SystemTime>, permissions: Option<u32>) -> SetAttributes {
+    fn attributes(&self, entry: &nmc_vfs::Entry) -> SetAttributes {
         SetAttributes {
-            modified: modified.filter(|_| self.options.preserve_mtime),
-            permissions: permissions.filter(|_| self.options.preserve_permissions),
+            modified: entry.modified.filter(|_| self.options.preserve_mtime),
+            permissions: entry.permissions.filter(|_| self.options.preserve_permissions),
+            os_flags: entry.os_flags,
         }
     }
 
     fn add_entry(&mut self, from: VfsPath, to: VfsPath, entry: &nmc_vfs::Entry) {
-        let attributes = self.attributes(entry.modified, entry.permissions);
+        let attributes = self.attributes(entry);
         match entry.kind {
             EntryKind::Directory => {
                 self.plan.steps.push(Step::CreateDir { path: to.clone() });
@@ -276,6 +300,8 @@ impl Builder {
                     size: entry.size,
                     modified: attributes.modified,
                     permissions: attributes.permissions,
+                    os_flags: attributes.os_flags,
+                    xattrs: self.options.xattrs,
                 });
             }
             EntryKind::Symlink => {
@@ -320,7 +346,36 @@ impl Builder {
         self.plan.steps.append(&mut self.files);
         self.dir_attributes.reverse();
         self.plan.steps.append(&mut self.dir_attributes);
+        self.warn_about_name_clashes();
         self.plan
+    }
+
+    /// Names that are different here but the same on the destination (`A`
+    /// and `a`, or NFC and NFD spellings, on a Mac or Windows volume): the
+    /// second would overwrite the first.
+    fn warn_about_name_clashes(&mut self) {
+        let mut by_folder: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+        let mut local = false;
+        for step in &self.plan.steps {
+            let to = match step {
+                Step::CopyFile { to, .. }
+                | Step::CopySymlink { to, .. }
+                | Step::CreateDir { path: to } => to,
+                _ => continue,
+            };
+            local = to.scheme() == "file";
+            if let (Some(parent), Some(name)) = (to.parent(), to.file_name()) {
+                by_folder.entry(parent.to_string()).or_default().push(name.to_owned());
+            }
+        }
+        let rules = if local { nmc_vfs::names::NameRules::usual() } else { Default::default() };
+        for (folder, names) in by_folder {
+            for (a, b) in nmc_vfs::names::clashes(names.iter().map(String::as_str), rules) {
+                self.plan.warnings.push(format!(
+                    "{folder}: \"{a}\" and \"{b}\" are the same name on the destination"
+                ));
+            }
+        }
     }
 }
 
@@ -455,7 +510,11 @@ mod tests {
     #[tokio::test]
     async fn attributes_can_be_dropped() {
         let (registry, _, _) = setup();
-        let options = PlanOptions { preserve_mtime: false, preserve_permissions: false };
+        let options = PlanOptions {
+            preserve_mtime: false,
+            preserve_permissions: false,
+            ..Default::default()
+        };
         let plan = plan_copy(&registry, &[p("a", "/src")], &p("b", "/x"), options).await.unwrap();
         assert!(!plan.steps.iter().any(|s| matches!(s, Step::SetAttributes { .. })));
         assert!(plan.steps.iter().all(|s| !matches!(s, Step::CopyFile { modified: Some(_), .. })));
