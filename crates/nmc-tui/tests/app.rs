@@ -1011,7 +1011,8 @@ async fn jobs_window_lists_transfers() {
     let screen = h.screen();
     assert!(screen.contains("Transfer queue") && screen.contains("done"), "{screen}");
     // Where the items came from and went to, with the system of each.
-    assert!(screen.contains("from Local:") && screen.contains("to Local:"), "{screen}");
+    // (The system is "Local" on Unix and the drive, "C:", on Windows.)
+    assert!(screen.contains("from ") && screen.contains("→  to "), "{screen}");
     h.press(KeyPress::char('x'));
     assert!(h.app.jobs().is_empty(), "finished jobs removed");
     h.key("Esc");
