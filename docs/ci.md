@@ -65,3 +65,14 @@ A test that only makes sense on one system is gated with `#[cfg(windows)]` or
 `#[cfg(target_os = "macos")]`. They run in the full tier only (the simple tier
 is Linux only), so they cost nothing on pull requests. A test that touches the
 real credential store or a real volume must use a throwaway name and clean up.
+
+## OS-specific tests (SC-164)
+
+The nightly tier runs the whole workspace on macOS and Windows. Tests that
+need the real system sit in `crates/nmc-frontend/tests/os_native.rs` (drive
+letters, drive and disk lists, the path model, symlinks) and in the `cfg`-gated
+modules of `nmc-providers` (Windows attributes, long and UNC paths, xattr),
+`nmc-vfs` (Credential Manager, Keychain) and `nmc-libarchive`. The agent and
+CLI integration tests (`nmc-agent`, `nmc-cli`) run there too and act as the
+smoke test of the binaries. Missing features are not tested; installers have
+their own job (SC-168).
