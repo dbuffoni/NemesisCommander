@@ -18,6 +18,10 @@ use nmc_s3::sigv4::Credentials;
 use nmc_vfs::{Provider, VfsPath, WriteMode, WriteOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+/// The toxics apply to every connection of the one proxy: the tests take
+/// turns, or one test's cut would break another's requests.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct Setup {
     api: String,
     endpoint: String,
@@ -101,6 +105,7 @@ async fn upload(provider: &S3Provider, path: &VfsPath, data: &[u8]) -> std::io::
 
 #[tokio::test]
 async fn a_cut_during_an_upload_is_an_error_and_the_next_upload_works() {
+    let _turn = ONE_AT_A_TIME.lock().await;
     let Some(s) = setup() else { return };
     let provider = s.provider();
     let data: Vec<u8> = (0..24 * 1024 * 1024u32).map(|i| (i % 253) as u8).collect();
@@ -124,6 +129,7 @@ async fn a_cut_during_an_upload_is_an_error_and_the_next_upload_works() {
 
 #[tokio::test]
 async fn latency_slows_requests_but_does_not_break_them() {
+    let _turn = ONE_AT_A_TIME.lock().await;
     let Some(s) = setup() else { return };
     let provider = s.provider();
     s.add_toxic("lag", "latency", r#"{"latency":400,"jitter":100}"#).await;
@@ -138,6 +144,7 @@ async fn latency_slows_requests_but_does_not_break_them() {
 
 #[tokio::test]
 async fn a_dead_link_fails_with_an_error_after_a_timeout() {
+    let _turn = ONE_AT_A_TIME.lock().await;
     let Some(s) = setup() else { return };
     let provider = s.provider();
     // `timeout` with 0 holds the connection open and sends nothing.
