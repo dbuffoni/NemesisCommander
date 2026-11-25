@@ -34,7 +34,7 @@ fn uri(dir: &TempDir, relative: &str) -> String {
 fn list_read_and_copy_over_sftp() {
     let dir = TempDir::new().unwrap();
     let Some(mut ls) = nmc(&dir) else {
-        eprintln!("skipping: no sftp-server installed");
+        skip("no sftp-server installed");
         return;
     };
     fs::create_dir_all(dir.path().join("srv/docs")).unwrap();
@@ -65,4 +65,16 @@ fn list_read_and_copy_over_sftp() {
         .assert()
         .success();
     assert_eq!(fs::read(dir.path().join("srv/upload.bin")).unwrap().len(), 1_000_000);
+}
+
+/// A missing test server skips the test, unless the nightly CI requires it
+/// (`NMC_REQUIRE_SERVERS=1` for all servers, or a list like `sftp,smb`):
+/// a skipped test proves nothing there.
+fn skip(why: &str) {
+    let required = std::env::var("NMC_REQUIRE_SERVERS").unwrap_or_default();
+    assert!(
+        !(required == "1" || required.split(',').any(|name| name == "sftp")),
+        "NMC_REQUIRE_SERVERS asks for {why}"
+    );
+    eprintln!("skipping: {why}");
 }

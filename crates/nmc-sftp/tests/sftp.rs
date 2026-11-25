@@ -30,7 +30,7 @@ const SERVERS: &[&str] = &[
 fn sftp_server() -> Option<PathBuf> {
     let found = SERVERS.iter().map(PathBuf::from).find(|p| p.exists());
     if found.is_none() {
-        eprintln!("skipping: no sftp-server installed");
+        skip("no sftp-server installed");
     }
     found
 }
@@ -224,4 +224,16 @@ async fn copies_between_local_and_sftp_with_the_normal_engine() {
         fs::read(dir.path().join("back/source/deep/er/two.bin")).unwrap(),
         vec![7u8; 700_000]
     );
+}
+
+/// A missing test server skips the test, unless the nightly CI requires it
+/// (`NMC_REQUIRE_SERVERS=1` for all servers, or a list like `sftp,smb`):
+/// a skipped test proves nothing there.
+fn skip(why: &str) {
+    let required = std::env::var("NMC_REQUIRE_SERVERS").unwrap_or_default();
+    assert!(
+        !(required == "1" || required.split(',').any(|name| name == "sftp")),
+        "NMC_REQUIRE_SERVERS asks for {why}"
+    );
+    eprintln!("skipping: {why}");
 }

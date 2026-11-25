@@ -39,7 +39,7 @@ impl Drop for Cleanup<'_> {
 #[test]
 fn install_serve_on_a_server_and_remove_it() {
     let Ok(host) = std::env::var("NMC_TEST_SSH_HOST") else {
-        eprintln!("skipping: no SSH test server (see scripts/ssh-test-server.sh)");
+        skip("no SSH test server (see scripts/ssh-test-server.sh)");
         return;
     };
     let dir = TempDir::new().unwrap();
@@ -82,4 +82,35 @@ fn install_serve_on_a_server_and_remove_it() {
         .args(["ls", &format!("scs://localhost:{PORT}{}", dir.path().display())])
         .assert()
         .failure();
+}
+
+/// With `SSH_VARIANT=changed-hostkey` (scripts/ssh-test-server.sh) the
+/// server's key differs from the one in known_hosts: nmc must refuse to
+/// connect and say why.
+#[test]
+fn a_changed_host_key_is_refused() {
+    let (Ok(host), Ok("changed-hostkey")) =
+        (std::env::var("NMC_TEST_SSH_HOST"), std::env::var("NMC_TEST_SSH_VARIANT").as_deref())
+    else {
+        eprintln!("skipping: not the changed-hostkey SSH variant");
+        return;
+    };
+    let dir = TempDir::new().unwrap();
+    nmc(&dir)
+        .args(["ls", &format!("sftp://{host}/")])
+        .assert()
+        .failure()
+        .stderr(predicate::str::is_match("(?i)host key|identification").unwrap());
+}
+
+/// A missing test server skips the test, unless the nightly CI requires it
+/// (`NMC_REQUIRE_SERVERS=1` for all servers, or a list like `sftp,smb`):
+/// a skipped test proves nothing there.
+fn skip(why: &str) {
+    let required = std::env::var("NMC_REQUIRE_SERVERS").unwrap_or_default();
+    assert!(
+        !(required == "1" || required.split(',').any(|name| name == "ssh")),
+        "NMC_REQUIRE_SERVERS asks for {why}"
+    );
+    eprintln!("skipping: {why}");
 }

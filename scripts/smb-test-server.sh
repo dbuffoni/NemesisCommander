@@ -8,6 +8,9 @@
 # The server listens on 127.0.0.1:4445, shares <dir>/share as "share", and
 # accepts the user "sctest" with password "sctest-pass". Files are created
 # as the user who ran sudo, so the tests can check and clean them up.
+#
+# SMB_MIN_PROTOCOL (default SMB2_10) and SMB_SIGNING (default auto;
+# "mandatory" requires signing) pick the variant the nightly CI tests.
 # Pick a <dir> every user can reach (not a private temporary folder).
 set -euo pipefail
 
@@ -37,7 +40,8 @@ cat > "$dir/smb.conf" <<CONF
   ncalrpc dir = $dir/state/ncalrpc
   log file = $dir/log/smbd.log
   passdb backend = tdbsam:$dir/private/passdb.tdb
-  server min protocol = SMB2_10
+  server min protocol = ${SMB_MIN_PROTOCOL:-SMB2_10}
+  server signing = ${SMB_SIGNING:-auto}
   map to guest = never
 [share]
   path = $dir/share
