@@ -279,30 +279,87 @@ fn sevenz_extract(file: &Path, name: &str, out: &mut dyn Write, key: &str) -> io
 // ---------------------------------------------------------------- rar
 
 #[cfg(feature = "rar")]
-fn rar_index(file: &Path) -> io::Result<ArchiveIndex> {
-    let archive = unrar::Archive::new(file).open_for_listing().map_err(invalid)?;
-    let mut index = ArchiveIndex::default();
-    for header in archive {
-        let header = header.map_err(invalid)?;
-        let name = header.filename.to_string_lossy().into_owned();
-        let kind = if header.is_directory() { EntryKind::Directory } else { EntryKind::File };
-        let entry = Entry::new("", kind).with_size(header.unpacked_size);
-        index.insert(&name, entry, Locator::Named(name.clone()));
+mod rar {
+    use std::io::{self, Write};
+    use std::path::Path;
+
+    use nmc_libarchive::{Error, RarReader};
+    use nmc_vfs::{Entry, EntryKind};
+
+    use super::{ArchiveIndex, Locator};
+
+    /// A clear message for what cannot be read.
+    fn rar_error(e: Error) -> io::Error {
+        match e {
+            Error::Encrypted => io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "this RAR archive is encrypted; encrypted RAR archives cannot be read",
+            ),
+            Error::Other(text) if text.to_lowercase().contains("volume") => io::Error::new(
+                io::ErrorKind::Unsupported,
+                "this RAR archive is part of a multi-volume set, which cannot be read",
+            ),
+            Error::Other(text) => io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("cannot read this RAR archive: {text}"),
+            ),
+        }
     }
-    Ok(index)
+
+    pub(super) fn index(file: &Path) -> io::Result<ArchiveIndex> {
+        let mut archive = RarReader::open(file).map_err(rar_error)?;
+        let mut index = ArchiveIndex::default();
+        while let Some(member) = archive.next_member().map_err(rar_error)? {
+            if member.encrypted {
+                return Err(rar_error(Error::Encrypted));
+            }
+            let kind = if member.is_dir {
+                EntryKind::Directory
+            } else if member.is_symlink {
+                EntryKind::Symlink
+            } else {
+                EntryKind::File
+            };
+            let mut entry = Entry::new("", kind).with_size(member.size);
+            entry.modified = member.modified;
+            index.insert(
+                member.path.trim_end_matches('/'),
+                entry,
+                Locator::Named(member.path.clone()),
+            );
+        }
+        Ok(index)
+    }
+
+    /// Reads on from the start until `name`: a solid archive has to be
+    /// decoded in order anyway.
+    pub(super) fn extract(file: &Path, name: &str, out: &mut dyn Write) -> io::Result<()> {
+        let mut archive = RarReader::open(file).map_err(rar_error)?;
+        while let Some(member) = archive.next_member().map_err(rar_error)? {
+            if member.path != name {
+                continue;
+            }
+            let mut buffer = vec![0u8; 256 * 1024];
+            loop {
+                let n = archive.read(&mut buffer).map_err(rar_error)?;
+                if n == 0 {
+                    return Ok(());
+                }
+                out.write_all(&buffer[..n])?;
+            }
+        }
+        Err(io::Error::new(io::ErrorKind::NotFound, format!("{name} not in archive")))
+    }
+}
+
+#[cfg(feature = "rar")]
+fn rar_index(file: &Path) -> io::Result<ArchiveIndex> {
+    rar::index(file)
 }
 
 #[cfg(feature = "rar")]
 fn rar_extract(file: &Path, name: &str, out: &mut dyn Write) -> io::Result<()> {
-    let mut archive = unrar::Archive::new(file).open_for_processing().map_err(invalid)?;
-    while let Some(header) = archive.read_header().map_err(invalid)? {
-        if header.entry().filename.to_string_lossy() == name {
-            let (data, _) = header.read().map_err(invalid)?;
-            return out.write_all(&data);
-        }
-        archive = header.skip().map_err(invalid)?;
-    }
-    Err(io::Error::new(io::ErrorKind::NotFound, format!("{name} not in archive")))
+    rar::extract(file, name, out)
 }
 
 #[cfg(not(feature = "rar"))]

@@ -6,8 +6,10 @@ Decisions that should not be taken without the owner.
 
 - **License: MIT** (2026-11-15). The `LICENSE` file from the initial commit
   stays; every crate declares `license = "MIT"`.
-- **RAR in release builds: enabled** (2026-11-15), with the licensing
-  notes in [`TODO.md`](../TODO.md). Qt's LGPL notices are listed there too.
+- **RAR in release builds: enabled, read with libarchive** (2026-11-25,
+  [ADR 0050](adr/0050-rar-with-libarchive.md)); this replaces the unRAR
+  decision of 2026-11-15. Qt's LGPL notices are listed in
+  [`TODO.md`](../TODO.md).
 
 ## Open
 

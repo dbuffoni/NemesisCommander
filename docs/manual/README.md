@@ -560,7 +560,9 @@ two on FAT) match.
 
 Archives open like folders: press Enter on one, browse it, view and copy
 files out of it. Supported: ZIP, 7-Zip, tar (plain, gz, bz2, xz, zst),
-single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Shift+F5
+single compressed files (`.gz`, `.xz`, …) and RAR (reading only, with
+libarchive: RAR 3/4 and 5, solid archives included; encrypted archives and
+multi-volume sets are refused with a message). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
 Shift+F9 unpacks.
 

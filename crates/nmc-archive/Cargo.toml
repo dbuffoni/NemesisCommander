@@ -24,19 +24,20 @@ liblzma.workspace = true
 bzip2.workspace = true
 zstd.workspace = true
 sevenz-rust2.workspace = true
-unrar = { workspace = true, optional = true }
+nmc-libarchive = { workspace = true, optional = true }
 
 [features]
 default = []
-# Read-only RAR support through the unRAR library (C++, non-OSI license;
-# see docs/adr/0006-archives.md).
-rar = ["dep:unrar"]
+# Read-only RAR support through libarchive (BSD-2-Clause, built from source;
+# see docs/adr/0006-archives.md). Nothing here creates RAR files.
+rar = ["dep:nmc-libarchive"]
 
 [dev-dependencies]
 nmc-providers.workspace = true
 nmc-ops.workspace = true
 tokio = { workspace = true, features = ["full"] }
 proptest.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

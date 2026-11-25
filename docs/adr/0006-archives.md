@@ -28,11 +28,9 @@ read rar, and browse archives like folders, all natively.
   archive can never make an extraction escape its target directory.
 - Updating an existing archive in place (add/delete members) is not part of
   this decision; it can later be done as "repack to a part file, rename".
-- **RAR** reading uses the `unrar` crate (bindings to RARLAB's unRAR C++
-  library). unRAR's license is not OSI-approved (it forbids using the code
-  to re-create RAR compression), so it is behind the optional Cargo feature
-  `rar`, off by default. Whether release builds enable it is an open
-  question tied to the project license (see `docs/OPEN_QUESTIONS.md`).
+- **RAR** is read (never written) with libarchive, behind the Cargo feature
+  `rar`; see [ADR 0050](0050-rar-with-libarchive.md). It replaces the unRAR
+  library this decision first used.
 - 7z has no portable symlink entry; symlinks are stored as small files
   containing the link target.
 - URI schemes may start with a digit (deviation from RFC 3986) so that the

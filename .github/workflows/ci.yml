@@ -115,6 +115,12 @@ jobs:
           sudo mkdir -p /run/sshd
           scripts/ssh-test-server.sh /var/tmp/nmc-ssh >> "$GITHUB_ENV"
       - run: cargo test --workspace --exclude nmc-gui
+      # RAR is read with the bundled libarchive (feature `rar`, on in releases).
+      - run: cargo test -p nmc-archive --features rar
+      # No unRAR code in the release (ADR 0050).
+      - name: No unrar crate
+        shell: bash
+        run: "! cargo tree -i unrar 2>/dev/null"
 
   gui:
     name: Desktop interface (Qt 6)
