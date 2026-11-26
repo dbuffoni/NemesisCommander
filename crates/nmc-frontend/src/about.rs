@@ -81,8 +81,10 @@ pub fn lines() -> Vec<String> {
         format!("Source:  {REPOSITORY}"),
         String::new(),
         "Built with Rust and Qt 6 (LGPL v3, linked dynamically).".into(),
-        "Release builds read RAR archives with libarchive (BSD-2-Clause). The".into(),
-        "third-party notices of a release list every library and its license.".into(),
+        // One line per paragraph: each interface wraps it to its width.
+        "Release builds read RAR archives with libarchive (BSD-2-Clause). The \
+         third-party notices of a release list every library and its license."
+            .into(),
     ]
 }
 

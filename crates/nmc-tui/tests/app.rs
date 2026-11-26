@@ -3599,13 +3599,18 @@ async fn a_long_message_scrolls_with_the_keys() {
     assert!(screen.contains("Install nmc serve on a server"), "{screen}");
     assert!(screen.contains("more lines") && !screen.contains("earlier lines"), "{screen}");
     assert!(screen.contains("Esc: close"), "{screen}");
+    // Paragraphs break between words.
+    assert!(
+        screen.contains("lets this computer (and") && screen.contains("│other servers)"),
+        "{screen}"
+    );
     h.key("PageDown");
     let screen = small(&mut h);
     assert!(screen.contains("earlier lines"), "{screen}");
     // End stops at the last line, so one step up moves at once.
     h.key("End");
     let end = small(&mut h);
-    assert!(end.contains("saved there with F4") && !end.contains("more lines"), "{end}");
+    assert!(end.contains("with F4).") && !end.contains("more lines"), "{end}");
     h.key("Up");
     assert!(small(&mut h).contains("more lines"));
     h.key("Home");

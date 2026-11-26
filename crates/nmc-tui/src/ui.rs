@@ -536,6 +536,44 @@ fn scrolled_rows<'a>(mut rows: Vec<Line<'a>>, room: usize, offset: &mut usize) -
     shown
 }
 
+/// The widest a paragraph of a message is set, however wide the window.
+const PROSE_WIDTH: usize = 72;
+
+/// A line of a message as rows: text breaks between words, and what
+/// continues a list item stays under its text. A row of a table (a run of
+/// spaces after its start) is cut where the window ends.
+fn wrap_message(line: &str, width: usize) -> Vec<String> {
+    let text = line.trim_start_matches(' ');
+    let indent = line.len() - text.len();
+    if text.trim_end().contains("  ") {
+        return hard_wrap(line, width);
+    }
+    let width = width.clamp(8, PROSE_WIDTH);
+    // "4. issues…" continues under "issues".
+    let number = text
+        .split_once(". ")
+        .filter(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(0, |(n, _)| n.len() + 2);
+    let under = " ".repeat((indent + number).min(width / 2));
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = " ".repeat(indent.min(width / 2));
+    let mut empty = true;
+    for word in text.split_whitespace() {
+        if !empty && row.chars().count() + 1 + word.chars().count() > width {
+            rows.push(std::mem::replace(&mut row, under.clone()));
+            empty = true;
+        }
+        if !empty {
+            row.push(' ');
+        }
+        row.push_str(word);
+        empty = false;
+    }
+    rows.push(row);
+    // A word longer than the row (an address) is cut.
+    rows.iter().flat_map(|r| hard_wrap(r, width)).collect()
+}
+
 /// A key row on as many lines as it needs, broken between its parts.
 fn wrap_keys(hint: &str, width: usize) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
@@ -562,7 +600,7 @@ fn draw_text(
     let screen = frame.area();
     let inner_width = box_width(screen).saturating_sub(4) as usize;
     let mut body: Vec<Line> =
-        dialog.lines.iter().flat_map(|l| hard_wrap(l, inner_width)).map(Line::raw).collect();
+        dialog.lines.iter().flat_map(|l| wrap_message(l, inner_width)).map(Line::raw).collect();
     let hint = wrap_keys(hint, inner_width);
     let room = (screen.height.saturating_sub(4) as usize).saturating_sub(hint.len() + 1);
     let logo = dialog.logo && body.len() + usize::from(about::LOGO_ROWS) <= room;
