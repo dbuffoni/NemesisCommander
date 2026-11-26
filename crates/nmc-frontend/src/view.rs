@@ -33,6 +33,9 @@ pub struct Screen {
     pub keys: Vec<KeyLabel>,
     /// The open dialog or window.
     pub overlay: Option<OverlayView>,
+    /// Rows its text is scrolled down (messages and the lines under a typed
+    /// answer); a window that cannot go so far reports how far it can.
+    pub dialog_scroll: usize,
     /// A copy conflict waiting for an answer, shown above everything.
     pub conflict: Option<ConflictView>,
     /// The fonts of the window (the terminal ignores them).
@@ -514,6 +517,8 @@ impl Screen {
             progress: jobs_progress(&app.jobs, app).unwrap_or(-1.0),
             keys,
             overlay,
+            // (End asks for more than any text has.)
+            dialog_scroll: app.dialog_scroll.min(1_000_000),
             conflict,
             icons: if app.context().config.panels.icons {
                 crate::icons::Shape::ALL
@@ -1092,6 +1097,9 @@ pub fn entry_details(panel: &Panel, git: Option<&crate::git::GitStatus>) -> Stri
     if let Some(mode) = entry.permissions {
         parts.push(permissions(mode));
     }
+    if let Some(flags) = entry.os_flags.map(nmc_vfs::os_flags::describe).filter(|f| !f.is_empty()) {
+        parts.push(flags.join(" "));
+    }
     if let Some(target) = &entry.symlink_target {
         parts.push(format!("→ {target}"));
     }
@@ -1102,34 +1110,19 @@ pub fn entry_details(panel: &Panel, git: Option<&crate::git::GitStatus>) -> Stri
     parts.join("  ")
 }
 
-/// What F`number` does with the modifiers held now, for the function key
-/// bar: empty when nothing is bound to that combination.
-pub fn key_bar_label(app: &App, number: u8) -> &'static str {
+/// The command F`number` runs with the modifiers held now, for the function
+/// key bar: `None` when nothing is bound to that combination.
+pub fn key_bar_action(app: &App, number: u8) -> Option<Action> {
     // Alt is left out: desktops use it themselves (GNOME shows its own
     // window menu and moves windows with it), and no command is on Alt+F.
     let (ctrl, _alt, shift) = app.modifiers();
-    app.context()
-        .keymap
-        .action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
-        .map(short_label)
-        .unwrap_or("")
+    app.context().keymap.action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
 }
 
-/// A short label for the function key bar.
-pub fn short_label(action: Action) -> &'static str {
-    match action {
-        Action::Help => "Help",
-        Action::Rename => "Rename",
-        Action::View => "View",
-        Action::Edit => "Edit",
-        Action::Copy => "Copy",
-        Action::Move => "Move",
-        Action::MakeDir => "Mkdir",
-        Action::Delete => "Delete",
-        Action::Menu => "Commands",
-        Action::Quit => "Quit",
-        other => other.label().split_whitespace().next().unwrap_or("").trim_end_matches('…'),
-    }
+/// What F`number` says on the function key bar: the command's short name
+/// (empty when nothing is bound).
+pub fn key_bar_label(app: &App, number: u8) -> &'static str {
+    key_bar_action(app, number).map(Action::short).unwrap_or("")
 }
 
 /// `done` as a percentage of `total` (`None` when the total is unknown).

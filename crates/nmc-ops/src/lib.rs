@@ -39,7 +39,7 @@ pub use execute::{
     is_connection_error,
 };
 pub use link::{LinkKind, LinkReport, create_links, relative_path};
-pub use plan::{Plan, PlanOptions, Step, plan_copy, plan_delete, plan_move};
+pub use plan::{Plan, PlanOptions, Step, XattrPolicy, plan_copy, plan_delete, plan_move};
 pub use rename::{
     CaseChange, RenameError, RenameRule, apply_renames, preview_renames, rename_conflicts, renamed,
 };

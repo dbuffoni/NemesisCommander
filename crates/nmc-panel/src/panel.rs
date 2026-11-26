@@ -1,7 +1,7 @@
 //! A single directory view.
 
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use nmc_index::{Mask, SortKey, SortSpec, sort_entries};
 use nmc_vfs::{Entry, EntryKind, ProviderRegistry, Result, VfsPath, collect_listing};
@@ -142,6 +142,26 @@ static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 /// `true` if any part of a relative path (`a/.cache/x`) starts with a dot.
 fn is_hidden_path(name: &str) -> bool {
     name.split('/').any(|part| part.starts_with('.') && part != "..")
+}
+
+static HIDE_DS_STORE: AtomicBool = AtomicBool::new(false);
+
+/// Hide macOS `.DS_Store` files from every panel, even when hidden files are
+/// shown.
+pub fn set_hide_ds_store(hide: bool) {
+    HIDE_DS_STORE.store(hide, Ordering::Relaxed);
+}
+
+/// `true` for an entry the panel hides unless hidden files are shown: a name
+/// starting with a dot, or the Windows hidden/system attribute.
+fn is_hidden_entry(entry: &Entry) -> bool {
+    use nmc_vfs::os_flags;
+    is_hidden_path(&entry.name)
+        || entry.os_flags.is_some_and(|f| f & (os_flags::HIDDEN | os_flags::SYSTEM) != 0)
+}
+
+fn is_ds_store(name: &str) -> bool {
+    name.rsplit('/').next() == Some(".DS_Store")
 }
 
 /// Name of the synthetic "parent directory" row.
@@ -305,7 +325,8 @@ impl Panel {
         visible.extend(
             self.all
                 .iter()
-                .filter(|e| self.show_hidden || !is_hidden_path(&e.name))
+                .filter(|e| !(HIDE_DS_STORE.load(Ordering::Relaxed) && is_ds_store(&e.name)))
+                .filter(|e| self.show_hidden || !is_hidden_entry(e))
                 .filter(|e| filter.matches(&e.name))
                 .cloned(),
         );

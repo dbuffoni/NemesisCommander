@@ -54,7 +54,7 @@ macro_rules! fixture {
         match Fixture::new($name).await {
             Some(fixture) => fixture,
             None => {
-                eprintln!("skipping: no SMB test server (see scripts/smb-test-server.sh)");
+                skip("no SMB test server (see scripts/smb-test-server.sh)");
                 return;
             }
         }
@@ -143,7 +143,8 @@ async fn folder_operations() {
     assert_eq!(fs::read(f.local.join("new/g")).unwrap(), b"2", "rename replaces a file");
 
     let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_234_567_890);
-    let attributes = SetAttributes { permissions: None, modified: Some(when) };
+    let attributes =
+        SetAttributes { permissions: None, modified: Some(when), ..Default::default() };
     f.provider.set_attributes(&folder.join("g"), &attributes).await.unwrap();
     assert_eq!(f.provider.stat(&folder.join("g")).await.unwrap().modified, Some(when));
 
@@ -236,7 +237,7 @@ impl Relay {
 async fn the_share_works_again_after_the_connection_was_cut() {
     let (Ok(url), Ok(dir)) = (std::env::var("NMC_TEST_SMB_URL"), std::env::var("NMC_TEST_SMB_DIR"))
     else {
-        eprintln!("skipping: no SMB test server (see scripts/smb-test-server.sh)");
+        skip("no SMB test server (see scripts/smb-test-server.sh)");
         return;
     };
     let password = std::env::var("NMC_TEST_SMB_PASSWORD").unwrap_or_default();
@@ -287,4 +288,41 @@ async fn the_share_works_again_after_the_connection_was_cut() {
     sink.shutdown().await.unwrap();
     assert_eq!(read_all(&provider, &file, 0).await, b"after");
     assert_eq!(fs::read(folder.join("a.txt")).unwrap(), b"after");
+}
+
+#[tokio::test]
+async fn a_file_over_2_gib_is_listed_and_read_at_its_end() {
+    let f = fixture!("huge");
+    // A sparse file: it takes no disk space on the server.
+    let size: u64 = (2 << 30) + 4096;
+    let file = fs::File::create(f.local.join("big.bin")).unwrap();
+    file.set_len(size).unwrap();
+    drop(file);
+    let entry = f.provider.stat(&f.remote("big.bin")).await.unwrap();
+    assert_eq!(entry.size, size);
+    let tail = read_all(&f.provider, &f.remote("big.bin"), size - 16).await;
+    assert_eq!(tail, [0u8; 16]);
+}
+
+#[tokio::test]
+async fn a_wrong_password_is_refused() {
+    let Ok(url) = std::env::var("NMC_TEST_SMB_URL") else {
+        skip("no SMB test server (see scripts/smb-test-server.sh)");
+        return;
+    };
+    let share = VfsPath::parse(&url).unwrap();
+    let (user, addr) = share.authority().rsplit_once('@').unwrap();
+    assert!(SmbProvider::connect(addr, user, "not-the-password").await.is_err());
+}
+
+/// A missing test server skips the test, unless the nightly CI requires it
+/// (`NMC_REQUIRE_SERVERS=1` for all servers, or a list like `sftp,smb`):
+/// a skipped test proves nothing there.
+fn skip(why: &str) {
+    let required = std::env::var("NMC_REQUIRE_SERVERS").unwrap_or_default();
+    assert!(
+        !(required == "1" || required.split(',').any(|name| name == "smb")),
+        "NMC_REQUIRE_SERVERS asks for {why}"
+    );
+    eprintln!("skipping: {why}");
 }

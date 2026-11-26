@@ -56,6 +56,11 @@ pub mod qobject {
         #[qinvokable]
         fn click_row(self: Pin<&mut Commander>, side: i32, row: i32);
 
+        /// How far down the text of a dialog is, in rows: after the wheel,
+        /// or when the keys asked for more than there is.
+        #[qinvokable]
+        fn dialog_scrolled(self: Pin<&mut Commander>, rows: i32);
+
         /// The wheel over a panel.
         #[qinvokable]
         fn scroll_rows(self: Pin<&mut Commander>, side: i32, lines: i32);

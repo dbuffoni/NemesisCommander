@@ -127,33 +127,35 @@ pub fn summary(options: &InstallOptions) -> String {
 
 /// What F1 shows: what the install does and how to use the result.
 pub fn explanation() -> Vec<String> {
+    // One line per paragraph or list item: each interface wraps it to its
+    // width.
     [
         "Install nmc serve on a server",
         "",
-        "nmc serve is a small server program that lets this computer (and other",
-        "servers) copy, list and checksum files quickly and securely, with",
-        "certificates on both sides. Everything is done from here over SSH:",
+        "nmc serve is a small server program that lets this computer (and other \
+         servers) copy, list and checksum files quickly and securely, with \
+         certificates on both sides. Everything is done from here over SSH:",
         "",
         "  1. creates this computer's certificate authority, if there is none;",
         "  2. checks the server: Linux, same processor, systemd;",
         "  3. copies nmc to ~/.local/bin/nmc on the server;",
-        "  4. issues the server's certificate and copies it to",
-        "     ~/.config/nmc/serve-tls (private key readable by you only);",
-        "  5. adds a systemd user service nmc-serve and starts it (it keeps",
-        "     running after you log out);",
+        "  4. issues the server's certificate and copies it to \
+         ~/.config/nmc/serve-tls (private key readable by you only);",
+        "  5. adds a systemd user service nmc-serve and starts it (it keeps \
+         running after you log out);",
         "  6. connects to scs://server:7443 to prove it works.",
         "",
-        "Nothing needs root. Run it again to update; the certificates are kept.",
-        "Remove it with `nmc serve uninstall me@host`.",
+        "Nothing needs root. Run it again to update; the certificates are kept. \
+         Remove it with `nmc serve uninstall me@host`.",
         "",
         "How to use it: type the server, for example me@nas.lan. Options:",
         "  --root DIR   serve only this folder        --read-only   no changes",
         "  --port N     another TCP port              --renew       new certificate",
         "  --name NAME  name in the certificate (default: the host)",
         "",
-        "Ctrl+T tests first, without installing: it only reads from the server",
-        "and changes nothing. When the install ends, the location scs://… is",
-        "shown: open it from the drive list (it is saved there with F4).",
+        "Ctrl+T tests first, without installing: it only reads from the server \
+         and changes nothing. When the install ends, the location scs://… is \
+         shown: open it from the drive list (it is saved there with F4).",
     ]
     .iter()
     .map(|l| (*l).to_owned())

@@ -81,7 +81,7 @@ A folder with `plugin.json` and the script (`main`, default `main.ts`):
   "description": "Moves the selected files into folders named after their extension",
   "main": "main.ts",
   "commands": [
-    { "id": "sort", "title": "Sort selected files into folders by type", "category": "Files" }
+    { "id": "sort", "title": "Sort selected files into folders by type", "short": "SortType", "category": "Files" }
   ],
   "permissions": { "write": ["$PANEL"] },
   "limits": { "memory": 64, "timeout": 120 }
@@ -89,6 +89,9 @@ A folder with `plugin.json` and the script (`main`, default `main.ts`):
 ```
 
 - `name`: lowercase letters, digits and dashes. Command ids are unique.
+- `short`: a name of 1 to 8 characters for the bottom bar's function-key
+  button. Give every command one; without it the first word of the title is
+  used and `nmc test` warns.
 - `category` (optional): `Files`, `Select`, `Navigate`, `View`, `Tools`,
   `NemesisCommander`; anything else, or none, means `Plugins`.
 - `permissions`: `read` and `write` lists of `$PANEL`, `$OTHER`,

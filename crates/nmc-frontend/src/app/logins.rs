@@ -69,13 +69,13 @@ impl App {
                 "Keep it as it is (use the login ~/.netrc already has)"
             };
             let save = if keyring::available() {
-                "Save the login in the system keyring (GNOME Keyring, KWallet)"
+                format!("Save the login in {}", keyring::store_name())
             } else {
-                "Save the login in the system keyring (needs secret-tool: not found)"
+                format!("Save the login in {} ({})", keyring::store_name(), keyring::missing())
             };
             vec![
                 "Ask for the password every time (kept in memory only)".to_owned(),
-                save.to_owned(),
+                save,
                 keep.to_owned(),
             ]
         };
@@ -282,10 +282,14 @@ impl App {
             Ok(()) => {
                 netrc::set_session(&host, &user, password);
                 self.store_connection(name, uri, replace, false);
-                self.set_status(format!("Login of {user}@{host} saved in the system keyring"));
+                self.set_status(format!(
+                    "Login of {user}@{host} saved in {}",
+                    keyring::store_name()
+                ));
             }
             Err(e) => self.set_error(format!(
-                "Cannot save the login in the keyring: {e}. Choose \"ask every time\" instead"
+                "Cannot save the login in {}: {e}. Choose \"ask every time\" instead",
+                keyring::store_name()
             )),
         }
     }

@@ -156,6 +156,7 @@ mod engine {
                         }
                     }
                     report.checks.push(passed("manifest"));
+                    report.notes.extend(plugin.warnings());
                     Some(Target {
                         main: plugin.dir.join(&plugin.manifest.main),
                         plugin: Some(plugin),

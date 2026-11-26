@@ -6,11 +6,12 @@ members = ["crates/*", "gui"]
 default-members = ["crates/*"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.92"
 repository = "https://github.com/dbuffoni/NemesisCommander"
 license = "MIT"
+authors = ["Daniele Buffoni"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -41,6 +42,7 @@ nmc-ops = { path = "crates/nmc-ops" }
 nmc-transfer = { path = "crates/nmc-transfer" }
 nmc-index = { path = "crates/nmc-index" }
 nmc-archive = { path = "crates/nmc-archive" }
+nmc-libarchive = { path = "crates/nmc-libarchive" }
 nmc-config = { path = "crates/nmc-config" }
 nmc-panel = { path = "crates/nmc-panel" }
 nmc-app = { path = "crates/nmc-app", default-features = false }
@@ -94,7 +96,6 @@ liblzma = { version = "0.4.9", features = ["static"] }
 bzip2 = "0.6.1"
 zstd = "0.14.4"
 sevenz-rust2 = { version = "0.25.0", default-features = false, features = ["compress", "util", "aes256"] }
-unrar = "0.5.8"
 
 # images (viewer)
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }

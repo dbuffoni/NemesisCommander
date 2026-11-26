@@ -62,16 +62,24 @@ impl CommandEntry {
     /// What it does, in a sentence or two (F1 in the command list).
     pub fn help(&self) -> String {
         match &self.target {
-            Target::Action(action) => action.help().to_owned(),
+            Target::Action(action) => {
+                format!("{} Bottom bar button: {}.", action.help(), action.short())
+            }
             Target::Search(name) => format!("Runs the saved search \"{name}\" again."),
             Target::Plugin(PluginChoice::Command { dir, command }) => format!(
-                "Runs the command \"{command}\" of the plugin in {}. Its plugin.json describes it.",
-                dir.display()
+                "Runs the command \"{command}\" of the plugin in {}. Its plugin.json describes it. \
+                 Bottom bar button: {}.",
+                dir.display(),
+                crate::app::plugin_short_name(dir, command)
             ),
             Target::Plugin(PluginChoice::UserScript(path)) => format!(
                 "Runs your script {} on the folders and the selection of the panels.",
                 path.file_name().unwrap_or_default().to_string_lossy()
             ),
+            Target::Plugin(PluginChoice::Store) => {
+                "Lists the plugins of the plugin repositories, to install, update or uninstall."
+                    .to_owned()
+            }
             Target::Plugin(PluginChoice::Script(_)) => {
                 "Runs the script under the cursor on the folders and the selection of the panels."
                     .to_owned()

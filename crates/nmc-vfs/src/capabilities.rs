@@ -34,6 +34,11 @@ bitflags! {
         const TRASH = 1 << 9;
         /// Directory changes can be watched.
         const WATCH = 1 << 10;
+        /// Windows file attributes (read-only, hidden, system) are reported
+        /// and can be set.
+        const OS_FLAGS = 1 << 11;
+        /// Extended attributes can be read and written.
+        const XATTRS = 1 << 12;
     }
 }
 

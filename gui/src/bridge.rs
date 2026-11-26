@@ -234,6 +234,11 @@ impl qobject::Commander {
         self.refresh();
     }
 
+    pub(crate) fn dialog_scrolled(mut self: Pin<&mut Self>, rows: i32) {
+        self.as_mut().rust_mut().with_app(|app| app.dialog_scroll = rows.max(0) as usize);
+        self.refresh();
+    }
+
     pub(crate) fn drag_rows(mut self: Pin<&mut Self>, from: i32, row: i32, to: i32) {
         self.as_mut()
             .rust_mut()

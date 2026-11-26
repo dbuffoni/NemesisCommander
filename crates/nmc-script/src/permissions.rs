@@ -22,6 +22,7 @@ pub enum Access {
 pub struct Permissions {
     read: Vec<VfsPath>,
     write: Vec<VfsPath>,
+    run: Vec<String>,
     all: bool,
 }
 
@@ -46,6 +47,27 @@ impl Permissions {
     pub fn allow_write(&mut self, location: VfsPath) -> &mut Self {
         self.write.push(location);
         self
+    }
+
+    /// Allows starting the program called `name` (a bare name looked up on
+    /// the PATH, never a path). `all` does not include programs.
+    pub fn allow_run(&mut self, name: &str) -> &mut Self {
+        self.run.push(name.to_owned());
+        self
+    }
+
+    /// Checks that the script may start `program`.
+    pub fn check_run(&self, program: &str) -> Result<(), String> {
+        if program.is_empty() || program.contains(['/', '\\']) {
+            return Err(format!(
+                "{program:?}: a program is named without a folder (it is looked up on the PATH)"
+            ));
+        }
+        if self.run.iter().any(|allowed| allowed == program) {
+            Ok(())
+        } else {
+            Err(format!("{program}: the plugin has no permission to run this program"))
+        }
     }
 
     /// Checks `path` for `access`; the error names the missing permission.
@@ -105,6 +127,17 @@ mod tests {
         assert!(p.check(&path("sftp://other/out"), Access::Read).is_err());
         let error = p.check(&path("/etc"), Access::Write).unwrap_err();
         assert!(error.contains("--allow-write"), "{error}");
+    }
+
+    #[test]
+    fn only_named_programs_run() {
+        let mut p = Permissions::none();
+        p.allow_run("bsdtar");
+        assert!(p.check_run("bsdtar").is_ok());
+        assert!(p.check_run("7z").is_err());
+        assert!(p.check_run("/usr/bin/bsdtar").is_err(), "no paths");
+        assert!(p.check_run("").is_err());
+        assert!(Permissions::all().check_run("bsdtar").is_err(), "all is files only");
     }
 
     #[test]

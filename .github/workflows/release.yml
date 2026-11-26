@@ -2,6 +2,7 @@
 #
 # * the AppImage of the main application (x86_64): the window, with Qt
 #   bundled, and the `nmc` program, and
+# * the Windows zip and the macOS disk image (installers.yml), and
 # * the agent: a static Linux `nmc` per architecture, built without the
 #   terminal UI and desktop features, that controllers copy to servers.
 #
@@ -160,10 +161,16 @@ jobs:
           path: nmc-agent-linux-${{ matrix.arch }}
           if-no-files-found: error
 
+  # Windows zip and macOS disk image (see installers.yml).
+  installers:
+    name: Installers
+    uses: ./.github/workflows/installers.yml
+    secrets: inherit
+
   publish:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [appimage, agent]
+    needs: [appimage, agent, installers]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

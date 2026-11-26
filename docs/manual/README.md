@@ -260,6 +260,12 @@ confirmations, `Esc: close` for lists, messages and viewers. A question that
 cannot be undone, such as deleting for good, answers **no** to Enter: only
 **y** says yes (its row says so).
 
+A text that does not fit its window (About, an explanation) scrolls with
+**Up**, **Down**, **PageUp**, **PageDown**, **Home** and **End**; the
+examples under a question scroll with all but Home and End, which move in
+the answer. In the terminal the first and last rows count the lines out of
+sight.
+
 ### Typing and pasting
 
 Every question (new folder, go to, a connection's address, a password…) is a
@@ -560,7 +566,9 @@ two on FAT) match.
 
 Archives open like folders: press Enter on one, browse it, view and copy
 files out of it. Supported: ZIP, 7-Zip, tar (plain, gz, bz2, xz, zst),
-single compressed files (`.gz`, `.xz`, …) and RAR (reading only). Shift+F5
+single compressed files (`.gz`, `.xz`, …) and RAR (reading only, with
+libarchive: RAR 3/4 and 5, solid archives included; encrypted archives and
+multi-volume sets are refused with a message). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
 Shift+F9 unpacks.
 
@@ -858,6 +866,9 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
 
 - `nmc run script.ts` runs a script from the command line, with
   `--allow-read` and `--allow-write` for the paths it may use.
+- Installing, writing and publishing plugins, repositories included, is in
+  [plugins.md](../plugins.md). In short: `nmc plugin available`, `nmc plugin
+  install NAME`, `nmc plugin repo add URL`.
 - Plugins are folders with a `plugin.json` that names their commands and the
   permissions they need (for example `$SELECTION` or `$OTHER`). Install one
   with `nmc plugin install DIR`; the first run asks you to allow its

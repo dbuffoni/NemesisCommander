@@ -54,5 +54,6 @@ sizes and idle memory with `scripts/footprint.py` and fails over budget
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Release builds read RAR archives with the unRAR
-library, which has its own license: see [TODO.md](TODO.md).
+MIT, © 2026 Daniele Buffoni, see [LICENSE](LICENSE). The files in `assets/` (logo,
+icons) are released under the same MIT license. Release builds read RAR archives with
+libarchive (BSD-2-Clause, bundled in `crates/nmc-libarchive`).

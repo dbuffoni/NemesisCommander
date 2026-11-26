@@ -49,6 +49,11 @@
     mkdir: (path) => ops.op_nmc_mkdir(stringArgument("path", path)),
     rename: (from, to) => ops.op_nmc_rename(stringArgument("from", from), stringArgument("to", to)),
     remove: (path) => ops.op_nmc_remove(stringArgument("path", path)),
+    run: (program, args = [], options = {}) => {
+      if (!Array.isArray(args)) throw new TypeError("args must be an array of strings");
+      args.forEach((arg) => stringArgument("argument", arg));
+      return ops.op_nmc_run(stringArgument("program", program), args, options.cwd ?? null);
+    },
     copy: (sources, destination, options = {}) => {
       if (!Array.isArray(sources)) throw new TypeError("sources must be an array of strings");
       sources.forEach((source) => stringArgument("source", source));

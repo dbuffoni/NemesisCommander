@@ -40,6 +40,8 @@ pub enum PluginChoice {
     /// A script of the user's scripts folder: it runs like a script from a
     /// panel, without the question, since the user put it there.
     UserScript(PathBuf),
+    /// "Browse and install plugins…".
+    Store,
 }
 
 /// Script file name endings.
@@ -178,13 +180,8 @@ impl App {
         if let Some(problem) = problems.first() {
             self.set_error(problem.clone());
         }
-        if items.is_empty() {
-            self.set_status(
-                "No plugins installed: add one with `nmc plugin install FOLDER`, \
-                 or put the cursor on a .ts script",
-            );
-            return;
-        }
+        items.push("Browse and install plugins…".to_owned());
+        choices.push(PluginChoice::Store);
         let dialog =
             ChooseDialog::new("Plugins and scripts", items, ChoosePurpose::Plugin(choices));
         let mut dialog = dialog;
@@ -202,6 +199,7 @@ impl App {
                 return self.set_error("Scripts run from local folders only");
             }
             PluginChoice::UserScript(_) => return self.run_plugin_choice(choice),
+            PluginChoice::Store => return self.open_plugin_store(false),
             PluginChoice::Script(script) => {
                 if folder.scheme() != "file" || folder.container().is_some() {
                     self.set_error("Scripts run from local folders only");
@@ -345,6 +343,22 @@ fn rename_answer(text: &str) -> Result<(nmc_ops::RenameRule, String), String> {
     Ok((answer.rule, answer.explanation))
 }
 
+/// The short name of a plugin command, for the bottom bar and the command
+/// list (derived from its title when the manifest has none).
+#[cfg(feature = "scripting")]
+pub fn plugin_short_name(dir: &Path, command: &str) -> String {
+    nmc_script::plugin::Plugin::load(dir)
+        .ok()
+        .and_then(|p| p.command(command).map(|c| c.short_name()))
+        .unwrap_or_default()
+}
+
+/// Without the plugin engine there are no plugin commands.
+#[cfg(not(feature = "scripting"))]
+pub fn plugin_short_name(_dir: &Path, _command: &str) -> String {
+    String::new()
+}
+
 /// A plugin's folder, name and commands (id, title, category).
 type PluginRow = (PathBuf, String, Vec<(String, String, Option<String>)>);
 
@@ -457,6 +471,7 @@ pub(super) async fn run_choice(
             let result = nmc_script::run(&script.display().to_string(), &source, options).await;
             (name, result.map_err(|e| e.to_string()))
         }
+        PluginChoice::Store => ("Plugins".into(), Ok(())),
     }
 }
 
@@ -496,6 +511,8 @@ pub(super) async fn run_choice(
         PluginChoice::Script(script) | PluginChoice::UserScript(script) => {
             script.file_name().unwrap_or_default().to_string_lossy().into_owned()
         }
+        // Opens the plugin list, it runs nothing.
+        PluginChoice::Store => return ("Plugins".into(), Ok(())),
     };
     let script = matches!(choice, PluginChoice::Script(_) | PluginChoice::UserScript(_));
     let folder = if script { panel.to_local_path() } else { None };
@@ -597,6 +614,7 @@ fn nmc_arguments(
                 args.extend(["--selected".into(), selected.to_string()]);
             }
         }
+        PluginChoice::Store => {}
     }
     args.extend(["--panel".into(), panel.to_string(), "--other".into(), other.to_string()]);
     args

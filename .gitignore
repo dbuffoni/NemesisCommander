@@ -8,3 +8,4 @@
 .env
 *.pem
 *.key
+scripts/heavy/apache/htpasswd

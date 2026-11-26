@@ -68,6 +68,8 @@ pub fn entry_from_pb(entry: pb::Entry) -> Entry {
         gid: entry.gid,
         symlink_target: entry.symlink_target,
         link_is_dir: entry.link_is_dir,
+        // Windows attributes do not cross the agent protocol.
+        os_flags: None,
     }
 }
 

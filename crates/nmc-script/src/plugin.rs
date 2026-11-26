@@ -93,6 +93,18 @@ pub struct Manifest {
     /// One line shown to the user.
     #[serde(default)]
     pub description: String,
+    /// Who wrote it (shown in the catalogue).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// Where to read about it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    /// Its licence, as an SPDX name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// The oldest `nmc` version it works with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_nmc: Option<String>,
     /// The script, relative to the plugin folder.
     #[serde(default = "default_main")]
     pub main: String,
@@ -130,6 +142,53 @@ pub struct CommandSpec {
     /// name puts the command under `Plugins`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    /// A name of 1 to 8 characters for a function-key button (shown on the
+    /// bottom bar and in the command list). Missing: the title's first word.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short: Option<String>,
+}
+
+/// The longest short name of a command.
+pub const SHORT_MAX: usize = 8;
+
+impl CommandSpec {
+    /// The short name: the declared one, or the first word of the title cut
+    /// at [`SHORT_MAX`] characters.
+    pub fn short_name(&self) -> String {
+        match &self.short {
+            Some(short) => short.clone(),
+            None => self
+                .title
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_end_matches('…')
+                .chars()
+                .take(SHORT_MAX)
+                .collect(),
+        }
+    }
+}
+
+impl Plugin {
+    /// Warnings about the manifest that do not stop it from loading: the
+    /// commands that have no short name yet.
+    pub fn warnings(&self) -> Vec<String> {
+        self.manifest
+            .commands
+            .iter()
+            .filter(|c| c.short.is_none())
+            .map(|c| {
+                format!(
+                    "command {:?} of {} has no \"short\" name (used on the bottom bar); \
+                     {:?} is derived from its title",
+                    c.id,
+                    self.manifest.name,
+                    c.short_name()
+                )
+            })
+            .collect()
+    }
 }
 
 /// A panel column a plugin fills.
@@ -202,11 +261,23 @@ pub struct Requested {
     /// Everything the user can reach.
     #[serde(default)]
     pub all: bool,
+    /// Programs the plugin may start from the PATH, by bare name
+    /// (`nmc.run`); never through a shell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub run: Vec<String>,
 }
 
 impl Requested {
     /// The request in words, one line per grant, for confirmation dialogs.
     pub fn describe(&self) -> Vec<String> {
+        let mut lines = self.describe_files();
+        if !self.run.is_empty() {
+            lines.push(format!("may run: {}", self.run.join(", ")));
+        }
+        lines
+    }
+
+    fn describe_files(&self) -> Vec<String> {
         if self.all {
             return vec!["read and change every file you can".into()];
         }
@@ -220,7 +291,7 @@ impl Requested {
         let mut lines: Vec<String> =
             self.read.iter().map(|l| format!("read {}", words(l))).collect();
         lines.extend(self.write.iter().map(|l| format!("read and change {}", words(l))));
-        if lines.is_empty() {
+        if lines.is_empty() && self.run.is_empty() {
             lines.push("no access to files".into());
         }
         lines
@@ -310,10 +381,13 @@ impl Plugin {
     /// nothing.
     pub fn permissions(&self, context: &Context) -> Result<Permissions, PluginError> {
         let requested = &self.manifest.permissions;
-        if requested.all {
-            return Ok(Permissions::all());
+        let mut permissions = if requested.all { Permissions::all() } else { Permissions::none() };
+        for program in &requested.run {
+            permissions.allow_run(program);
         }
-        let mut permissions = Permissions::none();
+        if requested.all {
+            return Ok(permissions);
+        }
         for location in &requested.read {
             for path in self.expand(location, context)? {
                 permissions.allow_read(path);
@@ -453,6 +527,18 @@ fn validate(manifest: &Manifest) -> Result<(), String> {
     if ids.iter().any(|id| id.is_empty()) {
         return Err("a command needs an id".into());
     }
+    for command in &manifest.commands {
+        if let Some(short) = &command.short {
+            let length = short.chars().count();
+            if length == 0 || length > SHORT_MAX || short.chars().any(char::is_control) {
+                return Err(format!(
+                    "command {:?}: \"short\" {short:?} must be 1 to {SHORT_MAX} characters \
+                     without control characters",
+                    command.id
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -576,6 +662,33 @@ mod tests {
         let manifest: Manifest = serde_json::from_str(json).map_err(|e| e.to_string())?;
         validate(&manifest)?;
         Ok(manifest)
+    }
+
+    #[test]
+    fn a_command_may_name_its_button() {
+        let ok = manifest(
+            r#"{"name":"x","version":"1","commands":[
+                {"id":"a","title":"Create a file with random content","short":"NewRnd"},
+                {"id":"b","title":"Tidy up this folder now"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(ok.commands[0].short_name(), "NewRnd");
+        assert_eq!(ok.commands[1].short_name(), "Tidy", "derived from the title");
+        let plugin = Plugin { dir: PathBuf::from("/p/x"), manifest: ok };
+        let warnings = plugin.warnings();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("\"b\"") && warnings[0].contains("no \"short\""));
+        let long = manifest(
+            r#"{"name":"x","version":"1","commands":[{"id":"a","title":"A","short":"TooLong99"}]}"#,
+        )
+        .unwrap_err();
+        assert!(long.contains("1 to 8 characters"), "{long}");
+        assert!(
+            manifest(
+                r#"{"name":"x","version":"1","commands":[{"id":"a","title":"A","short":""}]}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]

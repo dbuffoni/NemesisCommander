@@ -13,7 +13,7 @@ so a png could not be written.
 
 ## Decision
 
-- `examples/plugins/random-file` adds the command "Create a file with random
+- `plugins/random-file` adds the command "Create a file with random
   content" (category Files). It writes into the active panel (`$PANEL`, the
   only permission it asks for), picks a free name `random-N.ext` and prints it.
   `main.ts` is numbered in sections (context, helpers, one generator per

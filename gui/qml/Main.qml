@@ -39,7 +39,16 @@ ApplicationWindow {
     // The fonts of the settings; empty or 0 keeps the system's.
     readonly property var fonts: screen ? screen.fonts : null
     font.family: fonts && fonts.family ? fonts.family : Qt.application.font.family
-    font.pointSize: fonts && fonts.size > 0 ? fonts.size : Qt.application.font.pointSize
+    // The size of the settings, but never more than the window can show:
+    // About and the long install questions are about 14 lines of 50 to 60
+    // characters, which fit when a line is at most height / 28 points and
+    // the width allows 48 characters per line at that size (an 800x500
+    // window shows 24 pt as 17 pt). The setting itself is not changed.
+    readonly property real wantedPointSize:
+        fonts && fonts.size > 0 ? fonts.size : Qt.application.font.pointSize
+    readonly property real fittingPointSize:
+        Math.max(8, Math.min(height / 28, width / 48))
+    font.pointSize: Math.min(wantedPointSize, fittingPointSize)
     readonly property font fixedFont: Qt.font({
         family: fonts && fonts.fixed_family ? fonts.fixed_family : "monospace",
         pointSize: font.pointSize
@@ -251,29 +260,40 @@ ApplicationWindow {
                 }
             }
 
-            // Function keys F1-F10. When the window is too narrow for every
-            // label, the least important keys show only their number (words
-            // are never cut): F10 and F9 keep their label longest.
+            // Function keys F1-F10, all as wide. In a narrow window the
+            // number goes above the label, so that the text stays readable;
+            // when even that does not fit, the least important keys show only
+            // their number (words are never cut): F10 and F9 keep their label
+            // longest.
             FontMetrics { id: keyBold; font.family: window.font.family
                 font.pointSize: window.font.pointSize; font.bold: true }
             FontMetrics { id: keyPlain; font: window.font }
             readonly property var keyList: window.screen ? window.screen.keys : []
             readonly property var keyPriority: [10, 9, 1, 3, 5, 6, 7, 8, 4, 2]
-            function fullWidth(key, labelled) {
+            function widthAt(key, labelled, above) {
                 // (the metrics change with the font: depend on them)
-                return 8 + 0 * (keyBold.height + keyPlain.height) + keyBold.advanceWidth("F" + key.number)
-                     + (labelled ? 4 + keyPlain.advanceWidth(key.label) : 0)
+                // Every key is as wide as one labelled "Commands" (the longest
+                // standard label) and only a longer label stretches its own
+                // button, so the bar does not look uneven.
+                var number = keyBold.advanceWidth("F10")
+                var label = labelled ? Math.max(keyPlain.advanceWidth(key.label),
+                                                keyPlain.advanceWidth("Commands")) : 0
+                return 8 + 0 * (keyBold.height + keyPlain.height)
+                     + (above ? Math.max(number, label) : number + (labelled ? 4 + label : 0))
             }
-            // The text shrinks, down to 70%, so that every label fits.
-            readonly property real keyScale: {
+            // How much the text shrinks for every label to fit.
+            function fitting(above) {
                 var all = 0, gaps = 2 * keyList.length
                 for (var i = 0; i < keyList.length; i++)
-                    all += fullWidth(keyList[i], true)
-                return all + gaps <= body.width ? 1
-                    : Math.max(0.4, (body.width - gaps - 4) / all)
+                    all += widthAt(keyList[i], true, above)
+                return all + gaps <= body.width ? 1 : (body.width - gaps - 4) / all
             }
+            // The text never shrinks below 8.5 points.
+            readonly property real keyFloor: Math.min(1, 8.5 / window.font.pointSize)
+            readonly property bool stacked: fitting(false) < keyFloor
+            readonly property real keyScale: Math.max(keyFloor, fitting(stacked))
             function keyWidth(key, labelled) {
-                return fullWidth(key, labelled) * keyScale
+                return widthAt(key, labelled, stacked) * keyScale
             }
             // The numbers of the keys that keep their label.
             readonly property var labelled: {
@@ -305,7 +325,8 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredWidth: body.keyWidth(modelData, withLabel)
                         Layout.minimumWidth: body.keyWidth(modelData, false)
-                        implicitHeight: window.rowHeight
+                        implicitHeight: Math.max(window.rowHeight,
+                                                 keyText.implicitHeight + 4)
                         color: palette.button
                         border.color: window.lineColor
                         radius: 2
@@ -318,10 +339,12 @@ ApplicationWindow {
                                 keys.forceActiveFocus()
                             }
                         }
-                        Row {
+                        Grid {
+                            id: keyText
                             anchors.verticalCenter: parent.verticalCenter
                             x: 4
-                            spacing: 4
+                            columns: body.stacked ? 1 : 2
+                            columnSpacing: 4
                             Label {
                                 text: "F" + modelData.number
                                 font.bold: true
@@ -343,6 +366,7 @@ ApplicationWindow {
             anchors.fill: parent
             view: window.screen ? window.screen.overlay : null
             conflict: window.screen ? window.screen.conflict : null
+            scroll: window.screen ? window.screen.dialog_scroll : 0
         }
     }
 }

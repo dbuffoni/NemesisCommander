@@ -18,7 +18,7 @@ use nmc_frontend::icons::icon_for;
 use nmc_frontend::preview::Zoom;
 use nmc_frontend::view::{
     column_headers, commands_view, describe, entry_details, git_mark, git_of, job_how, job_line,
-    job_route, jobs_progress, jobs_summary, key_bar_label, panel_footer, scroll_offset, size_text,
+    job_route, jobs_progress, jobs_summary, key_bar_action, panel_footer, scroll_offset, size_text,
     tab_title,
 };
 use nmc_frontend::{
@@ -82,7 +82,12 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         match overlay {
             Overlay::Help => draw_help(frame, app),
             Overlay::Commands(palette) => draw_commands(frame, app, palette),
-            Overlay::Input(dialog) => draw_input(frame, dialog, &app.with_back(dialog.hint())),
+            Overlay::Input(dialog) => {
+                let hint = app.with_back(dialog.hint());
+                let mut scroll = app.dialog_scroll;
+                draw_input(frame, dialog, &hint, &mut scroll);
+                app.dialog_scroll = scroll;
+            }
             Overlay::Confirm(dialog) => {
                 let mut lines: Vec<Line> =
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
@@ -94,6 +99,12 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 let page = draw_choose(frame, dialog, &app.with_back(dialog.footer.clone()));
                 app.page = page;
             }
+            Overlay::Message(dialog) if !dialog.is_log() => {
+                let hint = app.with_back(dialog.hint());
+                let mut scroll = app.dialog_scroll;
+                draw_text(frame, dialog, &hint, &mut scroll);
+                app.dialog_scroll = scroll;
+            }
             Overlay::Message(dialog) => {
                 let mut lines: Vec<Line> =
                     dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
@@ -102,21 +113,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 // A log keeps one size while lines are added to it.
                 let log_rows = (dialog.busy || dialog.lines.len() > 10)
                     .then(|| frame.area().height.saturating_sub(6).min(22) as usize);
-                if dialog.logo {
-                    // The logo takes the first rows of the box.
-                    let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
-                    lines.splice(0..0, blank);
-                    let area = draw_box(frame, &dialog.title, lines);
-                    let top = Rect::new(
-                        area.x + 1,
-                        area.y + 1,
-                        area.width.saturating_sub(2),
-                        about::LOGO_ROWS,
-                    );
-                    draw_image(frame, about::logo(), Zoom::default(), top);
-                } else {
-                    draw_box_fixed(frame, &dialog.title, lines, log_rows);
-                }
+                draw_box_fixed(frame, &dialog.title, lines, log_rows);
             }
             Overlay::Viewer(viewer) => {
                 let page = draw_viewer(frame, viewer, frame.area());
@@ -439,28 +436,24 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// A label that fits five columns: the short word for the long ones, else
-/// the text is cut by `fit` with a `…`.
-fn narrow_label(label: &str) -> &str {
-    match label {
-        "Commands" => "Cmds",
-        "Rename" => "Ren",
-        "Delete" => "Del",
-        "Search" => "Find",
-        "Unpack" => "Unpk",
-        "Drives" => "Disks",
-        "Multi-rename" | "Multi-rename…" => "MRen",
-        other => other,
-    }
+/// The columns of each label on the key bar: as many as fit (up to the 8 of
+/// the longest short name), five on a narrow screen where the shorter
+/// `narrow` names are used. With the "F" and the number in front, ten
+/// labels of six letters fit 91 columns.
+fn key_bar_width(columns: usize) -> usize {
+    let fits = |width: usize| 9 * (2 + width + 1) + (3 + width + 1) <= columns;
+    (6..=8).rev().find(|w| fits(*w)).unwrap_or(5)
 }
 
 fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans = Vec::new();
     for n in 1..=10u8 {
-        let label = key_bar_label(app, n);
-        // With the "F" in front, ten labels fit 80 columns at five letters.
-        let width = if area.width < 90 { 5 } else { 6 };
-        let label = if width < 6 { narrow_label(label) } else { label };
+        let width = key_bar_width(area.width as usize);
+        let label = match key_bar_action(app, n) {
+            Some(action) if width < 6 => action.narrow(),
+            Some(action) => action.short(),
+            None => "",
+        };
         let label = fit(label, width).trim_end().to_owned();
         spans.push(Span::raw(format!("F{n}")));
         spans.push(Span::styled(
@@ -512,6 +505,118 @@ pub fn hard_wrap(text: &str, width: usize) -> Vec<String> {
         at = end;
     }
     rows
+}
+
+/// `rows` cut to `room`, scrolled `offset` rows down, with what is out of
+/// sight counted in the first and last row. `offset` is kept in range.
+fn scrolled_rows<'a>(mut rows: Vec<Line<'a>>, room: usize, offset: &mut usize) -> Vec<Line<'a>> {
+    let total = rows.len();
+    if total <= room || room < 3 {
+        *offset = 0;
+        rows.truncate(room);
+        return rows;
+    }
+    // At the end one row counts the earlier lines and the rest are shown.
+    *offset = (*offset).min(total - room + 1);
+    let start = *offset;
+    let mut shown = Vec::with_capacity(room);
+    if start > 0 {
+        shown.push(Line::styled(format!("… ({start} earlier lines)"), dim()));
+    }
+    let mut take = room - shown.len();
+    let more = total - start > take;
+    if more {
+        take -= 1;
+    }
+    shown.extend(rows.drain(start..start + take));
+    if more {
+        let left = total - start - take;
+        shown.push(Line::styled(format!("… ({left} more lines)"), dim()));
+    }
+    shown
+}
+
+/// The widest a paragraph of a message is set, however wide the window.
+const PROSE_WIDTH: usize = 72;
+
+/// A line of a message as rows: text breaks between words, and what
+/// continues a list item stays under its text. A row of a table (a run of
+/// spaces after its start) is cut where the window ends.
+fn wrap_message(line: &str, width: usize) -> Vec<String> {
+    let text = line.trim_start_matches(' ');
+    let indent = line.len() - text.len();
+    if text.trim_end().contains("  ") {
+        return hard_wrap(line, width);
+    }
+    let width = width.clamp(8, PROSE_WIDTH);
+    // "4. issues…" continues under "issues".
+    let number = text
+        .split_once(". ")
+        .filter(|(n, _)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(0, |(n, _)| n.len() + 2);
+    let under = " ".repeat((indent + number).min(width / 2));
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = " ".repeat(indent.min(width / 2));
+    let mut empty = true;
+    for word in text.split_whitespace() {
+        if !empty && row.chars().count() + 1 + word.chars().count() > width {
+            rows.push(std::mem::replace(&mut row, under.clone()));
+            empty = true;
+        }
+        if !empty {
+            row.push(' ');
+        }
+        row.push_str(word);
+        empty = false;
+    }
+    rows.push(row);
+    // A word longer than the row (an address) is cut.
+    rows.iter().flat_map(|r| hard_wrap(r, width)).collect()
+}
+
+/// A key row on as many lines as it needs, broken between its parts.
+fn wrap_keys(hint: &str, width: usize) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    for part in hint.split(nmc_frontend::hints::SEP) {
+        match rows.last_mut() {
+            Some(row) if row.chars().count() + 4 + part.chars().count() <= width => {
+                row.push_str(nmc_frontend::hints::SEP);
+                row.push_str(part);
+            }
+            _ => rows.push(part.to_owned()),
+        }
+    }
+    rows
+}
+
+/// A message to read from its start: the keys scroll it and the key row
+/// stays. The logo (About) is drawn when it fits above the whole text.
+fn draw_text(
+    frame: &mut Frame,
+    dialog: &nmc_frontend::MessageDialog,
+    hint: &str,
+    scroll: &mut usize,
+) {
+    let screen = frame.area();
+    let inner_width = box_width(screen).saturating_sub(4) as usize;
+    let mut body: Vec<Line> =
+        dialog.lines.iter().flat_map(|l| wrap_message(l, inner_width)).map(Line::raw).collect();
+    let hint = wrap_keys(hint, inner_width);
+    let room = (screen.height.saturating_sub(4) as usize).saturating_sub(hint.len() + 1);
+    let logo = dialog.logo && body.len() + usize::from(about::LOGO_ROWS) <= room;
+    if logo {
+        // The logo takes the first rows of the box.
+        let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
+        body.splice(0..0, blank);
+    }
+    let mut lines = scrolled_rows(body, room, scroll);
+    lines.push(Line::raw(""));
+    lines.extend(hint.into_iter().map(|row| Line::styled(row, dim())));
+    let area = draw_box(frame, &dialog.title, lines);
+    if logo {
+        let top = Rect::new(area.x + 1, area.y + 1, area.width.saturating_sub(2), about::LOGO_ROWS);
+        draw_image(frame, about::logo(), Zoom::default(), top);
+    }
 }
 
 /// A window with `lines` (wrapped to its width) and a key line under them.
@@ -748,7 +853,7 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
     lines
 }
 
-fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str) {
+fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str, scroll: &mut usize) {
     let screen = frame.area();
     let width = box_width(screen);
     let inner_width = width.saturating_sub(2) as usize;
@@ -757,12 +862,9 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str) {
     let prompt: Vec<String> =
         wrap(&dialog.prompt, inner_width).iter().flat_map(|l| hard_wrap(l, inner_width)).collect();
     let reserved = dialog.purpose.preview_rows();
-    let preview: Vec<String> = dialog
-        .preview
-        .iter()
-        .flat_map(|l| hard_wrap(l, inner_width))
-        .take(reserved.max(1))
-        .collect();
+    let preview: Vec<String> =
+        dialog.preview.iter().flat_map(|l| hard_wrap(l, inner_width)).collect();
+    let hint = hard_wrap(hint, inner_width);
     // A path longer than the field is shown whole below it.
     let field_width = inner_width.saturating_sub(2);
     let overflow = dialog.shown().text().chars().count() > field_width;
@@ -773,7 +875,7 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str) {
     };
     let full_rows = if dialog.purpose.is_path() { full.len().max(1) } else { 0 };
     let preview_rows = reserved + 1;
-    let height = (5 + prompt.len() + full_rows + preview_rows) as u16;
+    let height = (4 + hint.len() + prompt.len() + full_rows + preview_rows) as u16;
     let height = height.min(screen.height.saturating_sub(2));
     let area = centered(screen, width, height);
     frame.render_widget(Clear, area);
@@ -791,13 +893,15 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str) {
         }
     }
     lines.push(Line::raw(""));
-    for i in 0..reserved {
-        lines.push(Line::raw(preview.get(i).cloned().unwrap_or_default()));
-    }
+    // A short screen gives the lines under the field what is left; the
+    // keys scroll through the ones that do not fit.
+    let used = lines.len() + 1 + hint.len();
+    let room = reserved.min(usize::from(inner.height).saturating_sub(used));
+    let mut shown = scrolled_rows(preview.into_iter().map(Line::raw).collect(), room, scroll);
+    shown.resize(room, Line::raw(""));
+    lines.extend(shown);
     lines.push(Line::raw(""));
-    for row in hard_wrap(hint, inner_width) {
-        lines.push(Line::styled(row, dim()));
-    }
+    lines.extend(hint.into_iter().map(|row| Line::styled(row, dim())));
     frame.render_widget(Paragraph::new(lines), inner);
     frame.set_cursor_position(Position {
         x: inner.x + 1 + column as u16,

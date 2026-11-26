@@ -62,6 +62,9 @@ pub struct SetAttributes {
     pub permissions: Option<u32>,
     /// New modification time.
     pub modified: Option<SystemTime>,
+    /// New Windows attributes (`entry::os_flags` bits).
+    #[serde(default)]
+    pub os_flags: Option<u32>,
 }
 
 /// Checksum algorithms understood across the application.
@@ -135,6 +138,20 @@ pub trait Provider: Send + Sync + 'static {
     async fn rename(&self, from: &VfsPath, to: &VfsPath) -> Result<()> {
         let _ = to;
         Err(self.unsupported_on(from, "rename"))
+    }
+
+    /// Extended attributes of `path` (macOS and Linux file systems), name and
+    /// value. Only providers with [`Capabilities::XATTRS`] have any.
+    async fn read_xattrs(&self, path: &VfsPath) -> Result<Vec<(String, Vec<u8>)>> {
+        let _ = path;
+        Ok(Vec::new())
+    }
+
+    /// Sets extended attributes on `path`; the ones the file system refuses
+    /// are skipped. Only providers with [`Capabilities::XATTRS`] do anything.
+    async fn write_xattrs(&self, path: &VfsPath, attributes: &[(String, Vec<u8>)]) -> Result<()> {
+        let _ = (path, attributes);
+        Ok(())
     }
 
     /// Changes permissions and/or modification time.

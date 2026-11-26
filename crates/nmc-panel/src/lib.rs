@@ -18,5 +18,7 @@ pub mod format;
 mod panel;
 mod workspace;
 
-pub use panel::{BRANCH_LIMIT, Listing, LoadRequest, PARENT, Panel, SelectionSummary, load};
+pub use panel::{
+    BRANCH_LIMIT, Listing, LoadRequest, PARENT, Panel, SelectionSummary, load, set_hide_ds_store,
+};
 pub use workspace::{Side, SideId, Workspace};

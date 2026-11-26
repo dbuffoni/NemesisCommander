@@ -54,6 +54,8 @@ pub enum Field {
     Terminal,
     /// Show hidden files.
     ShowHidden,
+    /// Never list `.DS_Store`.
+    HideDsStore,
     /// Initial sort column.
     Sort,
     /// Initial sort direction.
@@ -144,12 +146,13 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 26] = [
+    pub const ALL: [Field; 27] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
         Field::Terminal,
         Field::ShowHidden,
+        Field::HideDsStore,
         Field::Sort,
         Field::Descending,
         Field::HumanSizes,
@@ -178,9 +181,8 @@ impl Field {
         use Field::*;
         match self {
             ConfirmDelete | UseTrash | Editor | Terminal => "General",
-            ShowHidden | Sort | Descending | HumanSizes | ArrowNavigation | GitStatus | Icons => {
-                "Panels"
-            }
+            ShowHidden | HideDsStore | Sort | Descending | HumanSizes | ArrowNavigation
+            | GitStatus | Icons => "Panels",
             ParallelJobs | ParallelFiles | AutoParallelism | Profile | KeepStats | Verify
             | VerifyRemoteFast | Conflict | BandwidthLimit | Retries => "Transfers",
             Wrap | TabWidth | HexAbove => "Viewer",
@@ -197,6 +199,7 @@ impl Field {
             Editor => "Editor (empty: $EDITOR or the system's)",
             Terminal => "Terminal command, {dir} is the folder (empty: the system's)",
             ShowHidden => "Show hidden files",
+            HideDsStore => "Always hide .DS_Store files",
             Sort => "Sort by",
             Descending => "Largest, latest or last first",
             HumanSizes => "Sizes as KiB, MiB, GiB",
@@ -226,8 +229,10 @@ impl Field {
     pub fn kind(self) -> FieldKind {
         use Field::*;
         match self {
-            ConfirmDelete | UseTrash | ShowHidden | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Icons | Wrap | VerifyRemoteFast | KeepStats => FieldKind::Toggle,
+            ConfirmDelete | UseTrash | ShowHidden | HideDsStore | Descending | HumanSizes
+            | ArrowNavigation | GitStatus | Icons | Wrap | VerifyRemoteFast | KeepStats => {
+                FieldKind::Toggle
+            }
             Sort | Verify | Conflict | AutoParallelism | Profile => FieldKind::Choice,
             Editor | Terminal => FieldKind::Text,
             FontFamily | FixedFontFamily => FieldKind::Font,
@@ -252,6 +257,7 @@ impl Field {
             Editor => g.editor.clone(),
             Terminal => g.terminal.clone(),
             ShowHidden => on(p.show_hidden),
+            HideDsStore => on(p.hide_ds_store),
             Sort => name_of(&SORTS, p.sort),
             Descending => on(p.descending),
             HumanSizes => on(p.human_sizes),
@@ -286,6 +292,7 @@ impl Field {
             ConfirmDelete => g.confirm_delete ^= true,
             UseTrash => g.use_trash ^= true,
             ShowHidden => p.show_hidden ^= true,
+            HideDsStore => p.hide_ds_store ^= true,
             Descending => p.descending ^= true,
             HumanSizes => p.human_sizes ^= true,
             ArrowNavigation => p.arrow_navigation ^= true,

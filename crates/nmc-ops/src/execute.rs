@@ -14,7 +14,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::conflict::{Conflict, ConflictAction, ConflictPolicy, ConflictResolver};
 use crate::copy::{CopyFileOptions, Throttle, VerifyMode, copy_file, verify_copy};
-use crate::plan::{Plan, PlanOptions, Step, plan_copy, plan_delete};
+use crate::plan::{Plan, PlanOptions, Step, XattrPolicy, plan_copy, plan_delete};
 
 /// Progress notifications emitted while a plan runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -381,9 +381,13 @@ impl Executor {
         self.emit(OpEvent::StepStarted { index });
         let result = match step {
             Step::CreateDir { path } => self.create_dir(path).await,
-            Step::CopyFile { from, to, modified, permissions, .. } => {
-                let attributes = SetAttributes { modified: *modified, permissions: *permissions };
-                self.copy(from, to, &attributes).await
+            Step::CopyFile { from, to, modified, permissions, os_flags, xattrs, .. } => {
+                let attributes = SetAttributes {
+                    modified: *modified,
+                    permissions: *permissions,
+                    os_flags: *os_flags,
+                };
+                self.copy(from, to, &attributes, *xattrs).await
             }
             Step::CopySymlink { from, to, target } => self.copy_symlink(from, to, target).await,
             Step::SetAttributes { path, attributes } => {
@@ -491,6 +495,7 @@ impl Executor {
         from: &VfsPath,
         to: &VfsPath,
         attributes: &SetAttributes,
+        xattrs: XattrPolicy,
     ) -> Result<StepOutcome> {
         let src = self.registry.provider_for(from).await?;
         let dst = self.registry.provider_for(to).await?;
@@ -529,6 +534,7 @@ impl Executor {
         if !verified {
             return Ok(StepOutcome::Failed(format!("{target}: verification failed")));
         }
+        copy_xattrs(src.as_ref(), from, dst.as_ref(), &target, xattrs).await;
         apply_attributes(dst.as_ref(), &target, attributes).await?;
         Ok(StepOutcome::Done)
     }
@@ -566,7 +572,7 @@ impl Executor {
         // The destination cannot store links: copy what the link points to.
         // `read` follows the link on providers that have links.
         match src.read(from, 0).await {
-            Ok(_) => self.copy(from, to, &SetAttributes::default()).await,
+            Ok(_) => self.copy(from, to, &SetAttributes::default(), XattrPolicy::Keep).await,
             Err(_) => Ok(StepOutcome::Failed(format!(
                 "{from}: link cannot be recreated on {} and does not point to a file",
                 dst.scheme()
@@ -668,6 +674,34 @@ async fn merge_plan(registry: &ProviderRegistry, from: &VfsPath, to: &VfsPath) -
     plan_copy(registry, &children, to, PlanOptions::default()).await
 }
 
+/// The macOS "downloaded from the internet" flag.
+const QUARANTINE: &str = "com.apple.quarantine";
+
+/// Copies the extended attributes of `from` to `to` when both file systems
+/// have them and the policy allows. A failure never fails the copy: the data
+/// is already there and attributes are a convenience.
+async fn copy_xattrs(
+    src: &dyn Provider,
+    from: &VfsPath,
+    dst: &dyn Provider,
+    to: &VfsPath,
+    policy: XattrPolicy,
+) {
+    if policy == XattrPolicy::Drop
+        || !src.capabilities().contains(Capabilities::XATTRS)
+        || !dst.capabilities().contains(Capabilities::XATTRS)
+    {
+        return;
+    }
+    let Ok(mut attributes) = src.read_xattrs(from).await else { return };
+    if policy == XattrPolicy::StripQuarantine {
+        attributes.retain(|(name, _)| name != QUARANTINE);
+    }
+    if !attributes.is_empty() {
+        let _ = dst.write_xattrs(to, &attributes).await;
+    }
+}
+
 /// Applies the attributes the destination supports and ignores the rest.
 async fn apply_attributes(
     provider: &dyn Provider,
@@ -678,6 +712,7 @@ async fn apply_attributes(
     let supported = SetAttributes {
         modified: wanted.modified.filter(|_| caps.contains(Capabilities::SET_MTIME)),
         permissions: wanted.permissions.filter(|_| caps.contains(Capabilities::POSIX_PERMISSIONS)),
+        os_flags: wanted.os_flags.filter(|_| caps.contains(Capabilities::OS_FLAGS)),
     };
     if supported == SetAttributes::default() {
         return Ok(());
@@ -948,6 +983,8 @@ mod tests {
             size: 4,
             modified: None,
             permissions: None,
+            os_flags: None,
+            xattrs: Default::default(),
         };
         Plan { steps: vec![step], total_bytes: 4, total_files: 1, warnings: vec![] }
     }

@@ -63,6 +63,11 @@ impl AppPaths {
         self.data_dir.join("plugin-lock.json")
     }
 
+    /// Catalogues of the plugin repositories, kept so browsing works offline.
+    pub fn plugin_catalog_dir(&self) -> PathBuf {
+        self.data_dir.join("plugin-catalog")
+    }
+
     /// The user's own scripts (`.ts`, `.js`), listed in the command list.
     pub fn scripts_dir(&self) -> PathBuf {
         self.data_dir.join("scripts")

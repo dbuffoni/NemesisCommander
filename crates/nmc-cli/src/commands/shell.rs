@@ -90,6 +90,8 @@ mod tests {
         }
     }
 
+    // Needs bash and a Unix file mode: not on Windows.
+    #[cfg(unix)]
     #[test]
     fn the_bash_function_changes_the_folder_for_real() {
         // A fake `nmc` that writes /tmp as the folder it ended in.

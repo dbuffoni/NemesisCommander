@@ -24,8 +24,18 @@ use tokio::io::AsyncReadExt;
 pub const VIEW_LIMIT: u64 = 16 * 1024 * 1024;
 /// The quick view panel loads only the beginning of a file.
 pub const QUICK_VIEW_LIMIT: u64 = 64 * 1024;
-/// Bytes shown per hex dump row.
+/// Bytes shown per hex dump row in a wide window.
 pub const HEX_ROW: usize = 16;
+/// Bytes per row in a narrow one (large fonts in a small window).
+pub const HEX_ROW_NARROW: usize = 8;
+/// Columns a full row needs: offset, 16 bytes in hex, the gap, the text.
+const HEX_WIDE_COLUMNS: usize = 8 + 2 + HEX_ROW * 3 + 1 + 1 + HEX_ROW;
+
+/// Bytes per hex row for a window `columns` wide: 16 when the whole row
+/// fits, else 8, so the text column is never cut.
+pub fn hex_width_for(columns: usize) -> usize {
+    if columns == 0 || columns >= HEX_WIDE_COLUMNS { HEX_ROW } else { HEX_ROW_NARROW }
+}
 /// Decoded images are reduced to fit this many pixels per side, which is
 /// more than any terminal shows and keeps memory use small.
 const IMAGE_SIDE: u32 = 1024;
@@ -152,17 +162,17 @@ pub fn text_lines(data: &[u8], tab_width: usize) -> Vec<String> {
         .collect()
 }
 
-/// One hex dump row: offset, 16 bytes in hex, and their printable form.
-pub fn hex_row(data: &[u8], row: usize) -> String {
-    let start = row * HEX_ROW;
-    let bytes = &data[start.min(data.len())..(start + HEX_ROW).min(data.len())];
+/// One hex dump row: offset, `width` bytes in hex, and their printable form.
+pub fn hex_row(data: &[u8], row: usize, width: usize) -> String {
+    let start = row * width;
+    let bytes = &data[start.min(data.len())..(start + width).min(data.len())];
     let mut line = format!("{start:08x}  ");
-    for i in 0..HEX_ROW {
+    for i in 0..width {
         match bytes.get(i) {
             Some(b) => line.push_str(&format!("{b:02x} ")),
             None => line.push_str("   "),
         }
-        if i == 7 {
+        if i == 7 && width > 8 {
             line.push(' ');
         }
     }
@@ -170,13 +180,13 @@ pub fn hex_row(data: &[u8], row: usize) -> String {
     line.extend(
         bytes.iter().map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' }),
     );
-    line.extend(std::iter::repeat_n(' ', HEX_ROW - bytes.len()));
+    line.extend(std::iter::repeat_n(' ', width - bytes.len()));
     line
 }
 
 /// Number of hex rows for `len` bytes.
-pub fn hex_rows(len: usize) -> usize {
-    len.div_ceil(HEX_ROW).max(1)
+pub fn hex_rows(len: usize, width: usize) -> usize {
+    len.div_ceil(width).max(1)
 }
 
 /// State of the full-screen viewer.
@@ -193,6 +203,8 @@ pub struct Viewer {
     pub lines: Vec<String>,
     /// Hex dump instead of text.
     pub hex: bool,
+    /// Bytes per hex row (see [`hex_width_for`]).
+    pub hex_width: usize,
     /// Columns per tab stop, for making `lines` later.
     pub tab_width: usize,
     /// Wrap long text lines.
@@ -249,6 +261,7 @@ impl Viewer {
             tab_width: 8,
             wrap,
             scroll: 0,
+            hex_width: HEX_ROW,
             error: None,
             image: None,
             kind,
@@ -415,6 +428,12 @@ impl Viewer {
     /// Lays a formatted document out for `columns` (front ends call this
     /// with their width before drawing).
     pub fn layout(&mut self, columns: usize) {
+        let width = hex_width_for(columns);
+        if width != self.hex_width {
+            // Keep the first visible byte in view when the rows change.
+            self.scroll = self.scroll * self.hex_width / width;
+            self.hex_width = width;
+        }
         if let (Some(lines), Some(rich)) = (&self.report, &mut self.rich) {
             if rich.width != columns {
                 rich.lines = lines.to_vec();
@@ -551,7 +570,7 @@ impl Viewer {
     pub fn row_count(&self) -> usize {
         match &self.data {
             None => 0,
-            Some(data) if self.hex => hex_rows(data.len()),
+            Some(data) if self.hex => hex_rows(data.len(), self.hex_width),
             Some(_) if self.image.is_some() || self.pdf.is_some() || self.model.is_some() => 0,
             Some(_) if self.rich.is_some() => self.rich.as_ref().map_or(0, |r| r.lines.len()),
             Some(_) => self.lines.len(),
@@ -584,14 +603,14 @@ impl Viewer {
             self.tint();
         }
         let offset = if self.hex {
-            self.scroll * HEX_ROW
+            self.scroll * self.hex_width
         } else {
             // Byte offset of the first visible line.
             self.lines.iter().take(self.scroll).map(|l| l.len() + 1).sum::<usize>()
         };
         self.hex = !self.hex;
         self.scroll = if self.hex {
-            offset / HEX_ROW
+            offset / self.hex_width
         } else {
             let mut seen = 0;
             self.lines
@@ -610,8 +629,8 @@ impl Viewer {
         match &self.data {
             None => Vec::new(),
             Some(data) if self.hex => (self.scroll
-                ..(self.scroll + count).min(hex_rows(data.len())))
-                .map(|row| hex_row(data, row))
+                ..(self.scroll + count).min(hex_rows(data.len(), self.hex_width)))
+                .map(|row| hex_row(data, row, self.hex_width))
                 .collect(),
             Some(_) if self.rich.is_some() => {
                 self.visible_rich(count).iter().map(line_text).collect()
@@ -642,12 +661,29 @@ mod tests {
     #[test]
     fn hex_rows_have_a_fixed_layout() {
         let data: Vec<u8> = (0u8..20).collect();
-        assert_eq!(hex_rows(data.len()), 2);
-        let first = hex_row(&data, 0);
+        assert_eq!(hex_rows(data.len(), HEX_ROW), 2);
+        let first = hex_row(&data, 0, HEX_ROW);
         assert!(first.starts_with("00000000  00 01 02 03 04 05 06 07  08 09"));
-        let second = hex_row(&data, 1);
+        let second = hex_row(&data, 1, HEX_ROW);
         assert!(second.starts_with("00000010  10 11 12 13"));
         assert_eq!(first.len(), second.len(), "short rows are padded");
+    }
+
+    #[test]
+    fn a_narrow_window_shows_eight_bytes_per_row() {
+        assert_eq!(hex_width_for(0), HEX_ROW, "no width known yet");
+        assert_eq!(hex_width_for(100), HEX_ROW);
+        assert_eq!(hex_width_for(60), HEX_ROW_NARROW);
+        let data: Vec<u8> = (0u8..20).collect();
+        let row = hex_row(&data, 1, HEX_ROW_NARROW);
+        assert!(row.starts_with("00000008  08 09 0a 0b 0c 0d 0e 0f "), "{row}");
+        assert!(row.chars().count() <= 60, "fits 60 columns: {row}");
+        let mut viewer = Viewer::new(VfsPath::parse("mem:///x").unwrap(), false);
+        viewer.set_data(vec![0; 400], false, 4);
+        viewer.toggle_hex();
+        viewer.scroll = 10;
+        viewer.layout(60);
+        assert_eq!((viewer.hex_width, viewer.scroll), (8, 20), "the same bytes stay on top");
     }
 
     #[test]

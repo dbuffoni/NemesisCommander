@@ -28,7 +28,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 use crate::dialogs::{
-    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputDialog, InputPurpose,
+    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, Forget, InputDialog, InputPurpose,
     JobsView, JumpRow, MessageDialog, Overlay, PendingConflict, Secret,
 };
 use crate::input::KeyPress;
@@ -40,14 +40,16 @@ mod features;
 mod generate;
 mod logins;
 mod palette;
+mod plugin_store;
 mod plugin_views;
 mod plugins;
 mod pointer;
 mod settings_screen;
 mod terminal;
 
+pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
-pub use plugins::PluginChoice;
+pub use plugins::{PluginChoice, plugin_short_name};
 
 /// Results of background work, delivered to [`App::handle_event`].
 #[derive(Debug)]
@@ -148,6 +150,20 @@ pub enum AppEvent {
         /// The result for the status line.
         message: String,
     },
+    /// The plugin list was loaded.
+    PluginStore {
+        /// The rows and their text.
+        rows: Vec<(String, StoreRow)>,
+        /// What went wrong with some repositories.
+        problems: Vec<String>,
+    },
+    /// A plugin repository to add was checked.
+    PluginRepoChecked {
+        /// The repository.
+        repository: nmc_config::PluginRepository,
+        /// How many plugins it lists, or why it cannot be used.
+        result: Result<usize, String>,
+    },
     /// A plugin command or script ended.
     ScriptDone {
         /// What ran, for messages.
@@ -178,6 +194,8 @@ impl AppEvent {
                 | AppEvent::Loaded { .. }
                 | AppEvent::Rendered { .. }
                 | AppEvent::ScriptDone { .. }
+                | AppEvent::PluginStore { .. }
+                | AppEvent::PluginRepoChecked { .. }
                 | AppEvent::AiRenameDone { .. }
                 | AppEvent::SyncCopies { .. }
                 | AppEvent::Compared { .. }
@@ -204,6 +222,32 @@ pub struct External {
     /// The file of names being edited for "rename in the editor", and the
     /// items they belong to.
     pub rename: Option<(PathBuf, Vec<VfsPath>)>,
+}
+
+/// Rows PageUp and PageDown move the text of a dialog: less than the
+/// smallest window shows, so that nothing is jumped over.
+const DIALOG_PAGE: usize = 6;
+
+/// Where `press` scrolls the text of `overlay` to, from `at`; `None` when
+/// the key is not for scrolling it. Messages (not logs, which follow their
+/// end) scroll with the arrows, PageUp/PageDown and Home/End; the lines
+/// under a typed answer with the arrows and PageUp/PageDown (Home and End
+/// move in the answer).
+fn scrolled_dialog(overlay: &Overlay, press: &KeyPress, at: usize) -> Option<usize> {
+    let message = match overlay {
+        Overlay::Message(dialog) if !dialog.is_log() => true,
+        Overlay::Input(_) => false,
+        _ => return None,
+    };
+    Some(match press.plain()? {
+        Key::Up => at.saturating_sub(1),
+        Key::Down => at.saturating_add(1),
+        Key::PageUp => at.saturating_sub(DIALOG_PAGE),
+        Key::PageDown => at.saturating_add(DIALOG_PAGE),
+        Key::Home if message => 0,
+        Key::End if message => usize::MAX,
+        _ => return None,
+    })
 }
 
 /// What identifies a question of a series: a window and what it asks.
@@ -313,6 +357,9 @@ pub struct App {
     pub scroll: [usize; 2],
     /// Rows per page, measured by the renderer.
     pub page: usize,
+    /// Rows the text of the open dialog is scrolled down. The keys move it;
+    /// the renderer, which knows how much text there is, keeps it in range.
+    pub dialog_scroll: usize,
     /// Columns of text the viewer shows, measured by the renderer
     /// (formatted documents are laid out for it).
     pub columns: usize,
@@ -613,6 +660,7 @@ impl App {
 
         let panels = &context.config.panels;
         let sort = SortSpec { key: panels.sort, descending: panels.descending };
+        nmc_panel::set_hide_ds_store(panels.hide_ds_store);
         let (workspace, requests) = Workspace::new(left, right, sort, panels.show_hidden);
         let status = (!context.warnings.is_empty())
             .then(|| Status { text: context.warnings.join("; "), error: true });
@@ -656,6 +704,7 @@ impl App {
             quick_view: None,
             scroll: [0, 0],
             page: 20,
+            dialog_scroll: 0,
             columns: 80,
             events,
             tasks: 0,
@@ -1060,6 +1109,7 @@ impl App {
                 }
             }
             AppEvent::Show(overlay) => {
+                self.dialog_scroll = 0;
                 // "Measuring…" and the like are over once the window is there.
                 if self.status.as_ref().is_some_and(|s| !s.error && s.text.ends_with('…')) {
                     self.status = None;
@@ -1124,6 +1174,10 @@ impl App {
                 Ok((rule, explanation)) => self.confirm_renames(paths, &rule, Some(explanation)),
                 Err(error) => self.set_error(format!("Multi-rename with AI: {error}")),
             },
+            AppEvent::PluginStore { rows, problems } => self.show_plugin_store(rows, problems),
+            AppEvent::PluginRepoChecked { repository, result } => {
+                self.plugin_repo_checked(repository, result)
+            }
             AppEvent::ScriptDone { title, lines, error } => {
                 self.reload_panels(None);
                 match (&error, lines.len()) {
@@ -1192,6 +1246,12 @@ impl App {
                 self.normal_key(press)
             }
             Some(overlay) => {
+                if let Some(scroll) = scrolled_dialog(&overlay, &press, self.dialog_scroll) {
+                    self.dialog_scroll = scroll;
+                    self.overlay = Some(overlay);
+                    return;
+                }
+                self.dialog_scroll = 0;
                 // Shift+Tab goes back to the question before this one.
                 if press.chord.shift
                     && !press.chord.ctrl
@@ -1478,16 +1538,13 @@ impl App {
                         if matches!(&dialog.purpose, ChoosePurpose::Drives(drives)
                             if drives.get(dialog.cursor).is_some_and(|d| d.saved)) =>
                     {
-                        if let ChoosePurpose::Drives(drives) = &mut dialog.purpose {
-                            let drive = drives.remove(dialog.cursor);
-                            self.context
-                                .config
-                                .connections
-                                .retain(|c| !(c.name == drive.name && c.uri == drive.location));
+                        if let ChoosePurpose::Drives(drives) = &dialog.purpose {
+                            let drive = &drives[dialog.cursor];
+                            return Some(forget_question(
+                                Forget::Connection(drive.name.clone(), drive.location.clone()),
+                                format!("Remove the saved connection \"{}\"?", drive.name),
+                            ));
                         }
-                        dialog.items.remove(dialog.cursor);
-                        dialog.move_cursor(0);
-                        self.save_settings();
                     }
                     _ => {}
                 }
@@ -2153,6 +2210,7 @@ impl App {
                 self.confirm_renames(paths, &rule, None);
             }
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
+            InputPurpose::AddPluginRepo => self.plugin_repo_typed(&text),
             InputPurpose::NewConnection => match crate::connections::check(&text) {
                 Ok(checked) => self.ask_name(
                     "New connection",
@@ -2405,6 +2463,36 @@ impl App {
         });
     }
 
+    /// Removes what the user saved, after the question, and opens its list
+    /// again.
+    fn forget(&mut self, what: Forget) {
+        match what {
+            Forget::Bookmark(index) => {
+                if index < self.context.config.bookmarks.len() {
+                    self.context.config.bookmarks.remove(index);
+                    self.save_settings();
+                }
+                self.open_bookmarks();
+            }
+            Forget::Search(index) => {
+                if index < self.context.config.searches.len() {
+                    self.context.config.searches.remove(index);
+                    self.save_settings();
+                }
+                self.open_saved_searches();
+            }
+            Forget::Connection(name, uri) => {
+                self.context.config.connections.retain(|c| !(c.name == name && c.uri == uri));
+                self.save_settings();
+                self.perform(Action::Drives);
+            }
+            Forget::Basket => {
+                self.basket.clear();
+                self.set_status("The basket is empty");
+            }
+        }
+    }
+
     fn confirmed(&mut self, purpose: ConfirmPurpose) {
         let registry = self.context.registry.clone();
         match purpose {
@@ -2428,7 +2516,10 @@ impl App {
                     done(result.map(|()| format!("{verb}: {count} {noun}")), None)
                 });
             }
+            ConfirmPurpose::Forget(what) => self.forget(what),
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
+            ConfirmPurpose::UninstallPlugin(name) => self.uninstall_plugin(&name),
+            ConfirmPurpose::AddPluginRepo(repository) => self.add_plugin_repo(repository),
             ConfirmPurpose::InstallServe(text) => self.start_install(&text),
             ConfirmPurpose::OfferInstall(host) => {
                 let mut dialog = InputDialog::new(
@@ -2492,6 +2583,8 @@ impl App {
                     self.load_opt(request);
                 }
             }
+            ChoosePurpose::PluginStore(rows) => self.plugin_store_chosen(&rows, cursor),
+            ChoosePurpose::PluginRepos(rows) => self.plugin_repo_chosen(&rows, cursor),
             ChoosePurpose::Plugin(mut choices) => {
                 if cursor < choices.len() {
                     self.plugin_chosen(choices.swap_remove(cursor));
@@ -2899,6 +2992,11 @@ impl App {
                 mode & 0o7777
             ));
             suggestion = format!("mode={:o}", mode & 0o7777);
+        }
+        if let Some(flags) = entry.os_flags {
+            let names = nmc_vfs::os_flags::describe(flags);
+            let shown = if names.is_empty() { "none".to_owned() } else { names.join(", ") };
+            lines.push(format!("Attributes:  {shown}"));
         }
         let then = Some(InputDialog::new(
             "Dates and permissions",
@@ -3335,6 +3433,15 @@ fn default_editor(graphical: bool) -> &'static str {
     } else {
         "xdg-open"
     }
+}
+
+/// The question before a list entry is removed (see [`Forget`]).
+fn forget_question(what: Forget, question: String) -> Overlay {
+    Overlay::Confirm(ConfirmDialog {
+        title: "Remove".into(),
+        lines: vec![question],
+        purpose: ConfirmPurpose::Forget(what),
+    })
 }
 
 #[cfg(test)]

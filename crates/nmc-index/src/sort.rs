@@ -37,22 +37,20 @@ pub struct SortSpec {
 /// assert_eq!(nmc_index::natural_cmp("file2.txt", "File10.txt"), Ordering::Less);
 /// ```
 pub fn natural_cmp(a: &str, b: &str) -> Ordering {
-    let (mut a, mut b) = (a.chars().peekable(), b.chars().peekable());
+    // Positions in both strings; digit runs are compared as slices, so no
+    // comparison allocates.
+    let (mut i, mut j) = (0, 0);
     loop {
-        match (a.peek().copied(), b.peek().copied()) {
+        match (a[i..].chars().next(), b[j..].chars().next()) {
             (None, None) => return Ordering::Equal,
             (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(x), Some(y)) if x.is_ascii_digit() && y.is_ascii_digit() => {
-                let take_number = |it: &mut std::iter::Peekable<std::str::Chars>| {
-                    let mut digits = String::new();
-                    while let Some(c) = it.peek().copied().filter(char::is_ascii_digit) {
-                        digits.push(c);
-                        it.next();
-                    }
-                    digits
+                let run = |text: &str, from: usize| {
+                    from + text[from..].bytes().take_while(u8::is_ascii_digit).count()
                 };
-                let (na, nb) = (take_number(&mut a), take_number(&mut b));
+                let (end_a, end_b) = (run(a, i), run(b, j));
+                let (na, nb) = (&a[i..end_a], &b[j..end_b]);
                 let (ta, tb) = (na.trim_start_matches('0'), nb.trim_start_matches('0'));
                 // Longer (without leading zeros) means larger; then lexicographic.
                 let by_value = ta.len().cmp(&tb.len()).then_with(|| ta.cmp(tb));
@@ -64,15 +62,28 @@ pub fn natural_cmp(a: &str, b: &str) -> Ordering {
                 if by_zeros != Ordering::Equal {
                     return by_zeros;
                 }
+                (i, j) = (end_a, end_b);
             }
             (Some(x), Some(y)) => {
                 let order = x.to_lowercase().cmp(y.to_lowercase());
                 if order != Ordering::Equal {
                     return order;
                 }
-                a.next();
-                b.next();
+                i += x.len_utf8();
+                j += y.len_utf8();
             }
+        }
+    }
+}
+
+/// Extensions, ignoring ASCII case, without allocating; no extension first.
+fn cmp_extension(a: &Entry, b: &Entry) -> Ordering {
+    match (a.extension_str(), b.extension_str()) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Less,
+        (Some(_), None) => Ordering::Greater,
+        (Some(x), Some(y)) => {
+            x.bytes().map(|c| c.to_ascii_lowercase()).cmp(y.bytes().map(|c| c.to_ascii_lowercase()))
         }
     }
 }
@@ -90,7 +101,7 @@ pub fn sort_entries(entries: &mut [Entry], spec: SortSpec) {
         rank(a).cmp(&rank(b)).then_with(|| {
             let order = match spec.key {
                 SortKey::Name => by_name(a, b),
-                SortKey::Extension => a.extension().cmp(&b.extension()).then_with(|| by_name(a, b)),
+                SortKey::Extension => cmp_extension(a, b).then_with(|| by_name(a, b)),
                 SortKey::Size => a.size.cmp(&b.size).then_with(|| by_name(a, b)),
                 SortKey::Modified => a.modified.cmp(&b.modified).then_with(|| by_name(a, b)),
             };

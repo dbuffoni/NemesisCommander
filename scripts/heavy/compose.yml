@@ -1,0 +1,28 @@
+# Real servers for the heavy tests (the full tier of the CI, docs/ci.md).
+# Start them with scripts/heavy/up.sh, which also prints the variables the
+# tests read. Image versions are pinned so the nightly stays stable. MinIO
+# and toxiproxy run as plain programs (scripts/heavy/install-binaries.sh):
+# MinIO no longer publishes container images.
+name: nmc-heavy
+
+services:
+  apache:
+    image: httpd:2.4.62
+    command: >
+      sh -c "mkdir -p /usr/local/apache2/davdata &&
+             chown daemon:daemon /usr/local/apache2/davdata &&
+             exec httpd-foreground -f /usr/local/apache2/conf/dav.conf"
+    volumes:
+      - ./apache/dav.conf:/usr/local/apache2/conf/dav.conf:ro
+      - ./apache/htpasswd:/usr/local/apache2/htpasswd:ro
+    ports: ["8081:8080"]
+
+  nextcloud:
+    image: nextcloud:29.0.9-apache
+    profiles: [nextcloud]
+    environment:
+      SQLITE_DATABASE: nextcloud
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: nmc-test-pass-2026
+      NEXTCLOUD_TRUSTED_DOMAINS: 127.0.0.1
+    ports: ["8082:80"]

@@ -16,8 +16,8 @@ pub mod keymap;
 mod paths;
 
 pub use config::{
-    Bookmark, Config, ConfigError, Connection, GeneralSettings, PanelSettings, SavedSearch,
-    TransferProfile, TransferSettings, ViewerSettings,
+    Bookmark, Config, ConfigError, Connection, GeneralSettings, PanelSettings, PluginRepository,
+    PluginSettings, SavedSearch, TransferProfile, TransferSettings, ViewerSettings,
 };
 pub use export::{ExportBundle, ImportMode};
 pub use keymap::{Action, Category, Key, KeyChord, Keymap};

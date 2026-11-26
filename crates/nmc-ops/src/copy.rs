@@ -177,11 +177,11 @@ async fn stream_copy(
 
     let read_stage = async move {
         loop {
-            let mut buf = BytesMut::zeroed(CHUNK_SIZE);
-            match reader.read(&mut buf).await {
+            // Reserved, not zeroed: the reader fills only what it reads.
+            let mut buf = BytesMut::with_capacity(CHUNK_SIZE);
+            match reader.read_buf(&mut buf).await {
                 Ok(0) => break,
-                Ok(n) => {
-                    buf.truncate(n);
+                Ok(_) => {
                     if tx.send(Ok(buf.freeze())).await.is_err() {
                         break; // writer gave up
                     }
