@@ -1,6 +1,23 @@
 # Changelog
 
+## 0.4.1
+
+The first release to be published since 0.2.0; it includes everything in
+0.4.0 below.
+
+- Desktop window: the folder text is shown formatted; the main shortcuts,
+  long messages and long yes or no questions scroll with the keys, and the
+  key row says so; table rows stay readable at large fonts.
+- The plugin list says that it is loading and why it failed.
+- Install nmc serve: the option tables fit 80 columns.
+- Copies record each file in the transfer journal as soon as it ends, so
+  an interrupted copy repeats less; overwriting many files reads the
+  destination folder less often.
+- Building the window needs Qt 6.4 or later.
+
 ## 0.4.0
+
+Not published.
 
 - Plugin repositories: an official catalogue and your own Git repositories,
   browsed and installed from the program; a plugin may run the programs it
