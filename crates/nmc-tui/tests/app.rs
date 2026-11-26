@@ -3329,7 +3329,8 @@ async fn an_archive_shows_its_files_not_its_bytes() {
         .await;
     let screen = h.screen();
     assert!(screen.contains("Contents") && screen.contains("readme.md"), "{screen}");
-    assert!(!screen.contains("PK"), "not the bytes: {screen}");
+    // Below the title, whose temporary folder has a random name.
+    assert!(!screen.lines().skip(1).any(|l| l.contains("PK")), "not the bytes: {screen}");
     h.key("Esc");
 
     // The quick view shows the same.
