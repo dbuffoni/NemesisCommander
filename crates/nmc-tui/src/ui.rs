@@ -89,11 +89,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 app.dialog_scroll = scroll;
             }
             Overlay::Confirm(dialog) => {
-                let mut lines: Vec<Line> =
-                    dialog.lines.iter().map(|l| Line::raw(l.as_str())).collect();
-                lines.push(Line::raw(""));
-                lines.push(Line::styled(app.with_back(dialog.hint()), dim()));
-                draw_box(frame, &dialog.title, lines);
+                let hint = app.with_back(dialog.hint());
+                let mut scroll = app.dialog_scroll;
+                draw_text(frame, &dialog.title, &dialog.lines, false, &hint, &mut scroll);
+                app.dialog_scroll = scroll;
             }
             Overlay::Choose(dialog) => {
                 let page = draw_choose(frame, dialog, &app.with_back(dialog.footer.clone()));
@@ -102,7 +101,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             Overlay::Message(dialog) if !dialog.is_log() => {
                 let hint = app.with_back(dialog.hint());
                 let mut scroll = app.dialog_scroll;
-                draw_text(frame, dialog, &hint, &mut scroll);
+                draw_text(frame, &dialog.title, &dialog.lines, dialog.logo, &hint, &mut scroll);
                 app.dialog_scroll = scroll;
             }
             Overlay::Message(dialog) => {
@@ -589,21 +588,29 @@ fn wrap_keys(hint: &str, width: usize) -> Vec<String> {
     rows
 }
 
-/// A message to read from its start: the keys scroll it and the key row
-/// stays. The logo (About) is drawn when it fits above the whole text.
+/// A text to read from its start (a message, a yes or no question): the
+/// keys scroll it, and the key row stays and then names them. The logo
+/// (About) is drawn when it fits above the whole text.
 fn draw_text(
     frame: &mut Frame,
-    dialog: &nmc_frontend::MessageDialog,
+    title: &str,
+    text: &[String],
+    logo: bool,
     hint: &str,
     scroll: &mut usize,
 ) {
     let screen = frame.area();
     let inner_width = box_width(screen).saturating_sub(4) as usize;
     let mut body: Vec<Line> =
-        dialog.lines.iter().flat_map(|l| wrap_message(l, inner_width)).map(Line::raw).collect();
-    let hint = wrap_keys(hint, inner_width);
-    let room = (screen.height.saturating_sub(4) as usize).saturating_sub(hint.len() + 1);
-    let logo = dialog.logo && body.len() + usize::from(about::LOGO_ROWS) <= room;
+        text.iter().flat_map(|l| wrap_message(l, inner_width)).map(Line::raw).collect();
+    let room_for =
+        |hint: &[String]| (screen.height.saturating_sub(4) as usize).saturating_sub(hint.len() + 1);
+    let mut keys = wrap_keys(hint, inner_width);
+    if body.len() > room_for(&keys) {
+        keys = wrap_keys(&nmc_frontend::hints::with_scroll(hint), inner_width);
+    }
+    let room = room_for(&keys);
+    let logo = logo && body.len() + usize::from(about::LOGO_ROWS) <= room;
     if logo {
         // The logo takes the first rows of the box.
         let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
@@ -611,8 +618,8 @@ fn draw_text(
     }
     let mut lines = scrolled_rows(body, room, scroll);
     lines.push(Line::raw(""));
-    lines.extend(hint.into_iter().map(|row| Line::styled(row, dim())));
-    let area = draw_box(frame, &dialog.title, lines);
+    lines.extend(keys.into_iter().map(|row| Line::styled(row, dim())));
+    let area = draw_box(frame, title, lines);
     if logo {
         let top = Rect::new(area.x + 1, area.y + 1, area.width.saturating_sub(2), about::LOGO_ROWS);
         draw_image(frame, about::logo(), Zoom::default(), top);
@@ -864,7 +871,8 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str, scroll: &mut 
     let reserved = dialog.purpose.preview_rows();
     let preview: Vec<String> =
         dialog.preview.iter().flat_map(|l| hard_wrap(l, inner_width)).collect();
-    let hint = hard_wrap(hint, inner_width);
+    let (plain, scrolling) = (hint, nmc_frontend::hints::with_scroll(hint));
+    let hint = wrap_keys(plain, inner_width);
     // A path longer than the field is shown whole below it.
     let field_width = inner_width.saturating_sub(2);
     let overflow = dialog.shown().text().chars().count() > field_width;
@@ -895,8 +903,13 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str, scroll: &mut 
     lines.push(Line::raw(""));
     // A short screen gives the lines under the field what is left; the
     // keys scroll through the ones that do not fit.
-    let used = lines.len() + 1 + hint.len();
-    let room = reserved.min(usize::from(inner.height).saturating_sub(used));
+    let room_for = |hint: &[String]| {
+        let used = lines.len() + 1 + hint.len();
+        reserved.min(usize::from(inner.height).saturating_sub(used))
+    };
+    let hint =
+        if preview.len() > room_for(&hint) { wrap_keys(&scrolling, inner_width) } else { hint };
+    let room = room_for(&hint);
     let mut shown = scrolled_rows(preview.into_iter().map(Line::raw).collect(), room, scroll);
     shown.resize(room, Line::raw(""));
     lines.extend(shown);

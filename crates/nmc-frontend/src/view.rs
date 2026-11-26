@@ -99,9 +99,10 @@ pub struct PanelView {
     pub flat: bool,
     /// The columns plugins add before the size, left to right.
     pub plugin_heads: Vec<PluginHeadView>,
-    /// The text of the folder's `nmc_folder.md` as plain lines (the window
-    /// wraps and limits it); empty when the folder has none.
-    pub folder_text: String,
+    /// The text of the folder's `nmc_folder.md` as formatted lines, one per
+    /// paragraph (the window wraps and limits it); empty when the folder has
+    /// none.
+    pub folder_text: Vec<RichLineView>,
 }
 
 /// A tab of a panel.
@@ -185,6 +186,8 @@ pub enum OverlayView {
     Help {
         /// The keys shown under the list.
         hint: String,
+        /// The same when the shortcuts do not fit: with the keys that scroll.
+        scroll_hint: String,
         /// Groups of `(keys, label)` rows.
         groups: Vec<HelpGroup>,
     },
@@ -209,6 +212,8 @@ pub enum OverlayView {
         is_path: bool,
         /// The keys shown under the field.
         hint: String,
+        /// The same when the text does not fit: with the keys that scroll it.
+        scroll_hint: String,
     },
     /// A yes/no question.
     Confirm {
@@ -218,6 +223,8 @@ pub enum OverlayView {
         lines: Vec<String>,
         /// The keys shown under the text.
         hint: String,
+        /// The same when the text does not fit: with the keys that scroll it.
+        scroll_hint: String,
     },
     /// A list to pick from.
     Choose {
@@ -231,6 +238,9 @@ pub enum OverlayView {
         footer: String,
         /// The rows change while the list is open: the window keeps one size.
         keeps_size: bool,
+        /// A row too long for the window loses its end (a description), not
+        /// its middle (a path).
+        cut_end: bool,
     },
     /// Information to read.
     Message {
@@ -242,6 +252,8 @@ pub enum OverlayView {
         has_next: bool,
         /// The keys line below the text.
         hint: String,
+        /// The same when the text does not fit: with the keys that scroll it.
+        scroll_hint: String,
         /// The work behind the window goes on, adding lines.
         busy: bool,
         /// The logo to show above the text (About): a `file://` URL of
@@ -662,21 +674,26 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
             .collect(),
         folder_text: {
             // A run of blank lines counts as one: the window shows little.
-            let mut lines: Vec<String> = Vec::new();
-            for line in
-                folder_text_lines(app, side, 100, 60).iter().map(nmc_preview::rich::line_text)
-            {
-                if line.trim().is_empty() && lines.last().is_none_or(|l| l.trim().is_empty()) {
+            let mut lines: Vec<RichLineView> = Vec::new();
+            let mut after_blank = true;
+            for line in folder_text_lines(app, side, FOLDER_TEXT_COLUMNS, 60) {
+                let blank = nmc_preview::rich::line_text(&line).trim().is_empty();
+                if blank && after_blank {
                     continue;
                 }
-                lines.push(line);
+                after_blank = blank;
+                lines.push(RichLineView::of(&line));
             }
-            lines.join("\n")
+            lines
         },
     };
     app.scroll[index] = offset;
     view
 }
+
+/// Columns the window's folder text is laid out for: wide enough that a
+/// paragraph stays one line, which the window wraps to the panel.
+const FOLDER_TEXT_COLUMNS: usize = 400;
 
 /// The git status of what `side` shows, if it is known for that folder.
 pub fn git_of(app: &App, side: SideId) -> Option<std::sync::Arc<crate::git::GitStatus>> {
@@ -696,16 +713,11 @@ pub fn folder_text_lines(
     max_rows: usize,
 ) -> Vec<nmc_preview::rich::Line> {
     let panel = app.workspace.side(side).panel();
-    let Some((path, blocks)) = &app.folder_text[side_index(side)] else { return Vec::new() };
+    let Some((path, note)) = &app.folder_text[side_index(side)] else { return Vec::new() };
     if path != panel.location() || max_rows < 2 {
         return Vec::new();
     }
-    let mut lines = nmc_preview::rich::layout(blocks, width);
-    while lines.last().is_some_and(|l| nmc_preview::rich::line_text(l).trim().is_empty()) {
-        lines.pop();
-    }
-    lines.truncate(max_rows - 1);
-    lines
+    note.lines(width, max_rows - 1)
 }
 
 /// The mark of `name`: one character, or empty.
@@ -820,7 +832,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         headers: Default::default(),
         flat: false,
         plugin_heads: Vec::new(),
-        folder_text: String::new(),
+        folder_text: Vec::new(),
     }
 }
 
@@ -828,6 +840,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
     Some(match app.overlay()? {
         Overlay::Help => OverlayView::Help {
             hint: crate::hints::HELP.into(),
+            scroll_hint: crate::hints::with_scroll(crate::hints::HELP),
             groups: app
                 .context()
                 .keymap
@@ -849,11 +862,13 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             preview_rows: dialog.purpose.preview_rows(),
             is_path: dialog.purpose.is_path(),
             hint: app.with_back(dialog.hint()),
+            scroll_hint: crate::hints::with_scroll(&app.with_back(dialog.hint())),
         },
         Overlay::Confirm(dialog) => OverlayView::Confirm {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
             hint: app.with_back(dialog.hint()),
+            scroll_hint: crate::hints::with_scroll(&app.with_back(dialog.hint())),
         },
         Overlay::Choose(dialog) => OverlayView::Choose {
             title: dialog.title.clone(),
@@ -861,12 +876,14 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             cursor: dialog.cursor,
             footer: app.with_back(dialog.footer.clone()),
             keeps_size: dialog.keeps_size(),
+            cut_end: matches!(dialog.purpose, crate::ChoosePurpose::PluginStore(_)),
         },
         Overlay::Message(dialog) => OverlayView::Message {
             title: dialog.title.clone(),
             lines: dialog.lines.clone(),
             has_next: dialog.then.is_some() || dialog.then_choose.is_some(),
             hint: app.with_back(dialog.hint()),
+            scroll_hint: crate::hints::with_scroll(&app.with_back(dialog.hint())),
             busy: dialog.busy,
             logo_url: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.0)).flatten(),
             logo_url_light: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.1)).flatten(),

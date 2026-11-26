@@ -230,12 +230,21 @@ const DIALOG_PAGE: usize = 6;
 
 /// Where `press` scrolls the text of `overlay` to, from `at`; `None` when
 /// the key is not for scrolling it. Messages (not logs, which follow their
-/// end) scroll with the arrows, PageUp/PageDown and Home/End; the lines
+/// end), questions to answer with yes or no and, in a window, the main
+/// shortcuts (the terminal lays them out to fit) scroll with the arrows,
+/// PageUp/PageDown and Home/End; the lines
 /// under a typed answer with the arrows and PageUp/PageDown (Home and End
 /// move in the answer).
-fn scrolled_dialog(overlay: &Overlay, press: &KeyPress, at: usize) -> Option<usize> {
+fn scrolled_dialog(
+    overlay: &Overlay,
+    press: &KeyPress,
+    at: usize,
+    graphical: bool,
+) -> Option<usize> {
     let message = match overlay {
         Overlay::Message(dialog) if !dialog.is_log() => true,
+        Overlay::Confirm(_) => true,
+        Overlay::Help if graphical => true,
         Overlay::Input(_) => false,
         _ => return None,
     };
@@ -401,7 +410,7 @@ pub struct App {
     /// The plugin columns of the folder of each panel.
     pub column_cells: [ColumnCells; 2],
     /// The text of `nmc_folder.md` in the folder of each panel.
-    pub folder_text: [Option<(VfsPath, Vec<nmc_preview::rich::Block>)>; 2],
+    pub folder_text: [Option<(VfsPath, FolderNote)>; 2],
     /// Rows the text of `nmc_folder.md` takes in each panel, measured by the
     /// renderer (the mouse needs them).
     pub note_rows: [usize; 2],
@@ -444,6 +453,36 @@ pub enum UndoStep {
 /// The file whose Markdown text is shown at the top of a panel:
 /// `nmc_folder.md`.
 pub const FOLDER_TEXT_NAMES: [&str; 1] = ["nmc_folder.md"];
+
+/// The text of a folder's `nmc_folder.md`.
+#[derive(Debug, Default)]
+pub struct FolderNote {
+    blocks: Vec<nmc_preview::rich::Block>,
+    /// The last layout and its width: the screen is drawn many times for
+    /// each change of the text or of the window.
+    laid: std::cell::RefCell<Option<(usize, Vec<nmc_preview::rich::Line>)>>,
+}
+
+impl FolderNote {
+    /// A note not laid out yet.
+    pub fn new(blocks: Vec<nmc_preview::rich::Block>) -> Self {
+        FolderNote { blocks, laid: Default::default() }
+    }
+
+    /// The first `rows` lines of the text laid out for `width` columns,
+    /// without the blank lines at its end.
+    pub fn lines(&self, width: usize, rows: usize) -> Vec<nmc_preview::rich::Line> {
+        let mut laid = self.laid.borrow_mut();
+        if laid.as_ref().is_none_or(|(w, _)| *w != width) {
+            let mut lines = nmc_preview::rich::layout(&self.blocks, width);
+            while lines.last().is_some_and(|l| nmc_preview::rich::line_text(l).trim().is_empty()) {
+                lines.pop();
+            }
+            *laid = Some((width, lines));
+        }
+        laid.iter().flat_map(|(_, lines)| lines).take(rows).cloned().collect()
+    }
+}
 
 /// The largest folder text read.
 const FOLDER_TEXT_LIMIT: u64 = 64 * 1024;
@@ -947,7 +986,7 @@ impl App {
                 for side in [SideId::Left, SideId::Right] {
                     if self.workspace.side(side).panel().location() == &path {
                         self.folder_text[side_index(side)] =
-                            blocks.clone().map(|b| (path.clone(), b));
+                            blocks.clone().map(|b| (path.clone(), FolderNote::new(b)));
                     }
                 }
             }
@@ -1246,7 +1285,9 @@ impl App {
                 self.normal_key(press)
             }
             Some(overlay) => {
-                if let Some(scroll) = scrolled_dialog(&overlay, &press, self.dialog_scroll) {
+                if let Some(scroll) =
+                    scrolled_dialog(&overlay, &press, self.dialog_scroll, self.graphical)
+                {
                     self.dialog_scroll = scroll;
                     self.overlay = Some(overlay);
                     return;

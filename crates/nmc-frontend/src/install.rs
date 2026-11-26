@@ -19,7 +19,7 @@ const OPTIONS: &[(&str, &str)] = &[
     ("--root DIR", "serve only this folder (repeat for more)"),
     ("--read-only", "refuse every change"),
     ("--port N", "TCP port of nmc serve (default 7443)"),
-    ("--name NAME", "name in the certificate and in scs:// (default: the host)"),
+    ("--name NAME", "name in certificate and scs:// (default: the host)"),
     ("--renew", "issue a new certificate even if there is one"),
 ];
 
@@ -149,9 +149,11 @@ pub fn explanation() -> Vec<String> {
          Remove it with `nmc serve uninstall me@host`.",
         "",
         "How to use it: type the server, for example me@nas.lan. Options:",
-        "  --root DIR   serve only this folder        --read-only   no changes",
-        "  --port N     another TCP port              --renew       new certificate",
-        "  --name NAME  name in the certificate (default: the host)",
+        "  --root DIR    serve only this folder",
+        "  --read-only   no changes",
+        "  --port N      another TCP port",
+        "  --name NAME   name in the certificate (default: the host)",
+        "  --renew       new certificate",
         "",
         "Ctrl+T tests first, without installing: it only reads from the server \
          and changes nothing. When the install ends, the location scs://… is \
@@ -315,6 +317,17 @@ pub fn finished(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A dialog 80 columns wide holds 68: table rows are not wrapped between
+    /// words, so they must fit.
+    #[test]
+    fn option_tables_fit_80_columns() {
+        for line in explanation().iter().chain(examples().iter()) {
+            if line.trim_start().contains("  ") {
+                assert!(line.chars().count() <= 68, "{line}");
+            }
+        }
+    }
 
     #[test]
     fn the_server_and_options_are_read() {

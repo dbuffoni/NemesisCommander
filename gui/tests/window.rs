@@ -14,9 +14,15 @@ struct Run {
 
 /// Runs the window on two folders of `home`, pressing `keys`.
 fn run(home: &Path, keys: &str, screenshot: Option<&Path>) -> Run {
+    run_with(home, keys, screenshot, &[])
+}
+
+/// [`run`] with more arguments.
+fn run_with(home: &Path, keys: &str, screenshot: Option<&Path>, more: &[&str]) -> Run {
     let mut command = Command::new(env!("CARGO_BIN_EXE_nmc-gui"));
     command
         .arg("--self-test")
+        .args(more)
         .arg(format!("--keys={keys}"))
         .arg(home.join("left"))
         .arg(home.join("right"))
@@ -319,4 +325,43 @@ fn plugin_columns_are_in_the_screen_description() {
     let notes = left["rows"].as_array().unwrap().iter().find(|r| r["name"] == "notes.txt").unwrap();
     // "first line\nsecond line\n" is 23 characters.
     assert_eq!(notes["cells"][0], "23");
+}
+
+#[test]
+fn the_folder_text_keeps_its_formatting() {
+    let home = home();
+    std::fs::write(
+        home.path().join("left/nmc_folder.md"),
+        "# Release files\n\nKeep **data.bin**.\n",
+    )
+    .unwrap();
+    let run = run(home.path(), "", None);
+    assert_no_qml_warnings(&run);
+    let text = &run.screen["panels"][0]["folder_text"];
+    assert_eq!(text[0]["heading"], 1, "{text}");
+    assert!(text.to_string().contains(r#""style":"bold""#), "{text}");
+}
+
+/// The smallest window of the reviews (800×500) with a 24 point font: every
+/// dialog that holds text draws without a QML complaint, and the main
+/// shortcuts scroll with the keys.
+#[test]
+fn dialogs_draw_cleanly_in_a_small_window_with_a_large_font() {
+    let home = home();
+    std::fs::create_dir(home.path().join("config")).unwrap();
+    std::fs::write(home.path().join("config/config.toml"), "[appearance]\nfont_size = 24\n")
+        .unwrap();
+    for (keys, kind) in [
+        ("F1 PageDown", "help"),
+        ("F9 a b o u t Enter PageDown", "message"),
+        ("F9 i n s t a l l Enter PageDown", "input"),
+        ("F9 i n s t a l l Enter F1 End", "message"),
+        ("F9 i n s t a l l Enter m e Enter End", "confirm"),
+        ("Shift+F1", "choose"),
+        ("Down F3", "viewer"),
+    ] {
+        let run = run_with(home.path(), keys, None, &["--size=800x500"]);
+        assert_no_qml_warnings(&run);
+        assert_eq!(run.screen["overlay"]["kind"], kind, "{keys}: {}", run.screen["overlay"]);
+    }
 }

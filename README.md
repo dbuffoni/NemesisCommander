@@ -36,7 +36,7 @@ source. The SSH connections use the system's OpenSSH client.
 
 ```sh
 cargo build --release              # nmc: terminal interface, CLI, agent
-cargo build --release -p nmc-gui    # the window (needs Qt 6.8 or later)
+cargo build --release -p nmc-gui    # the window (needs Qt 6.4 or later)
 cargo test --workspace
 ```
 

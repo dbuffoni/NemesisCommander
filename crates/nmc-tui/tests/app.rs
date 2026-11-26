@@ -1223,6 +1223,56 @@ async fn without_plugins_ctrl_x_offers_the_plugin_list() {
     assert_eq!(dialog.items, ["Browse and install plugins…"]);
 }
 
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn the_plugin_list_says_it_loads_and_why_it_failed() {
+    let mut h = Harness::with_settings(|c| {
+        c.plugins.official = false;
+        c.plugins.repositories = vec![nmc_config::PluginRepository {
+            url: "file:///nonexistent/plugins.git".into(),
+            reference: None,
+        }];
+    })
+    .await;
+    h.key("Ctrl+X");
+    h.key("Enter");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("the list") };
+    assert_eq!(dialog.items, ["Loading the plugin list…"]);
+    h.settle_until(
+        |app| matches!(app.overlay(), Some(Overlay::Choose(d)) if d.items[0].starts_with('!')),
+    )
+    .await;
+    let screen = h.screen();
+    assert!(screen.contains("nonexistent") && screen.contains("F5 tries again"), "{screen}");
+}
+
+/// A question too long for the screen scrolls with the keys and still
+/// takes its answer.
+#[tokio::test]
+async fn a_long_question_scrolls_and_is_still_answered() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::InstallServe);
+    h.type_text("me@nas.lan");
+    h.key("Enter");
+    let small = |h: &mut Harness| {
+        let mut terminal = Terminal::new(TestBackend::new(80, 14)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..14)
+            .map(|y| (0..80).map(|x| buffer[(x, y)].symbol().to_owned()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let screen = small(&mut h);
+    assert!(screen.contains("install on me@nas.lan"), "{screen}");
+    assert!(screen.contains("PgUp/PgDn: scroll") && screen.contains("more lines"), "{screen}");
+    h.key("End");
+    let screen = small(&mut h);
+    assert!(screen.contains("Nothing needs root") && screen.contains("earlier lines"), "{screen}");
+    h.key("n");
+    assert!(h.app.overlay().is_none());
+}
+
 /// Moves the settings screen's cursor to the row whose label starts with
 /// `label`.
 fn settings_row(h: &mut Harness, label: &str) {
@@ -3329,7 +3379,8 @@ async fn an_archive_shows_its_files_not_its_bytes() {
         .await;
     let screen = h.screen();
     assert!(screen.contains("Contents") && screen.contains("readme.md"), "{screen}");
-    assert!(!screen.contains("PK"), "not the bytes: {screen}");
+    // Below the title, whose temporary folder has a random name.
+    assert!(!screen.lines().skip(1).any(|l| l.contains("PK")), "not the bytes: {screen}");
     h.key("Esc");
 
     // The quick view shows the same.
@@ -3598,6 +3649,7 @@ async fn a_long_message_scrolls_with_the_keys() {
     let screen = small(&mut h);
     assert!(screen.contains("Install nmc serve on a server"), "{screen}");
     assert!(screen.contains("more lines") && !screen.contains("earlier lines"), "{screen}");
+    assert!(screen.contains("PgUp/PgDn: scroll"), "{screen}");
     assert!(screen.contains("Esc: close"), "{screen}");
     // Paragraphs break between words.
     assert!(

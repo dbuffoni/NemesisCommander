@@ -61,6 +61,15 @@ pub fn with_back(hint: &str) -> String {
     parts.join(SEP)
 }
 
+/// `hint` for a dialog whose text does not fit: the keys that scroll it
+/// follow the main action (first when `Esc` is the only other part).
+pub fn with_scroll(hint: &str) -> String {
+    let mut parts: Vec<&str> = hint.split(SEP).filter(|p| !p.is_empty()).collect();
+    let main = parts.first().is_some_and(|p| !p.starts_with("Esc: "));
+    parts.insert(usize::from(main), "PgUp/PgDn: scroll");
+    parts.join(SEP)
+}
+
 /// What is wrong with `hint` as the key row of a dialog, if anything.
 pub fn check(hint: &str) -> Result<(), String> {
     let parts: Vec<&str> = hint.split(SEP).collect();
@@ -123,6 +132,14 @@ mod tests {
         check(&hint).unwrap();
         assert!(hint.ends_with("Shift+Tab: back    F1: help    Esc: cancel"), "{hint}");
         assert_eq!(with_back("Esc: close"), "Shift+Tab: back    Esc: close");
+    }
+
+    #[test]
+    fn the_scroll_keys_keep_the_order() {
+        assert_eq!(with_scroll("Esc: close"), "PgUp/PgDn: scroll    Esc: close");
+        let hint = with_scroll(&with_back(&confirm(false)));
+        check(&hint).unwrap();
+        assert!(hint.starts_with("Enter: yes    PgUp/PgDn: scroll    n: no"), "{hint}");
     }
 
     #[test]

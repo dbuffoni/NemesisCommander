@@ -62,6 +62,33 @@ Rectangle {
         text: "2026-12-31 23:59"
     }
 
+    readonly property bool hasFolderText: view !== null && !view.quick_view
+                                          && view.folder_text.length > 0
+
+    // The folder text as one StyledText: the spans are styled as the viewer
+    // styles them, single spaces let a paragraph wrap, and the line under a
+    // heading is left out (the heading's colour marks it).
+    function folderMarkup(lines) {
+        let out = []
+        let heading = false
+        for (const line of lines) {
+            if (line.rule) {
+                if (!heading)
+                    out.push("\u2500\u2500\u2500")
+                heading = false
+                continue
+            }
+            heading = line.heading > 0
+            let text = quickView.styledLine(line.spans, line.heading)
+            if (!line.code)
+                text = text.replace(/&nbsp;(?!&nbsp;)/g, " ")
+            if (heading)
+                text = "<font color=\"" + panel.theme.headingColor + "\">" + text + "</font>"
+            out.push(text)
+        }
+        return out.join("<br>")
+    }
+
     // Files dropped here, from the other panel or from another program, are
     // offered for copying into this folder.
     DropArea {
@@ -110,6 +137,8 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 6
             Rectangle {
+                // The quick view is on no drive.
+                visible: panel.view !== null && panel.view.drive !== ""
                 implicitWidth: driveLabel.implicitWidth + 12
                 implicitHeight: driveLabel.implicitHeight + 4
                 radius: 2
@@ -142,15 +171,17 @@ Rectangle {
         }
 
         // The text of nmc_folder.md, at most a third of the panel.
-        Label {
+        Text {
             Layout.fillWidth: true
             Layout.maximumHeight: panel.height / 3
             maximumLineCount: Math.max(1, Math.floor(panel.height / 3 / nameMin.height))
             Layout.leftMargin: 4
             Layout.rightMargin: 4
-            visible: panel.view !== null && !panel.view.quick_view && panel.view.folder_text !== ""
-            text: panel.view ? panel.view.folder_text : ""
-            textFormat: Text.PlainText
+            visible: panel.hasFolderText
+            text: panel.hasFolderText ? panel.folderMarkup(panel.view.folder_text) : ""
+            textFormat: Text.StyledText
+            font: panel.theme.font
+            color: palette.windowText
             wrapMode: Text.Wrap
             elide: Text.ElideRight
             clip: true
@@ -159,7 +190,7 @@ Rectangle {
             Layout.fillWidth: true
             implicitHeight: 1
             color: panel.theme.lineColor
-            visible: panel.view !== null && !panel.view.quick_view && panel.view.folder_text !== ""
+            visible: panel.hasFolderText
         }
 
         // Column titles; the sorted one has an arrow.
@@ -404,6 +435,7 @@ Rectangle {
 
         // Quick view (Ctrl+Q) in place of the listing.
         ViewerView {
+            id: quickView
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: panel.view !== null && !!panel.view.quick_view

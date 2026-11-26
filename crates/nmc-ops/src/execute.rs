@@ -262,7 +262,9 @@ impl Executor {
             let mut pending =
                 (index..end).filter(|&i| !tracker.is_some_and(|t| t.is_finished(i))).peekable();
             let mut running = FuturesUnordered::new();
-            let mut batch = Vec::new();
+            // The first reason to stop: reported once the steps already
+            // running have ended and are recorded.
+            let mut stop: Option<VfsError> = None;
             loop {
                 while running.len() < self.parallelism_now() {
                     match pending.next() {
@@ -281,22 +283,26 @@ impl Executor {
                     }
                     break;
                 }
-                if self.options.live_parallelism.is_some() {
+                let done = if self.options.live_parallelism.is_some() {
                     // Look at the limit again now and then: it may have been raised.
                     tokio::select! {
-                        done = running.next() => batch.extend(done),
-                        _ = tokio::time::sleep(Duration::from_millis(250)) => {}
+                        done = running.next() => done,
+                        _ = tokio::time::sleep(Duration::from_millis(250)) => None,
                     }
                 } else {
-                    batch.extend(running.next().await);
-                }
-            }
-            for (i, result) in batch {
+                    running.next().await
+                };
+                let Some((i, result)) = done else { continue };
                 let outcome = match result {
                     Ok(outcome) => outcome,
-                    Err(VfsError::Cancelled) => return Err(VfsError::Cancelled),
+                    Err(VfsError::Cancelled) => {
+                        stop = Some(VfsError::Cancelled);
+                        continue;
+                    }
                     Err(e) => StepOutcome::Failed(e.to_string()),
                 };
+                // Recorded as it ends, not with its batch: a run that is cut
+                // short (a crash, a power cut) does not copy it again.
                 if let Some(tracker) = tracker {
                     tracker.record(i, &outcome);
                 }
@@ -305,8 +311,8 @@ impl Executor {
                     StepOutcome::Skipped => report.skipped += 1,
                     StepOutcome::Failed(message) => {
                         report.failed.push((i, message.clone()));
-                        if !self.options.continue_on_error {
-                            return Err(VfsError::Other(message.clone()));
+                        if !self.options.continue_on_error && stop.is_none() {
+                            stop = Some(VfsError::Other(message.clone()));
                         }
                     }
                 }
@@ -315,6 +321,9 @@ impl Executor {
                 {
                     report.bytes += size;
                 }
+            }
+            if let Some(error) = stop {
+                return Err(error);
             }
             index = end;
         }
@@ -450,13 +459,14 @@ impl Executor {
             destination: to.clone(),
             destination_entry: existing,
         };
-        let parent = to.parent().unwrap_or_else(|| to.clone());
-        let names: Vec<String> =
-            nmc_vfs::collect_listing(dst, &parent).await?.into_iter().map(|e| e.name).collect();
-        let taken = |name: &str| names.iter().any(|n| n == name);
-
+        // The destination folder is listed only to find a free name: with a
+        // thousand files to overwrite it is not read a thousand times.
         let policy = *self.policy.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(action) = policy.decide(&conflict, taken) {
+        let mut names = Vec::new();
+        if policy == ConflictPolicy::KeepBoth {
+            names = names_beside(dst, to).await?;
+        }
+        if let Some(action) = policy.decide(&conflict, |n| names.iter().any(|x| x == n)) {
             return Ok(Some(action));
         }
         let Some(resolver) = &self.resolver else {
@@ -465,18 +475,23 @@ impl Executor {
         let _one_question_at_a_time = self.asking.lock().await;
         // The policy may have become "all" while we waited for the lock.
         let policy = *self.policy.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(action) = policy.decide(&conflict, taken) {
+        if policy == ConflictPolicy::KeepBoth {
+            names = names_beside(dst, to).await?;
+        }
+        if let Some(action) = policy.decide(&conflict, |n| names.iter().any(|x| x == n)) {
             return Ok(Some(action));
         }
         let mut resolution = resolver.resolve(&conflict).await;
         // A resolver may propose a name that is itself taken; pick the next
         // free one rather than failing.
-        if let ConflictAction::RenameTo(name) = &resolution.action
-            && taken(name)
-        {
-            let original = conflict.destination.file_name().unwrap_or("file");
-            resolution.action =
-                ConflictAction::RenameTo(crate::conflict::unique_name(original, taken));
+        if let ConflictAction::RenameTo(name) = &resolution.action {
+            names = names_beside(dst, to).await?;
+            let taken = |n: &str| names.iter().any(|x| x == n);
+            if taken(name) {
+                let original = conflict.destination.file_name().unwrap_or("file");
+                resolution.action =
+                    ConflictAction::RenameTo(crate::conflict::unique_name(original, taken));
+            }
         }
         if resolution.apply_to_all {
             let standing = match &resolution.action {
@@ -645,6 +660,13 @@ impl Executor {
         inner.run(&removal).await?;
         Ok(StepOutcome::Done)
     }
+}
+
+/// The names in the folder of `path`, to find one that is free.
+async fn names_beside(provider: &dyn Provider, path: &VfsPath) -> Result<Vec<String>> {
+    let parent = path.parent().unwrap_or_else(|| path.clone());
+    let listing = nmc_vfs::collect_listing(provider, &parent).await?;
+    Ok(listing.into_iter().map(|e| e.name).collect())
 }
 
 /// Forwards only byte counts from a nested executor, so step indices of the
@@ -1129,6 +1151,37 @@ mod tests {
         fn record(&self, index: usize, outcome: &StepOutcome) {
             self.0.lock().unwrap().push((index, outcome.clone()));
         }
+    }
+
+    #[tokio::test]
+    async fn a_step_is_recorded_as_it_ends_not_with_its_batch() {
+        let (registry, a, b) = setup();
+        a.put_file("/x", "1");
+        a.put_file("/y", "2");
+        b.put_file("/y", "old");
+        let plan = plan_copy(
+            &registry,
+            &[p("a", "/x"), p("a", "/y")],
+            &p("b", "/"),
+            PlanOptions::default(),
+        )
+        .await
+        .unwrap();
+        // The second file waits for an answer that never comes: the first,
+        // in the same batch, is recorded meanwhile.
+        struct Never;
+        #[async_trait]
+        impl ConflictResolver for Never {
+            async fn resolve(&self, _: &Conflict) -> Resolution {
+                std::future::pending().await
+            }
+        }
+        let tracker = Recorder(Mutex::new(Vec::new()), 0);
+        let executor = executor(&registry, ConflictPolicy::Ask).with_resolver(Arc::new(Never));
+        let run = executor.run_tracked(&plan, Some(&tracker));
+        let stopped = tokio::time::timeout(Duration::from_millis(500), run).await;
+        assert!(stopped.is_err(), "still waiting");
+        assert_eq!(*tracker.0.lock().unwrap(), [(0, StepOutcome::Done)]);
     }
 
     #[tokio::test]

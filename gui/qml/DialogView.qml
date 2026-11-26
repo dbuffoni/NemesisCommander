@@ -53,6 +53,8 @@ Item {
         // The rows are as wide as the window; a longer row is cut in the
         // middle, where a path keeps its start and its end.
         property bool keepsSize: false
+        // Descriptions are cut at the end instead.
+        property bool cutsEnd: false
         Layout.fillWidth: true
         // Whole rows only: a row is never cut in half.
         Layout.preferredHeight: Math.max(1, Math.floor((keepsSize ? dialogs.height * 0.6
@@ -63,8 +65,8 @@ Item {
         clip: true
         onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)
         onCountChanged: positionViewAtIndex(cursor, ListView.Contain)
-        // Tables in the fixed font (disks, drives) shrink, down to 60%, so
-        // that their columns are not cut.
+        // Tables in the fixed font (disks, drives) shrink a little, so that
+        // fewer columns are cut; never so much that they look like fine print.
         FontMetrics { id: tableMetrics; font: dialogs.theme.fixedFont }
         readonly property real shrink: {
             if (!fixed || !model || width <= 0)
@@ -73,7 +75,7 @@ Item {
             for (var i = 0; i < model.length; i++)
                 widest = Math.max(widest, tableMetrics.advanceWidth(
                     typeof model[i] === "string" ? model[i] : model[i].text))
-            return widest <= width - 8 ? 1 : Math.max(0.6, (width - 8) / widest)
+            return widest <= width - 8 ? 1 : Math.max(0.85, (width - 8) / widest)
         }
         delegate: Component {
             Rectangle {
@@ -84,7 +86,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     x: 4
                     width: parent.width - 8
-                    elide: Text.ElideMiddle
+                    elide: list.cutsEnd ? Text.ElideRight : Text.ElideMiddle
                     font: list.fixed ? Qt.font({ family: dialogs.theme.fixedFont.family,
                                                  pointSize: dialogs.theme.fixedFont.pointSize * list.shrink })
                                      : Qt.application.font
@@ -104,9 +106,13 @@ Item {
         required property Flickable target
         property bool active: true
         readonly property real row: dialogs.theme.rowHeight
+        // The text does not fit: the window's key row names the scroll keys.
+        property Item box: null
         function follow() {
             if (!active || target.height <= 0)
                 return
+            if (box)
+                box.overflows = target.contentHeight > target.height + 2
             const end = Math.max(0, target.contentHeight - target.height)
             const wanted = dialogs.scroll * row
             target.contentY = Math.min(wanted, end)
@@ -164,7 +170,7 @@ Item {
         Box {
             id: helpBox
             title: "Main shortcuts"
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             readonly property real gap: 32
             readonly property var bold: Qt.font({ family: dialogs.theme.font.family,
                                                   pointSize: dialogs.theme.font.pointSize,
@@ -204,7 +210,12 @@ Item {
                 contentHeight: grid.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
+                // The bar stays in sight while there is more to read.
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    visible: size < 0.999
+                }
+                KeyScroll { target: scroller; box: helpBox }
                 GridLayout {
                     id: grid
                     width: scroller.width
@@ -380,8 +391,9 @@ Item {
     Component {
         id: input
         Box {
+            id: inputBox
             title: dialogs.view.title
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             Label {
                 text: dialogs.view.prompt
                 Layout.fillWidth: true
@@ -454,7 +466,7 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
-                KeyScroll { target: previewScroll }
+                KeyScroll { target: previewScroll; box: inputBox }
                 ColumnLayout {
                     id: previewLines
                     width: previewScroll.width
@@ -468,8 +480,9 @@ Item {
     Component {
         id: confirm
         Box {
+            id: confirmBox
             title: dialogs.view.title
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             // Text taller than the dialog scrolls (wheel), from its top.
             Flickable {
                 id: confirmScroll
@@ -485,6 +498,7 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
+                KeyScroll { target: confirmScroll; box: confirmBox }
                 ColumnLayout {
                     id: confirmLines
                     width: confirmScroll.width
@@ -515,6 +529,7 @@ Item {
             CursorList {
                 fixed: true
                 keepsSize: dialogs.view.keeps_size
+                cutsEnd: dialogs.view.cut_end
                 cursor: dialogs.view.cursor
                 model: dialogs.view.items
             }
@@ -526,7 +541,7 @@ Item {
         Box {
             id: messageBox
             title: dialogs.view.title
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             // A log (the steps of an install, a connection test) keeps one
             // size while lines are added, and shows its end.
             readonly property bool log: dialogs.view.busy
@@ -567,7 +582,11 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
-                KeyScroll { target: messageScroll; active: !messageScroll.isLog }
+                KeyScroll {
+                    target: messageScroll
+                    active: !messageScroll.isLog
+                    box: messageBox
+                }
                 ColumnLayout {
                     id: messageLines
                     width: messageScroll.width
