@@ -231,6 +231,9 @@ pub enum OverlayView {
         footer: String,
         /// The rows change while the list is open: the window keeps one size.
         keeps_size: bool,
+        /// A row too long for the window loses its end (a description), not
+        /// its middle (a path).
+        cut_end: bool,
     },
     /// Information to read.
     Message {
@@ -861,6 +864,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             cursor: dialog.cursor,
             footer: app.with_back(dialog.footer.clone()),
             keeps_size: dialog.keeps_size(),
+            cut_end: matches!(dialog.purpose, crate::ChoosePurpose::PluginStore(_)),
         },
         Overlay::Message(dialog) => OverlayView::Message {
             title: dialog.title.clone(),

@@ -1223,6 +1223,29 @@ async fn without_plugins_ctrl_x_offers_the_plugin_list() {
     assert_eq!(dialog.items, ["Browse and install plugins…"]);
 }
 
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn the_plugin_list_says_it_loads_and_why_it_failed() {
+    let mut h = Harness::with_settings(|c| {
+        c.plugins.official = false;
+        c.plugins.repositories = vec![nmc_config::PluginRepository {
+            url: "file:///nonexistent/plugins.git".into(),
+            reference: None,
+        }];
+    })
+    .await;
+    h.key("Ctrl+X");
+    h.key("Enter");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("the list") };
+    assert_eq!(dialog.items, ["Loading the plugin list…"]);
+    h.settle_until(
+        |app| matches!(app.overlay(), Some(Overlay::Choose(d)) if d.items[0].starts_with('!')),
+    )
+    .await;
+    let screen = h.screen();
+    assert!(screen.contains("nonexistent") && screen.contains("F5 tries again"), "{screen}");
+}
+
 /// Moves the settings screen's cursor to the row whose label starts with
 /// `label`.
 fn settings_row(h: &mut Harness, label: &str) {

@@ -53,6 +53,8 @@ Item {
         // The rows are as wide as the window; a longer row is cut in the
         // middle, where a path keeps its start and its end.
         property bool keepsSize: false
+        // Descriptions are cut at the end instead.
+        property bool cutsEnd: false
         Layout.fillWidth: true
         // Whole rows only: a row is never cut in half.
         Layout.preferredHeight: Math.max(1, Math.floor((keepsSize ? dialogs.height * 0.6
@@ -63,8 +65,8 @@ Item {
         clip: true
         onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)
         onCountChanged: positionViewAtIndex(cursor, ListView.Contain)
-        // Tables in the fixed font (disks, drives) shrink, down to 60%, so
-        // that their columns are not cut.
+        // Tables in the fixed font (disks, drives) shrink a little, so that
+        // fewer columns are cut; never so much that they look like fine print.
         FontMetrics { id: tableMetrics; font: dialogs.theme.fixedFont }
         readonly property real shrink: {
             if (!fixed || !model || width <= 0)
@@ -73,7 +75,7 @@ Item {
             for (var i = 0; i < model.length; i++)
                 widest = Math.max(widest, tableMetrics.advanceWidth(
                     typeof model[i] === "string" ? model[i] : model[i].text))
-            return widest <= width - 8 ? 1 : Math.max(0.6, (width - 8) / widest)
+            return widest <= width - 8 ? 1 : Math.max(0.85, (width - 8) / widest)
         }
         delegate: Component {
             Rectangle {
@@ -84,7 +86,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     x: 4
                     width: parent.width - 8
-                    elide: Text.ElideMiddle
+                    elide: list.cutsEnd ? Text.ElideRight : Text.ElideMiddle
                     font: list.fixed ? Qt.font({ family: dialogs.theme.fixedFont.family,
                                                  pointSize: dialogs.theme.fixedFont.pointSize * list.shrink })
                                      : Qt.application.font
@@ -515,6 +517,7 @@ Item {
             CursorList {
                 fixed: true
                 keepsSize: dialogs.view.keeps_size
+                cutsEnd: dialogs.view.cut_end
                 cursor: dialogs.view.cursor
                 model: dialogs.view.items
             }

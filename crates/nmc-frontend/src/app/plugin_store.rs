@@ -45,6 +45,34 @@ pub fn store_lines(rows: &[(String, StoreRow)]) -> Vec<String> {
     rows.iter().map(|(line, _)| line.clone()).collect()
 }
 
+fn store_dialog(items: Vec<String>, rows: Vec<StoreRow>) -> ChooseDialog {
+    let mut dialog = ChooseDialog::new("Plugins", items, ChoosePurpose::PluginStore(rows));
+    dialog.footer = crate::hints::list(
+        "install or update",
+        &["Del: uninstall", "F5: refresh", "F7: repositories"],
+        "close",
+    );
+    dialog
+}
+
+/// A message as rows of the list, short enough to be read whole in a small
+/// window (rows are not wrapped); a longer word, such as an address, keeps a
+/// row of its own.
+fn message_rows(text: &str) -> Vec<String> {
+    const WIDTH: usize = 44;
+    let mut rows: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        match rows.last_mut() {
+            Some(row) if row.chars().count() + 1 + word.chars().count() <= WIDTH => {
+                row.push(' ');
+                row.push_str(word);
+            }
+            _ => rows.push(word.to_owned()),
+        }
+    }
+    rows
+}
+
 #[cfg(feature = "scripting")]
 mod live {
     use std::path::PathBuf;
@@ -191,44 +219,47 @@ mod live {
 }
 
 impl App {
-    /// Loads the plugin list (from the cache unless `refresh`) in the
-    /// background and then shows it.
+    /// Opens the plugin list, which says it is loading, and loads it (from
+    /// the cache unless `refresh`) in the background.
     pub(super) fn open_plugin_store(&mut self, refresh: bool) {
-        self.set_status("Loading the plugin list…");
+        let loading = vec!["Loading the plugin list…".to_owned()];
+        self.overlay = Some(Overlay::Choose(store_dialog(loading, Vec::new())));
         let config = self.context.config.plugins.clone();
         let paths = self.context.paths.clone();
         self.spawn_task(async move {
             let (rows, problems) =
                 tokio::task::spawn_blocking(move || live::load(&config, &paths, refresh))
                     .await
-                    .unwrap_or_default();
+                    .unwrap_or_else(|e| (Vec::new(), vec![e.to_string()]));
             AppEvent::PluginStore { rows, problems }
         });
     }
 
-    /// The list arrived.
+    /// The list arrived; it is dropped when the user has left the window.
+    /// What went wrong is written in the list, where it can be read.
     pub(super) fn show_plugin_store(
         &mut self,
         rows: Vec<(String, StoreRow)>,
         problems: Vec<String>,
     ) {
-        if rows.is_empty() {
-            let why = problems.first().cloned().unwrap_or_else(|| "no plugin found".into());
-            self.set_error(format!("Plugins: {why} (F7 in this list shows the repositories)"));
-            // The repositories can still be fixed from here.
+        if !matches!(&self.overlay, Some(Overlay::Choose(d))
+            if matches!(d.purpose, ChoosePurpose::PluginStore(_)))
+        {
+            return;
         }
-        let items = store_lines(&rows);
-        let purpose = ChoosePurpose::PluginStore(rows.into_iter().map(|(_, r)| r).collect());
-        let mut dialog = ChooseDialog::new("Plugins", items, purpose);
-        dialog.footer = crate::hints::list(
-            "install or update",
-            &["Del: uninstall", "F5: refresh", "F7: repositories"],
-            "close",
-        );
-        self.overlay = Some(Overlay::Choose(dialog));
-        if let Some(problem) = problems.first().filter(|_| !problems.is_empty()) {
-            self.set_error(problem.clone());
+        let mut items = store_lines(&rows);
+        let empty = items.is_empty();
+        if empty && problems.is_empty() {
+            items.push("No plugin found".to_owned());
         }
+        for problem in &problems {
+            items.extend(message_rows(&format!("! {problem}")));
+        }
+        if empty {
+            items.extend(message_rows("F7 shows the repositories, F5 tries again"));
+        }
+        let rows = rows.into_iter().map(|(_, r)| r).collect();
+        self.overlay = Some(Overlay::Choose(store_dialog(items, rows)));
     }
 
     /// Enter on a row of the plugin list.
