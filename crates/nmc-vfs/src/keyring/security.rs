@@ -115,7 +115,7 @@ pub(super) fn lookup(host: &str, user: Option<&str>) -> Option<Login> {
 }
 
 fn looks_like_hex(text: &str) -> bool {
-    !text.is_empty() && text.len() % 2 == 0 && text.bytes().all(|b| b.is_ascii_hexdigit())
+    !text.is_empty() && text.len().is_multiple_of(2) && text.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// The password as `find-generic-password -g` shows it on its error output:
