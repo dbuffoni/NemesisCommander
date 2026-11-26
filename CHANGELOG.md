@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.0
+
+- Plugin repositories: an official catalogue and your own Git repositories,
+  browsed and installed from the program; a plugin may run the programs it
+  asks permission for.
+- Short names for every command and plugin command; the bottom bar buttons of
+  the window are equally wide.
+- Removing a saved connection, bookmark or saved search, and emptying the
+  basket, ask first.
+- Saved logins use the Windows Credential Manager and the macOS Keychain.
+- Windows paths: network shares, long paths, reserved names and folder links.
+  Copies keep or drop attributes and extended attributes across systems, and
+  names that clash on the destination are recognised.
+- RAR archives are read with libarchive; no unRAR code is included.
+- Installers: a Windows zip and a macOS dmg (signed only when signing keys
+  are configured).
+- Small windows and large fonts: long dialog texts scroll with the keys, the
+  function key bar stays readable, the hex view fits, dialog tables keep their
+  columns.
+- Faster sorting and copying.
+- Copyright holder, licence of the assets and third-party notices.
+- CI in two tiers, with nightly tests on Linux, Windows and macOS and against
+  real servers.
+
 ## 0.3.0
 
 A consolidation release: no new features.
