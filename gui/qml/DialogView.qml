@@ -170,7 +170,7 @@ Item {
         Box {
             id: helpBox
             title: "Main shortcuts"
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             readonly property real gap: 32
             readonly property var bold: Qt.font({ family: dialogs.theme.font.family,
                                                   pointSize: dialogs.theme.font.pointSize,
@@ -210,7 +210,12 @@ Item {
                 contentHeight: grid.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
+                // The bar stays in sight while there is more to read.
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    visible: size < 0.999
+                }
+                KeyScroll { target: scroller; box: helpBox }
                 GridLayout {
                     id: grid
                     width: scroller.width

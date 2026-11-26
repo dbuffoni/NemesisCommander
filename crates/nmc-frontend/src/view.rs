@@ -186,6 +186,8 @@ pub enum OverlayView {
     Help {
         /// The keys shown under the list.
         hint: String,
+        /// The same when the shortcuts do not fit: with the keys that scroll.
+        scroll_hint: String,
         /// Groups of `(keys, label)` rows.
         groups: Vec<HelpGroup>,
     },
@@ -843,6 +845,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
     Some(match app.overlay()? {
         Overlay::Help => OverlayView::Help {
             hint: crate::hints::HELP.into(),
+            scroll_hint: crate::hints::with_scroll(crate::hints::HELP),
             groups: app
                 .context()
                 .keymap

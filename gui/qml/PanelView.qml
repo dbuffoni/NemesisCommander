@@ -137,6 +137,8 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 6
             Rectangle {
+                // The quick view is on no drive.
+                visible: panel.view !== null && panel.view.drive !== ""
                 implicitWidth: driveLabel.implicitWidth + 12
                 implicitHeight: driveLabel.implicitHeight + 4
                 radius: 2

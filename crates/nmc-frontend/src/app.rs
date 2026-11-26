@@ -230,14 +230,21 @@ const DIALOG_PAGE: usize = 6;
 
 /// Where `press` scrolls the text of `overlay` to, from `at`; `None` when
 /// the key is not for scrolling it. Messages (not logs, which follow their
-/// end) and questions to answer with yes or no scroll with the arrows,
+/// end), questions to answer with yes or no and, in a window, the main
+/// shortcuts (the terminal lays them out to fit) scroll with the arrows,
 /// PageUp/PageDown and Home/End; the lines
 /// under a typed answer with the arrows and PageUp/PageDown (Home and End
 /// move in the answer).
-fn scrolled_dialog(overlay: &Overlay, press: &KeyPress, at: usize) -> Option<usize> {
+fn scrolled_dialog(
+    overlay: &Overlay,
+    press: &KeyPress,
+    at: usize,
+    graphical: bool,
+) -> Option<usize> {
     let message = match overlay {
         Overlay::Message(dialog) if !dialog.is_log() => true,
         Overlay::Confirm(_) => true,
+        Overlay::Help if graphical => true,
         Overlay::Input(_) => false,
         _ => return None,
     };
@@ -1248,7 +1255,9 @@ impl App {
                 self.normal_key(press)
             }
             Some(overlay) => {
-                if let Some(scroll) = scrolled_dialog(&overlay, &press, self.dialog_scroll) {
+                if let Some(scroll) =
+                    scrolled_dialog(&overlay, &press, self.dialog_scroll, self.graphical)
+                {
                     self.dialog_scroll = scroll;
                     self.overlay = Some(overlay);
                     return;
