@@ -96,13 +96,15 @@ Item {
     }
 
     component Lines: Repeater {
-        // A table of examples keeps its columns: a line with a run of spaces
-        // is cut with an ellipsis instead of wrapped.
-        property bool table: false
+        // Indented examples and option tables (a run of spaces after the
+        // text, or an option) use the fixed font, which keeps their columns.
         delegate: Label {
-            readonly property bool columns: table && modelData.indexOf("  ", 2) >= 0
+            readonly property bool columns: modelData.startsWith("  ")
+                                            && (modelData.trim().indexOf("  ") > 0
+                                                || modelData.indexOf(" --") > 1)
             Layout.fillWidth: true
             text: modelData
+            font: columns ? dialogs.theme.fixedFont : dialogs.theme.font
             wrapMode: Text.Wrap
             textFormat: Text.PlainText
         }
@@ -402,12 +404,16 @@ Item {
                 contentHeight: previewLines.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
+                // The bar stays in sight while there is more to read.
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    visible: size < 0.999
+                }
                 ColumnLayout {
                     id: previewLines
                     width: previewScroll.width
                     spacing: 0
-                    Lines { table: true; model: dialogs.view.preview }
+                    Lines { model: dialogs.view.preview }
                 }
             }
         }
@@ -428,7 +434,11 @@ Item {
                 contentHeight: confirmLines.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
+                // The bar stays in sight while there is more to read.
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    visible: size < 0.999
+                }
                 ColumnLayout {
                     id: confirmLines
                     width: confirmScroll.width
@@ -506,7 +516,11 @@ Item {
                 onHeightChanged: if (isLog) contentY = Math.max(0, contentHeight - height)
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar {}
+                // The bar stays in sight while there is more to read.
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AlwaysOn
+                    visible: size < 0.999
+                }
                 ColumnLayout {
                     id: messageLines
                     width: messageScroll.width
