@@ -104,7 +104,33 @@ pub(super) fn lookup(host: &str, user: Option<&str>) -> Option<Login> {
     if password.ends_with('\n') {
         password.pop();
     }
+    // `-w` prints a password with non-ASCII or control characters as hex,
+    // which cannot be told from a password that is hex: ask `-g` which it is.
+    if looks_like_hex(&password)
+        && let Some(real) = decoded_by_g(&account)
+    {
+        password = real;
+    }
     (!password.is_empty()).then_some(Login { user, password })
+}
+
+fn looks_like_hex(text: &str) -> bool {
+    !text.is_empty() && text.len() % 2 == 0 && text.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The password as `find-generic-password -g` shows it on its error output:
+/// `password: "text"`, or `password: 0xHEX  "text"` when it is not plain.
+/// `None` when it is plain (the `-w` text stands) or cannot be read.
+fn decoded_by_g(account: &str) -> Option<String> {
+    let out = run(&["find-generic-password", "-s", SERVICE, "-a", account, "-g"], None).ok()?;
+    let text = String::from_utf8_lossy(&out.stderr);
+    let line = text.lines().find_map(|l| l.strip_prefix("password: "))?;
+    let hex = line.strip_prefix("0x")?;
+    let digits: String = hex.chars().take_while(char::is_ascii_hexdigit).collect();
+    let bytes = (0..digits.len() / 2)
+        .map(|i| u8::from_str_radix(&digits[2 * i..2 * i + 2], 16).ok())
+        .collect::<Option<Vec<u8>>>()?;
+    String::from_utf8(bytes).ok()
 }
 
 /// The user of the first login saved for `host`.
