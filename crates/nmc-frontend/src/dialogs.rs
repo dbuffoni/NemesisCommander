@@ -629,6 +629,12 @@ impl MessageDialog {
         }
     }
 
+    /// A log (the steps of an install, a connection test) is read from its
+    /// end; any other text from its start, and it scrolls with the keys.
+    pub fn is_log(&self) -> bool {
+        self.busy || self.lines.first().is_some_and(|l| l.starts_with('['))
+    }
+
     /// The hint below the text: `Enter: <next dialog>   Esc: close`.
     pub fn hint(&self) -> String {
         let copy = if self.can_copy() { "c: copy the log    " } else { "" };

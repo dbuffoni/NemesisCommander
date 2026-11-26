@@ -356,6 +356,7 @@ ApplicationWindow {
             anchors.fill: parent
             view: window.screen ? window.screen.overlay : null
             conflict: window.screen ? window.screen.conflict : null
+            scroll: window.screen ? window.screen.dialog_scroll : 0
         }
     }
 }

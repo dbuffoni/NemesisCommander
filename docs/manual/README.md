@@ -260,6 +260,12 @@ confirmations, `Esc: close` for lists, messages and viewers. A question that
 cannot be undone, such as deleting for good, answers **no** to Enter: only
 **y** says yes (its row says so).
 
+A text that does not fit its window (About, an explanation) scrolls with
+**Up**, **Down**, **PageUp**, **PageDown**, **Home** and **End**; the
+examples under a question scroll with all but Home and End, which move in
+the answer. In the terminal the first and last rows count the lines out of
+sight.
+
 ### Typing and pasting
 
 Every question (new folder, go to, a connection's address, a password…) is a

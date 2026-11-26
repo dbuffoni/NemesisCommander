@@ -224,6 +224,32 @@ pub struct External {
     pub rename: Option<(PathBuf, Vec<VfsPath>)>,
 }
 
+/// Rows PageUp and PageDown move the text of a dialog: less than the
+/// smallest window shows, so that nothing is jumped over.
+const DIALOG_PAGE: usize = 6;
+
+/// Where `press` scrolls the text of `overlay` to, from `at`; `None` when
+/// the key is not for scrolling it. Messages (not logs, which follow their
+/// end) scroll with the arrows, PageUp/PageDown and Home/End; the lines
+/// under a typed answer with the arrows and PageUp/PageDown (Home and End
+/// move in the answer).
+fn scrolled_dialog(overlay: &Overlay, press: &KeyPress, at: usize) -> Option<usize> {
+    let message = match overlay {
+        Overlay::Message(dialog) if !dialog.is_log() => true,
+        Overlay::Input(_) => false,
+        _ => return None,
+    };
+    Some(match press.plain()? {
+        Key::Up => at.saturating_sub(1),
+        Key::Down => at.saturating_add(1),
+        Key::PageUp => at.saturating_sub(DIALOG_PAGE),
+        Key::PageDown => at.saturating_add(DIALOG_PAGE),
+        Key::Home if message => 0,
+        Key::End if message => usize::MAX,
+        _ => return None,
+    })
+}
+
 /// What identifies a question of a series: a window and what it asks.
 /// `None` for windows that are not steps (viewer, lists of commands...).
 fn step_of(overlay: &Overlay) -> Option<(u8, String, String)> {
@@ -331,6 +357,9 @@ pub struct App {
     pub scroll: [usize; 2],
     /// Rows per page, measured by the renderer.
     pub page: usize,
+    /// Rows the text of the open dialog is scrolled down. The keys move it;
+    /// the renderer, which knows how much text there is, keeps it in range.
+    pub dialog_scroll: usize,
     /// Columns of text the viewer shows, measured by the renderer
     /// (formatted documents are laid out for it).
     pub columns: usize,
@@ -675,6 +704,7 @@ impl App {
             quick_view: None,
             scroll: [0, 0],
             page: 20,
+            dialog_scroll: 0,
             columns: 80,
             events,
             tasks: 0,
@@ -1079,6 +1109,7 @@ impl App {
                 }
             }
             AppEvent::Show(overlay) => {
+                self.dialog_scroll = 0;
                 // "Measuring…" and the like are over once the window is there.
                 if self.status.as_ref().is_some_and(|s| !s.error && s.text.ends_with('…')) {
                     self.status = None;
@@ -1215,6 +1246,12 @@ impl App {
                 self.normal_key(press)
             }
             Some(overlay) => {
+                if let Some(scroll) = scrolled_dialog(&overlay, &press, self.dialog_scroll) {
+                    self.dialog_scroll = scroll;
+                    self.overlay = Some(overlay);
+                    return;
+                }
+                self.dialog_scroll = 0;
                 // Shift+Tab goes back to the question before this one.
                 if press.chord.shift
                     && !press.chord.ctrl

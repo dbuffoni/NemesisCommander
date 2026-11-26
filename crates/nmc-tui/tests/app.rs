@@ -3578,3 +3578,45 @@ async fn install_test_pack_and_plugin_dialogs_follow_the_convention() {
         }
     }
 }
+
+/// A message longer than the screen is read from its start: the keys scroll
+/// it, what is out of sight is counted and the key row stays.
+#[tokio::test]
+async fn a_long_message_scrolls_with_the_keys() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::InstallServe);
+    h.key("F1");
+    let small = |h: &mut Harness| {
+        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        terminal.draw(|frame| draw(frame, &mut h.app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..20)
+            .map(|y| (0..80).map(|x| buffer[(x, y)].symbol().to_owned()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let screen = small(&mut h);
+    assert!(screen.contains("Install nmc serve on a server"), "{screen}");
+    assert!(screen.contains("more lines") && !screen.contains("earlier lines"), "{screen}");
+    assert!(screen.contains("Esc: close"), "{screen}");
+    h.key("PageDown");
+    let screen = small(&mut h);
+    assert!(screen.contains("earlier lines"), "{screen}");
+    // End stops at the last line, so one step up moves at once.
+    h.key("End");
+    let end = small(&mut h);
+    assert!(end.contains("saved there with F4") && !end.contains("more lines"), "{end}");
+    h.key("Up");
+    assert!(small(&mut h).contains("more lines"));
+    h.key("Home");
+    assert!(small(&mut h).contains("Install nmc serve on a server"));
+    // The lines under the answer scroll too, and start from the top again
+    // once something is typed.
+    h.key("Enter");
+    small(&mut h);
+    h.key("PageDown");
+    let screen = small(&mut h);
+    assert!(screen.contains("earlier lines") && screen.contains("Esc: cancel"), "{screen}");
+    h.type_text("x");
+    assert_eq!(h.app.dialog_scroll, 0);
+}

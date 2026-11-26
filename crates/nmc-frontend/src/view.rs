@@ -33,6 +33,9 @@ pub struct Screen {
     pub keys: Vec<KeyLabel>,
     /// The open dialog or window.
     pub overlay: Option<OverlayView>,
+    /// Rows its text is scrolled down (messages and the lines under a typed
+    /// answer); a window that cannot go so far reports how far it can.
+    pub dialog_scroll: usize,
     /// A copy conflict waiting for an answer, shown above everything.
     pub conflict: Option<ConflictView>,
     /// The fonts of the window (the terminal ignores them).
@@ -514,6 +517,8 @@ impl Screen {
             progress: jobs_progress(&app.jobs, app).unwrap_or(-1.0),
             keys,
             overlay,
+            // (End asks for more than any text has.)
+            dialog_scroll: app.dialog_scroll.min(1_000_000),
             conflict,
             icons: if app.context().config.panels.icons {
                 crate::icons::Shape::ALL

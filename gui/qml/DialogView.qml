@@ -11,6 +11,8 @@ Item {
     id: dialogs
     property var view: null
     property var conflict: null
+    // Rows the keys scrolled the text of the dialog down.
+    property int scroll: 0
     readonly property var theme: ApplicationWindow.window
     visible: view !== null || conflict !== null
 
@@ -91,6 +93,49 @@ Item {
                          : list.stateOf(modelData) === "failed" ? dialogs.theme.errorColor
                          : palette.windowText
                 }
+            }
+        }
+    }
+
+    // Moves a scrolling text where the keys ask, and tells the application
+    // where the wheel left it or how far it can go.
+    component KeyScroll: Item {
+        id: follower
+        required property Flickable target
+        property bool active: true
+        readonly property real row: dialogs.theme.rowHeight
+        function follow() {
+            if (!active || target.height <= 0)
+                return
+            const end = Math.max(0, target.contentHeight - target.height)
+            const wanted = dialogs.scroll * row
+            target.contentY = Math.min(wanted, end)
+            if (wanted >= end + row)
+                dialogs.theme.app.dialog_scrolled(Math.ceil(end / row))
+        }
+        // Once the text is laid out: its height settles after a few
+        // passes, and a limit taken before that would be too short.
+        Timer {
+            id: settle
+            interval: 50
+            running: true
+            onTriggered: follower.follow()
+        }
+        Connections {
+            target: dialogs
+            function onScrollChanged() { settle.restart() }
+        }
+        Connections {
+            target: follower.target
+            function onContentHeightChanged() { settle.restart() }
+            function onHeightChanged() { settle.restart() }
+        }
+        Connections {
+            target: follower.target
+            function onMovementEnded() {
+                if (follower.active)
+                    dialogs.theme.app.dialog_scrolled(
+                        Math.round(follower.target.contentY / follower.row))
             }
         }
     }
@@ -409,6 +454,7 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
+                KeyScroll { target: previewScroll }
                 ColumnLayout {
                     id: previewLines
                     width: previewScroll.width
@@ -521,6 +567,7 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
+                KeyScroll { target: messageScroll; active: !messageScroll.isLog }
                 ColumnLayout {
                     id: messageLines
                     width: messageScroll.width
