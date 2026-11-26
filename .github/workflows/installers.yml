@@ -120,10 +120,26 @@ jobs:
           mkdir -p "$mount"
           hdiutil attach "$dmg" -mountpoint "$mount" -nobrowse -readonly
           app="$mount/NemesisCommander.app/Contents"
-          "$app/MacOS/nmc" --version
-          QT_QPA_PLATFORM=offscreen "$app/MacOS/nmc-gui" --version
           test -f "$app/Resources/THIRD-PARTY-NOTICES.md"
+          # A copy of the app, as a user installs it.
+          cp -R "$mount/NemesisCommander.app" "$RUNNER_TEMP/"
           hdiutil detach "$mount"
+          app="$RUNNER_TEMP/NemesisCommander.app/Contents"
+          # The window needs a platform without a screen, which the bundle
+          # does not carry; it is borrowed for the test. A build signed with
+          # an identity refuses plugins signed by others, so it only starts.
+          if [ -z "$MACOS_SIGN_IDENTITY" ]; then
+            cp "$QT_ROOT_DIR/plugins/platforms/libqoffscreen.dylib" "$app/PlugIns/platforms/"
+          fi
+          # Qt is hidden: what the bundle lacks must not be found on this
+          # machine, as it would not be on a user's.
+          mv "$QT_ROOT_DIR" "$QT_ROOT_DIR.hidden"
+          trap 'mv "$QT_ROOT_DIR.hidden" "$QT_ROOT_DIR"' EXIT
+          "$app/MacOS/nmc" --version
+          "$app/MacOS/nmc-gui" --version
+          if [ -z "$MACOS_SIGN_IDENTITY" ]; then
+            QT_QPA_PLATFORM=offscreen "$app/MacOS/nmc-gui" --self-test --keys=F1 | grep -q '"help"'
+          fi
       - name: Upload (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4

@@ -84,8 +84,11 @@ their own job (SC-168).
 disk image (`packaging/macos/build-dmg.sh`, an app bundle with Qt bundled by
 `macdeployqt`), each with `LICENSE` and `THIRD-PARTY-NOTICES.md`, and tests
 them: unpack or mount into a temporary place and run `nmc --version` and
-`nmc-gui --version`. The full CI tier (nightly) runs it; the release workflow
-runs it too and publishes the files on a `v*` tag.
+`nmc-gui --version`. On macOS the copy of the app runs with the runner's Qt
+hidden and, unsigned, opens its window off screen; any error of
+`macdeployqt` fails the build. The Windows test still runs with Qt installed.
+The full CI tier (nightly) runs it; the release workflow runs it too and
+publishes the files on a `v*` tag.
 
 Without signing secrets the files are named `-unsigned` (macOS: signed ad hoc,
 so it runs on the Mac that built it; other Macs ask in Gatekeeper). Secrets,
