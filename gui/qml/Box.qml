@@ -9,6 +9,8 @@ Rectangle {
     id: box
     property string title: ""
     property string hint: ""
+    // Set by a text that does not fit, for a key row that says so.
+    property bool overflows: false
     property color hintColor: theme.dim
     default property alias content: column.data
     readonly property var theme: ApplicationWindow.window

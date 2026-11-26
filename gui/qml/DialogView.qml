@@ -106,9 +106,13 @@ Item {
         required property Flickable target
         property bool active: true
         readonly property real row: dialogs.theme.rowHeight
+        // The text does not fit: the window's key row names the scroll keys.
+        property Item box: null
         function follow() {
             if (!active || target.height <= 0)
                 return
+            if (box)
+                box.overflows = target.contentHeight > target.height + 2
             const end = Math.max(0, target.contentHeight - target.height)
             const wanted = dialogs.scroll * row
             target.contentY = Math.min(wanted, end)
@@ -382,8 +386,9 @@ Item {
     Component {
         id: input
         Box {
+            id: inputBox
             title: dialogs.view.title
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             Label {
                 text: dialogs.view.prompt
                 Layout.fillWidth: true
@@ -456,7 +461,7 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
-                KeyScroll { target: previewScroll }
+                KeyScroll { target: previewScroll; box: inputBox }
                 ColumnLayout {
                     id: previewLines
                     width: previewScroll.width
@@ -470,8 +475,9 @@ Item {
     Component {
         id: confirm
         Box {
+            id: confirmBox
             title: dialogs.view.title
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             // Text taller than the dialog scrolls (wheel), from its top.
             Flickable {
                 id: confirmScroll
@@ -487,6 +493,7 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
+                KeyScroll { target: confirmScroll; box: confirmBox }
                 ColumnLayout {
                     id: confirmLines
                     width: confirmScroll.width
@@ -529,7 +536,7 @@ Item {
         Box {
             id: messageBox
             title: dialogs.view.title
-            hint: dialogs.view.hint
+            hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             // A log (the steps of an install, a connection test) keeps one
             // size while lines are added, and shows its end.
             readonly property bool log: dialogs.view.busy
@@ -570,7 +577,11 @@ Item {
                     policy: ScrollBar.AlwaysOn
                     visible: size < 0.999
                 }
-                KeyScroll { target: messageScroll; active: !messageScroll.isLog }
+                KeyScroll {
+                    target: messageScroll
+                    active: !messageScroll.isLog
+                    box: messageBox
+                }
                 ColumnLayout {
                     id: messageLines
                     width: messageScroll.width
