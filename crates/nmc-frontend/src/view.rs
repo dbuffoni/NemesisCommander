@@ -99,9 +99,10 @@ pub struct PanelView {
     pub flat: bool,
     /// The columns plugins add before the size, left to right.
     pub plugin_heads: Vec<PluginHeadView>,
-    /// The text of the folder's `nmc_folder.md` as plain lines (the window
-    /// wraps and limits it); empty when the folder has none.
-    pub folder_text: String,
+    /// The text of the folder's `nmc_folder.md` as formatted lines, one per
+    /// paragraph (the window wraps and limits it); empty when the folder has
+    /// none.
+    pub folder_text: Vec<RichLineView>,
 }
 
 /// A tab of a panel.
@@ -665,21 +666,26 @@ fn panel_view(app: &mut App, side: SideId, rows: usize) -> PanelView {
             .collect(),
         folder_text: {
             // A run of blank lines counts as one: the window shows little.
-            let mut lines: Vec<String> = Vec::new();
-            for line in
-                folder_text_lines(app, side, 100, 60).iter().map(nmc_preview::rich::line_text)
-            {
-                if line.trim().is_empty() && lines.last().is_none_or(|l| l.trim().is_empty()) {
+            let mut lines: Vec<RichLineView> = Vec::new();
+            let mut after_blank = true;
+            for line in folder_text_lines(app, side, FOLDER_TEXT_COLUMNS, 60) {
+                let blank = nmc_preview::rich::line_text(&line).trim().is_empty();
+                if blank && after_blank {
                     continue;
                 }
-                lines.push(line);
+                after_blank = blank;
+                lines.push(RichLineView::of(&line));
             }
-            lines.join("\n")
+            lines
         },
     };
     app.scroll[index] = offset;
     view
 }
+
+/// Columns the window's folder text is laid out for: wide enough that a
+/// paragraph stays one line, which the window wraps to the panel.
+const FOLDER_TEXT_COLUMNS: usize = 400;
 
 /// The git status of what `side` shows, if it is known for that folder.
 pub fn git_of(app: &App, side: SideId) -> Option<std::sync::Arc<crate::git::GitStatus>> {
@@ -823,7 +829,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
         headers: Default::default(),
         flat: false,
         plugin_heads: Vec::new(),
-        folder_text: String::new(),
+        folder_text: Vec::new(),
     }
 }
 

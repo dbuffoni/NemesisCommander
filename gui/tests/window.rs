@@ -320,3 +320,18 @@ fn plugin_columns_are_in_the_screen_description() {
     // "first line\nsecond line\n" is 23 characters.
     assert_eq!(notes["cells"][0], "23");
 }
+
+#[test]
+fn the_folder_text_keeps_its_formatting() {
+    let home = home();
+    std::fs::write(
+        home.path().join("left/nmc_folder.md"),
+        "# Release files\n\nKeep **data.bin**.\n",
+    )
+    .unwrap();
+    let run = run(home.path(), "", None);
+    assert_no_qml_warnings(&run);
+    let text = &run.screen["panels"][0]["folder_text"];
+    assert_eq!(text[0]["heading"], 1, "{text}");
+    assert!(text.to_string().contains(r#""style":"bold""#), "{text}");
+}
