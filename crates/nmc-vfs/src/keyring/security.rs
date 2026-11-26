@@ -213,6 +213,10 @@ esac
     #[cfg(target_os = "macos")]
     #[test]
     fn the_real_keychain_stores_finds_and_clears_a_login() {
+        // The tests with a fake `security` set a process-wide command: wait
+        // for them, and use the real one.
+        let _turn = crate::keyring::ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+        crate::keyring::set_command(None);
         let host = format!("nmc-test-{}.invalid", std::process::id());
         store(&host, "anna", "s3 \"cret\\ é").unwrap();
         let login = lookup(&host, Some("anna")).unwrap();
