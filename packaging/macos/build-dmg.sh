@@ -41,7 +41,18 @@ if command -v iconutil >/dev/null; then
     iconutil -c icns "$icons" -o "$app/Contents/Resources/NemesisCommander.icns"
 fi
 
-macdeployqt "$app" -qmldir="$root/gui/qml" -executable="$app/Contents/MacOS/nmc-gui"
+# macdeployqt reports what it could not do and still succeeds: its errors
+# stop the build here.
+macdeployqt "$app" -qmldir="$root/gui/qml" -executable="$app/Contents/MacOS/nmc-gui" 2>&1 |
+    tee "$work/macdeployqt.log"
+# The database drivers of Qt are not used, and want libraries that are not
+# there: they are left out, and so are the errors about those libraries.
+rm -rf "$app/Contents/PlugIns/sqldrivers"
+harmless='^ERROR: (""|no file at ".*/(libmimerapi|libiodbc|libpq)[^/]*\.dylib")$'
+if grep '^ERROR:' "$work/macdeployqt.log" | grep -Ev "$harmless" >&2; then
+    echo "build-dmg.sh: macdeployqt failed: the app would not run elsewhere" >&2
+    exit 1
+fi
 
 # Licence and third-party notices (Qt, libarchive, crates).
 install -m644 "$root/LICENSE" "$app/Contents/Resources/LICENSE.txt"

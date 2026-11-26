@@ -14,6 +14,7 @@ The first release to be published since 0.2.0; it includes everything in
   an interrupted copy repeats less; overwriting many files reads the
   destination folder less often.
 - Building the window needs Qt 6.4 or later.
+- macOS: the app in the disk image uses the Qt bundled with it.
 
 ## 0.4.0
 
