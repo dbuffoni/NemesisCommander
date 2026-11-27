@@ -11,4 +11,4 @@ Colours: blue `#1E88E5` (ring, chevrons, "nox"), black `#000000` (right half, th
 Clear space: keep at least a quarter of the icon width free around the icon, and half of it around the wordmark. Do not recolour, rotate, stretch or restyle. Below 33 px the thick small variant is used (made by the script).
 
 Generated files live in `assets/branding` and are made by `scripts/make-icons.py` (PNG 16 to 1024 with real alpha, `pairnox.ico`, `pairnox.icns`, the wordmark PNGs, the symbolic icon). CI runs `scripts/make-icons.py --check`.
-The old NemesisCommander artwork is not kept in the product; it stays in git history.
+The artwork of the former name is not kept in the product; it stays in git history.
