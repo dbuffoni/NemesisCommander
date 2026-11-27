@@ -288,12 +288,40 @@ pub struct ViewerSettings {
     pub tab_width: usize,
     /// Files larger than this (MiB) open in hex mode by default.
     pub hex_above_mib: u64,
+    /// How the terminal interface draws pictures (the window is not
+    /// affected).
+    pub terminal_images: TerminalImages,
 }
 
 impl Default for ViewerSettings {
     fn default() -> Self {
-        ViewerSettings { wrap: true, tab_width: 4, hex_above_mib: 64 }
+        ViewerSettings {
+            wrap: true,
+            tab_width: 4,
+            hex_above_mib: 64,
+            terminal_images: TerminalImages::Auto,
+        }
     }
+}
+
+/// How the terminal interface draws a picture.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TerminalImages {
+    /// The best the terminal is known to do.
+    #[default]
+    Auto,
+    /// Kitty graphics (kitty, WezTerm, Ghostty).
+    Kitty,
+    /// iTerm2 inline images (iTerm2, WezTerm).
+    Iterm2,
+    /// Sixel graphics (foot, xterm, mlterm, Windows Terminal...).
+    Sixel,
+    /// Block characters, two pixels per cell: works everywhere.
+    Blocks,
+    /// Sextants (six pixels per cell): sharper, needs a font with the
+    /// "Symbols for Legacy Computing" block.
+    Sextants,
 }
 
 /// A named shortcut to a location.
@@ -378,6 +406,10 @@ pub struct Config {
     pub plugins: PluginSettings,
     /// Git.
     pub git: GitSettings,
+    /// AI providers (not written while unchanged, so older versions can
+    /// still read the file).
+    #[serde(skip_serializing_if = "crate::ai::AiSettings::is_unchanged")]
+    pub ai: crate::ai::AiSettings,
     /// Standard shortcut overrides: command id → chords that are not
     /// function keys (empty list: no shortcut).
     pub keys: BTreeMap<String, Vec<String>>,

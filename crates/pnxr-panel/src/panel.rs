@@ -119,6 +119,9 @@ pub struct Panel {
     visible: Vec<Entry>,
     cursor: usize,
     selected: HashSet<String>,
+    /// Selected names that the other panel does not have (a folder
+    /// comparison); they are shown in another colour.
+    missing: HashSet<String>,
     /// A selection being extended with Shift+arrows: where it started, the
     /// selection from before it, and where the cursor was left.
     extending: Option<Extending>,
@@ -177,6 +180,7 @@ impl Panel {
             visible: Vec::new(),
             cursor: 0,
             selected: HashSet::new(),
+            missing: HashSet::new(),
             extending: None,
             sort,
             show_hidden,
@@ -287,6 +291,7 @@ impl Panel {
             Ok(entries) => {
                 if listing.path != self.location || listing.branch != self.branch {
                     self.selected.clear();
+                    self.missing.clear();
                     self.extending = None;
                     self.filter.clear();
                     self.cursor = 0;
@@ -528,6 +533,22 @@ impl Panel {
     pub fn clear_selection(&mut self) {
         self.extending = None;
         self.selected.clear();
+        self.missing.clear();
+    }
+
+    /// Selects `name` and marks it as missing from the other panel (a
+    /// folder comparison): it is shown in light red, not as a plain
+    /// selection.
+    pub fn set_missing(&mut self, name: &str) {
+        self.set_selected(name, true);
+        if self.selected.contains(name) {
+            self.missing.insert(name.to_owned());
+        }
+    }
+
+    /// `true` if `name` is selected as missing from the other panel.
+    pub fn is_missing(&self, name: &str) -> bool {
+        self.missing.contains(name) && self.selected.contains(name)
     }
 
     /// `true` if `name` is selected.

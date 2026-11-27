@@ -5,7 +5,7 @@
 //! The functions here only change a [`Config`]; the application saves it
 //! and applies it (key map, transfer manager) afterwards.
 
-use pnxr_config::{Action, Config, KeyChord, Keymap, TransferProfile};
+use pnxr_config::{Action, Config, KeyChord, Keymap, TerminalImages, TransferProfile};
 use pnxr_index::SortKey;
 use pnxr_ops::{ConflictPolicy, VerifyMode};
 
@@ -138,6 +138,8 @@ pub enum Field {
     TabWidth,
     /// Files above this size open as hex.
     HexAbove,
+    /// How the terminal interface draws pictures.
+    TerminalImages,
     /// Icons for the kinds of files.
     Icons,
     /// Font family of the window.
@@ -176,6 +178,14 @@ const PROFILES: [(TransferProfile, &str); 3] = [
     (TransferProfile::MaxSpeed, "max speed"),
     (TransferProfile::Discreet, "discreet"),
 ];
+const IMAGES: [(TerminalImages, &str); 6] = [
+    (TerminalImages::Auto, "automatic"),
+    (TerminalImages::Kitty, "kitty graphics"),
+    (TerminalImages::Iterm2, "iTerm2 images"),
+    (TerminalImages::Sixel, "sixel"),
+    (TerminalImages::Blocks, "block characters"),
+    (TerminalImages::Sextants, "sextants (sharper blocks)"),
+];
 const VERIFY: [(VerifyMode, &str); 4] = [
     (VerifyMode::None, "no check"),
     (VerifyMode::Size, "same size"),
@@ -194,7 +204,7 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 30] = [
+    pub const ALL: [Field; 31] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
@@ -220,6 +230,7 @@ impl Field {
         Field::Wrap,
         Field::TabWidth,
         Field::HexAbove,
+        Field::TerminalImages,
         Field::FontFamily,
         Field::FontSize,
         Field::FixedFontFamily,
@@ -238,7 +249,7 @@ impl Field {
             GitStatus | GitExecutable => "Git",
             ParallelJobs | ParallelFiles | AutoParallelism | Profile | KeepStats | Verify
             | VerifyRemoteFast | Conflict | BandwidthLimit | Retries => "Transfers",
-            Wrap | TabWidth | HexAbove => "Viewer",
+            Wrap | TabWidth | HexAbove | TerminalImages => "Viewer",
             FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
         }
     }
@@ -339,6 +350,10 @@ impl Field {
             ),
             Wrap => ("Wrap long lines in the viewer.", "Default: no (long lines scroll sideways)."),
             TabWidth => ("Spaces a tab stands for in the viewer.", "Between 1 and 16."),
+            TerminalImages => (
+                "How the terminal interface draws pictures.",
+                "Automatic uses kitty, iTerm2 or sixel graphics when the terminal is known to have them (not inside tmux), else block characters. Force one when your terminal has it but is not recognised; blocks work everywhere, sextants are sharper but need a font that has them. Takes effect the next time a picture is opened. The window is not affected.",
+            ),
             HexAbove => (
                 "Files bigger than this open as hex, in MiB.",
                 "Big files are not read as text. Default: 50 MiB.",
@@ -398,6 +413,7 @@ impl Field {
             Wrap => "Wrap long lines",
             TabWidth => "Spaces per tab",
             HexAbove => "Open as hex above (MiB)",
+            TerminalImages => "Pictures in the terminal",
             FontFamily => "Font",
             FontSize => "Font size in points (0: the system's)",
             FixedFontFamily => "Fixed-width font",
@@ -412,7 +428,9 @@ impl Field {
             | ArrowNavigation | GitStatus | Icons | Wrap | VerifyRemoteFast | KeepStats => {
                 FieldKind::Toggle
             }
-            Sort | Verify | Conflict | AutoParallelism | Profile => FieldKind::Choice,
+            Sort | Verify | Conflict | AutoParallelism | Profile | TerminalImages => {
+                FieldKind::Choice
+            }
             Terminal | GitExecutable => FieldKind::Text,
             Editor | GuiEditor | TerminalEditor => FieldKind::Editor,
             FontFamily | FixedFontFamily => FieldKind::Font,
@@ -460,6 +478,7 @@ impl Field {
             Wrap => on(v.wrap),
             TabWidth => v.tab_width.to_string(),
             HexAbove => v.hex_above_mib.to_string(),
+            TerminalImages => name_of(&IMAGES, v.terminal_images),
             FontFamily => config.appearance.font_family.clone(),
             FontSize => config.appearance.font_size.to_string(),
             FixedFontFamily => config.appearance.fixed_font_family.clone(),
@@ -489,6 +508,7 @@ impl Field {
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),
             Conflict => t.conflict = cycle(&CONFLICTS, t.conflict, delta),
+            TerminalImages => v.terminal_images = cycle(&IMAGES, v.terminal_images, delta),
             Editor | GuiEditor | TerminalEditor | Terminal | GitExecutable | FontFamily
             | FixedFontFamily => {}
             _ => {
@@ -568,6 +588,8 @@ fn cycle<T: PartialEq + Copy>(table: &[(T, &str)], value: T, delta: i64) -> T {
 /// A command at the end of the screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
+    /// The AI services (Anthropic, OpenRouter, OpenAI, local, custom).
+    AiProviders,
     /// Send these settings to another machine.
     SendTo,
     /// Replace these settings with another machine's.
@@ -588,7 +610,8 @@ pub enum Command {
 
 impl Command {
     /// Every command, in screen order.
-    pub const ALL: [Command; 8] = [
+    pub const ALL: [Command; 9] = [
+        Command::AiProviders,
         Command::SendTo,
         Command::FetchFrom,
         Command::Export,
@@ -602,6 +625,7 @@ impl Command {
     /// What it is called on screen.
     pub fn label(self) -> &'static str {
         match self {
+            Command::AiProviders => "AI providers (Anthropic, OpenRouter, OpenAI, local)…",
             Command::SendTo => "Send these settings to another machine…",
             Command::FetchFrom => "Get the settings of another machine…",
             Command::Export => "Export settings to a file…",

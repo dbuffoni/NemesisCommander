@@ -19,6 +19,7 @@ use pnxr_vfs::VfsPath;
 
 use pnxr_config::{Action, Category};
 
+use super::ai_providers::AiThen;
 use super::{App, AppEvent};
 use crate::commands::{CommandEntry, SCRIPTS, Target, plugin_category};
 use crate::dialogs::{
@@ -359,6 +360,9 @@ impl App {
             self.set_error("Plugins and scripts are not part of this build");
             return;
         }
+        if !self.ai_ready(AiThen::Script) {
+            return;
+        }
         self.ask(
             "Write a script with AI",
             "What should the script do? (Claude writes and tests it)",
@@ -399,6 +403,9 @@ impl App {
     pub(super) fn ask_ai_rename(&mut self, targets: Vec<VfsPath>) {
         if !cfg!(feature = "scripting") {
             self.set_error("AI is not part of this build");
+            return;
+        }
+        if !self.ai_ready(AiThen::Rename(targets.clone())) {
             return;
         }
         self.ask(

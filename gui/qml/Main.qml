@@ -74,6 +74,9 @@ ApplicationWindow {
     readonly property color brandBlue: "#1F6BFF"
     readonly property color selectionTint: Qt.rgba(0x1F / 255, 0x6B / 255, 1.0, dark ? 0.32 : 0.22)
     readonly property color selectedText: dark ? "#8db6ff" : "#0b3fa8"
+    // Files the other panel lacks, after a folder comparison.
+    readonly property color missingTint: Qt.rgba(1.0, 0.35, 0.35, dark ? 0.30 : 0.22)
+    readonly property color missingText: dark ? "#ff9a9a" : "#a31515"
     readonly property color lineColor: Qt.rgba(palette.windowText.r, palette.windowText.g,
                                                palette.windowText.b, 0.18)
     readonly property color dim: Qt.rgba(palette.windowText.r, palette.windowText.g,

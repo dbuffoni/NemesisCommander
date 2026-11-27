@@ -93,6 +93,10 @@ impl App {
     fn settings_command(&mut self, command: Command, screen: SettingsScreen) -> Option<Overlay> {
         let screen = Box::new(screen);
         let (title, prompt, purpose) = match command {
+            Command::AiProviders => {
+                self.open_ai_providers();
+                return self.overlay.take();
+            }
             Command::SendTo => (
                 "Send settings",
                 "Machine (agent://host, scs://host) or settings file or folder:",

@@ -21,8 +21,9 @@ pub async fn ai(_context: &AppContext, _args: AiArgs) -> CmdResult {
 pub async fn ai(context: &AppContext, args: AiArgs) -> CmdResult {
     use crate::cli::AiAction;
     match args.action {
-        AiAction::Key => engine::save_key(context),
-        AiAction::New { description, plugin, out, fixture, tries, model, force } => {
+        AiAction::Key { provider } => engine::save_key(context, provider.as_deref()),
+        AiAction::Providers => engine::providers(context),
+        AiAction::New { description, plugin, out, fixture, tries, model, provider, force } => {
             let request = engine::Request {
                 description: description.join(" "),
                 plugin,
@@ -30,12 +31,13 @@ pub async fn ai(context: &AppContext, args: AiArgs) -> CmdResult {
                 fixture,
                 tries: tries.max(1),
                 model,
+                provider,
                 force,
             };
             engine::new(context, request).await
         }
-        AiAction::Rename { description, paths, model, json } => {
-            engine::rename(context, &description, &paths, &model, json).await
+        AiAction::Rename { description, paths, model, provider, json } => {
+            engine::rename(context, &description, &paths, model, provider, json).await
         }
     }
 }
@@ -49,6 +51,7 @@ mod engine {
     use std::time::Duration;
 
     use pnxr_app::AppContext;
+    use pnxr_config::{AiKind, AiProvider};
     use serde::Deserialize;
     use serde_json::{Value, json};
 
@@ -57,9 +60,6 @@ mod engine {
     use crate::commands::script_test;
 
     /// The API, unless `PNXR_AI_URL` names another server (tests).
-    const API: &str = "https://api.anthropic.com";
-    /// The file `pnxr ai key` writes, in the settings folder.
-    const KEY_FILE: &str = "anthropic-api-key";
     /// Models that fall back to another model when they decline a request
     /// (`fallbacks: "default"`).
     const WITH_FALLBACKS: [&str; 5] = [
@@ -76,7 +76,8 @@ mod engine {
         pub out: Option<String>,
         pub fixture: Option<String>,
         pub tries: u32,
-        pub model: String,
+        pub model: Option<String>,
+        pub provider: Option<String>,
         pub force: bool,
     }
 
@@ -93,63 +94,100 @@ mod engine {
         content: String,
     }
 
+    /// The provider named `name`, or the default one.
+    fn provider_named(context: &AppContext, name: Option<&str>) -> Result<AiProvider, String> {
+        match name {
+            None => Ok(context.config.ai.default_provider()),
+            Some(name) => context.config.ai.get(name).ok_or_else(|| {
+                let known: Vec<_> = context.config.ai.all().into_iter().map(|p| p.name).collect();
+                format!(
+                    "no AI provider {name:?} (known: {}; add one in Settings)",
+                    known.join(", ")
+                )
+            }),
+        }
+    }
+
     /// `pnxr ai key`: saves the key read from standard input, readable only
     /// by the user.
-    pub fn save_key(context: &AppContext) -> CmdResult {
+    pub fn save_key(context: &AppContext, provider: Option<&str>) -> CmdResult {
+        let provider = provider_named(context, provider)?;
         let mut key = String::new();
         std::io::stdin().read_to_string(&mut key)?;
         let key = key.trim();
         if key.is_empty() {
             return Err("no key on standard input (echo KEY | pnxr ai key)".into());
         }
-        let path = context.paths.config_dir.join(KEY_FILE);
-        fs::create_dir_all(&context.paths.config_dir)?;
-        write_private(&path, key)?;
-        crate::out!("saved the key in {}", path.display());
+        let path = pnxr_config::ai::save_key(&provider, &context.paths.config_dir, key)?;
+        crate::out!("saved the key of {} in {}", provider.name, path.display());
         Ok(ExitCode::SUCCESS)
     }
 
-    fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
-        #[cfg(unix)]
-        {
-            use std::io::Write;
-            use std::os::unix::fs::OpenOptionsExt;
-            let mut file = fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(path)?;
-            file.write_all(text.as_bytes())
+    /// `pnxr ai providers`.
+    pub fn providers(context: &AppContext) -> CmdResult {
+        for provider in context.config.ai.all() {
+            let mark = if context.config.ai.is_default(&provider.name) { "*" } else { " " };
+            let key = if !provider.needs_key() {
+                "no key needed".to_owned()
+            } else {
+                match pnxr_config::ai::find_key(&provider, &context.paths.config_dir) {
+                    Some((_, source)) => format!("key from {}", source.describe()),
+                    None => "no key".to_owned(),
+                }
+            };
+            crate::out!(
+                "{mark} {:<12} {:<18} {} {}  ({key})",
+                provider.name,
+                provider.kind.label(),
+                provider.base_url,
+                provider.model
+            );
         }
-        #[cfg(not(unix))]
-        fs::write(path, text)
+        Ok(ExitCode::SUCCESS)
     }
 
-    /// The key: `ANTHROPIC_API_KEY`, else the one `pnxr ai key` saved.
-    fn api_key(context: &AppContext) -> Result<String, String> {
-        if let Ok(key) = std::env::var("ANTHROPIC_API_KEY")
-            && !key.trim().is_empty()
-        {
-            return Ok(key.trim().to_owned());
+    /// The provider, its key (when it needs one) and the model for a
+    /// request.
+    fn connect(
+        context: &AppContext,
+        provider: Option<&str>,
+        model: Option<String>,
+    ) -> Result<Client, String> {
+        let provider = provider_named(context, provider)?;
+        let key = match pnxr_config::ai::find_key(&provider, &context.paths.config_dir) {
+            Some((key, _)) => key,
+            None if !provider.needs_key() => String::new(),
+            None => {
+                let how = if provider.key_env.is_empty() {
+                    String::new()
+                } else {
+                    format!("set {} or ", provider.key_env)
+                };
+                return Err(format!(
+                    "no API key for {}: {how}save one with `pnxr ai key --provider {}` \
+                     (or enter it in Settings, AI providers)",
+                    provider.name, provider.name
+                ));
+            }
+        };
+        let model =
+            model.filter(|m| !m.trim().is_empty()).unwrap_or_else(|| provider.model.clone());
+        if model.is_empty() {
+            return Err(format!(
+                "no model for {}: set one in Settings, AI providers, or pass --model",
+                provider.name
+            ));
         }
-        fs::read_to_string(context.paths.config_dir.join(KEY_FILE))
-            .map(|key| key.trim().to_owned())
-            .ok()
-            .filter(|key| !key.is_empty())
-            .ok_or_else(|| {
-                "no Anthropic API key: set ANTHROPIC_API_KEY or save one with `pnxr ai key`".into()
-            })
+        Client::new(&provider, key, model)
     }
 
     /// `pnxr ai new`: ask, test, fix, save.
     pub async fn new(context: &AppContext, request: Request) -> CmdResult {
-        let key = api_key(context)?;
-        let client = Client::new(key, request.model.clone())?;
+        let client = connect(context, request.provider.as_deref(), request.model.clone())?;
         let draft = tempfile::Builder::new().prefix("pnxr-ai-").tempdir()?;
         let mut messages = vec![json!({ "role": "user", "content": first_message(&request) })];
         for attempt in 1..=request.tries {
-            crate::out!("asking {} (try {attempt} of {})…", request.model, request.tries);
+            crate::out!("asking {} (try {attempt} of {})…", client.model, request.tries);
             let content = client.ask(&system_prompt(), &messages, answer_schema()).await?;
             let answer: Answer = parse_answer(&content)?;
             // The assistant turn goes back unchanged (thinking included).
@@ -399,11 +437,11 @@ mod engine {
         context: &AppContext,
         description: &str,
         paths: &[String],
-        model: &str,
+        model: Option<String>,
+        provider: Option<String>,
         as_json: bool,
     ) -> CmdResult {
-        let key = api_key(context)?;
-        let client = Client::new(key, model.to_owned())?;
+        let client = connect(context, provider.as_deref(), model)?;
         let files = crate::location::parse_all(paths)?;
         let names: Vec<&str> =
             files.iter().map(|path| path.file_name().unwrap_or_default()).collect();
@@ -513,16 +551,19 @@ mod engine {
         Prefer the simplest rule; keep extensions unless asked. New names must differ from \
         each other. `explanation`: one short sentence, in the language of the request.";
 
-    /// The Messages API over HTTPS (there is no official Rust SDK).
+    /// The AI service over HTTPS (there is no official Rust SDK): the
+    /// Anthropic Messages API, or the OpenAI chat API that OpenRouter and
+    /// local servers speak.
     struct Client {
         http: reqwest::Client,
+        kind: AiKind,
         key: String,
         model: String,
         url: String,
     }
 
     impl Client {
-        fn new(key: String, model: String) -> Result<Self, String> {
+        fn new(provider: &AiProvider, key: String, model: String) -> Result<Self, String> {
             // reqwest is built without a crypto provider; use ring, as
             // WebDAV and S3 do. Installing twice fails harmlessly.
             let _ = rustls::crypto::ring::default_provider().install_default();
@@ -532,13 +573,95 @@ mod engine {
                 .timeout(Duration::from_secs(600))
                 .build()
                 .map_err(|e| format!("cannot start the HTTP client: {e}"))?;
-            let base = std::env::var("PNXR_AI_URL").unwrap_or_else(|_| API.to_owned());
-            let url = format!("{}/v1/messages", base.trim_end_matches('/'));
-            Ok(Client { http, key, model, url })
+            // `PNXR_AI_URL` names another server (tests).
+            let base = std::env::var("PNXR_AI_URL")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| provider.base_url.clone());
+            if base.trim().is_empty() {
+                return Err(format!(
+                    "no address for {}: set it in Settings, AI providers",
+                    provider.name
+                ));
+            }
+            let base = base.trim_end_matches('/');
+            let url = match provider.kind {
+                AiKind::Anthropic => format!("{base}/v1/messages"),
+                AiKind::OpenAi => format!("{base}/chat/completions"),
+            };
+            Ok(Client { http, kind: provider.kind, key, model, url })
         }
 
         /// One request; the answer's content blocks.
         async fn ask(
+            &self,
+            system: &str,
+            messages: &[Value],
+            schema: Value,
+        ) -> Result<Value, String> {
+            match self.kind {
+                AiKind::Anthropic => self.ask_anthropic(system, messages, schema).await,
+                AiKind::OpenAi => self.ask_openai(system, messages, schema).await,
+            }
+        }
+
+        /// The OpenAI chat API: the schema goes into the instructions and the
+        /// reply is asked as a JSON object (every server that speaks this API
+        /// knows that; not all know schemas). The answer comes back as one
+        /// text block, like Anthropic's.
+        async fn ask_openai(
+            &self,
+            system: &str,
+            messages: &[Value],
+            schema: Value,
+        ) -> Result<Value, String> {
+            let system = format!(
+                "{system}\n\nAnswer with one JSON object and nothing else, matching this JSON \
+                 schema:\n{schema}"
+            );
+            let mut all = vec![json!({ "role": "system", "content": system })];
+            for message in messages {
+                all.push(json!({
+                    "role": message["role"],
+                    "content": flat_text(&message["content"]),
+                }));
+            }
+            let body = json!({
+                "model": self.model,
+                "messages": all,
+                "response_format": { "type": "json_object" },
+            });
+            let mut request = self.http.post(&self.url).header("content-type", "application/json");
+            if !self.key.is_empty() {
+                request = request.bearer_auth(&self.key);
+            }
+            let response = request
+                .body(body.to_string())
+                .send()
+                .await
+                .map_err(|e| format!("cannot reach the AI service at {}: {e}", self.url))?;
+            let status = response.status();
+            let text = response.text().await.map_err(|e| format!("the AI service stopped: {e}"))?;
+            let reply: Value = serde_json::from_str(&text)
+                .map_err(|_| format!("the AI service answered {status}: {text}"))?;
+            if !status.is_success() {
+                let message =
+                    reply["error"]["message"].as_str().or(reply["error"].as_str()).unwrap_or(&text);
+                return Err(format!("the AI service answered {status}: {message}"));
+            }
+            let choice = &reply["choices"][0];
+            if choice["finish_reason"].as_str() == Some("length") {
+                return Err("the answer was too long; ask for something smaller".into());
+            }
+            let content = choice["message"]["content"].as_str().unwrap_or_default();
+            if content.trim().is_empty() {
+                let why = choice["message"]["refusal"].as_str().unwrap_or("it sent no answer");
+                return Err(format!("the model declined to write this script: {why}"));
+            }
+            Ok(json!([{ "type": "text", "text": content }]))
+        }
+
+        async fn ask_anthropic(
             &self,
             system: &str,
             messages: &[Value],
@@ -587,6 +710,21 @@ mod engine {
                 }
                 _ => Ok(reply["content"].clone()),
             }
+        }
+    }
+
+    /// The text of a message's content: a string, or the text blocks of a
+    /// list (thinking blocks are left out).
+    fn flat_text(content: &Value) -> String {
+        match content {
+            Value::String(text) => text.clone(),
+            Value::Array(blocks) => blocks
+                .iter()
+                .filter(|b| b["type"].as_str() == Some("text"))
+                .filter_map(|b| b["text"].as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            other => other.to_string(),
         }
     }
 

@@ -1,8 +1,54 @@
 # Changelog
 
+## 0.7.1
+
+Rough edges found while using 0.7.0.
+
+- **The plugin list no longer breaks on one new manifest.** A plugin whose
+  `plugin.json` has a field this version does not know (such as `fkey` on a
+  0.6 build) is listed with "requires newer Pairnox" and cannot be installed,
+  instead of putting a raw error with a path in the list. Long descriptions
+  wrap onto the next line in the terminal and the window.
+- **Message log** (Pairnox menu, F9): every message of the status line since
+  start, errors included, newest first. `c` copies one, `a` copies all.
+- **Compare** is now *Compare two files* (Ctrl+F3) and only compares two
+  files; a folder under a cursor gets a clear message. *Compare folders* is its
+  own command (F9; bind a key to it), and files missing from one side are
+  shown in **light red** instead of the selection blue, in the terminal and the
+  window, light and dark.
+- **AI providers** (ADR 0063): Settings, *AI providers…* (also in the Pairnox
+  menu) holds Anthropic, OpenRouter, OpenAI, a local server (Ollama, LM Studio)
+  and any other server that speaks the OpenAI API, each with address, model
+  and key, and a default one. `pnxr ai new|rename` take `--provider` and
+  `--model`, `pnxr ai key --provider NAME` saves a key, `pnxr ai providers`
+  lists them. Keys stay out of the settings file (variable or a private file).
+- **AI key help.** When the default provider has no key, *Write a script with
+  AI* and *Multi-rename with AI* open a dialog that says how to get a key and
+  every way to give it, with a field to paste and save it there.
+- **Pairnox menu:** *Install pnxr serve on a server…* moved from Tools to the
+  Pairnox menu (the command keeps its id and shortcuts). New *Install the pnxr
+  command…* puts a `pnxr` launcher in `~/.local/bin` (or a folder you choose;
+  `%LOCALAPPDATA%\Pairnox\bin` on Windows), shows its status, removes it, and
+  adds or removes the `pnxr shell-init` line in your shell's startup file.
+  *Quit without changing the shell's folder* ends the terminal interface
+  without the `cd` that `shell-init` does.
+- **Terminal contrast.** Secondary text (footers, the info line under the
+  panel, headers, the inactive panel, comments in the viewer) is the terminal's
+  own text colour, dimmed, instead of "bright black" that was nearly invisible
+  on many dark themes; the F-key labels are the terminal's colours swapped
+  instead of black on bright cyan.
+- **Terminal logo.** The About logo is drawn from its shape (ring, chevrons,
+  white and black halves) at two sizes, with nothing drawn around the disc.
+- **Sharp pictures in the terminal** (SC-38): the viewer and the quick view use
+  kitty graphics (kitty, Ghostty), iTerm2 images (iTerm2, WezTerm) or sixel
+  (foot, mlterm, Contour, or any terminal when forced) when the terminal is
+  known to have them (not inside tmux). Other terminals get a sharper block
+  drawing (Lanczos scaling, no smearing), or sextants. Setting: *Pictures in the
+  terminal* (or `PNXR_IMAGES`).
+
 ## 0.7.0
 
-Not released yet (version prepared; the tag waits for the go-ahead).
+Released.
 
 - **Image duplicates plugin 1.1.0** (ADR 0062). *Find similar pictures* now shows
   a list in the window and the terminal, with the columns Group, Match, Pixels,

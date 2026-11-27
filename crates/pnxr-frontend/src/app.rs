@@ -34,6 +34,7 @@ use crate::dialogs::{
 use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
+mod ai_providers;
 mod archives;
 mod checksums;
 mod diskwork;
@@ -42,8 +43,10 @@ mod features;
 mod fkeys;
 mod generate;
 mod git_actions;
+mod install_command;
 mod keys;
 mod logins;
+mod message_log;
 mod palette;
 mod plugin_store;
 mod plugin_views;
@@ -53,7 +56,9 @@ mod properties;
 mod settings_screen;
 mod terminal;
 
+pub use ai_providers::{AiField, AiThen};
 pub use checksums::ChecksumJob;
+pub use install_command::InstallRow;
 pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
 pub use plugins::{PluginChoice, plugin_key_defaults, plugin_short_name};
@@ -154,6 +159,8 @@ pub enum AppEvent {
     Compared {
         /// The names to select on each side.
         marks: Vec<(SideId, Vec<String>)>,
+        /// Of those, the names the other side lacks (shown in light red).
+        missing: Vec<(SideId, Vec<String>)>,
         /// The result for the status line.
         message: String,
     },
@@ -398,6 +405,8 @@ pub struct App {
     pub basket: Vec<VfsPath>,
     /// Text waiting to go to the system clipboard.
     clipboard: Option<String>,
+    /// The messages the status line showed, oldest first.
+    pub(crate) messages: Vec<message_log::LogLine>,
     /// Where the terminal interface writes the folder it ends in.
     cwd_file: Option<std::path::PathBuf>,
     /// Encrypted archives whose password the user refused to give (until
@@ -742,6 +751,7 @@ impl App {
         let mut app = App {
             basket: Vec::new(),
             clipboard: None,
+            messages: Vec::new(),
             cwd_file: None,
             password_declined: HashSet::new(),
             password_wanted: None,
@@ -1266,6 +1276,7 @@ impl App {
                 InputPurpose::SearchName,
             ),
             Action::Compare => self.compare(),
+            Action::CompareFolders => self.compare_folders(),
             Action::Jobs => {
                 self.refresh_jobs();
                 self.overlay = Some(Overlay::Jobs(JobsView::default()));
@@ -1320,6 +1331,14 @@ impl App {
                 self.load(request);
             }
             Action::Choose => self.choose_now(),
+            Action::MessageLog => self.open_message_log(),
+            Action::InstallCommand => self.open_install_command(),
+            Action::AiProviders => self.open_ai_providers(),
+            Action::QuitKeepFolder => {
+                // The shell stays where it was: nothing is written to --cwd-file.
+                self.cwd_file = None;
+                self.running = false;
+            }
             Action::About => self.overlay = Some(Overlay::Message(crate::about::dialog())),
             Action::Quit => self.running = false,
         }
@@ -1652,6 +1671,11 @@ impl App {
             InputPurpose::FetchSettings(_) => self.fetch_settings(&text),
             InputPurpose::AiScript => self.write_script_with_ai(text),
             InputPurpose::InstallServe => self.install_serve(&text),
+            InputPurpose::InstallCommandFolder => self.install_command_folder(&text),
+            InputPurpose::AiKey { provider, then } => self.ai_key_typed(&provider, then, &text),
+            InputPurpose::AiProviderField { provider, field } => {
+                self.ai_provider_typed(&provider, field, &text)
+            }
             InputPurpose::InstallLinger(install) => self.start_install_with(&install, Some(text)),
         }
     }
@@ -1864,6 +1888,15 @@ impl App {
                 }
             }
             ChoosePurpose::PluginStore(rows) => self.plugin_store_chosen(&rows, cursor),
+            ChoosePurpose::InstallCommand(rows) => self.install_command_chosen(&rows, cursor),
+            ChoosePurpose::AiProviders(names) => self.ai_provider_chosen(&names, cursor),
+            ChoosePurpose::AiPresets(presets) => self.ai_preset_chosen(&presets, cursor),
+            ChoosePurpose::AiProvider(name) => self.ai_provider_row(&name, cursor),
+            ChoosePurpose::MessageLog(lines) => {
+                if let Some(line) = lines.get(cursor).cloned() {
+                    self.copy_text(line, "the message");
+                }
+            }
             ChoosePurpose::PluginRepos(rows) => self.plugin_repo_chosen(&rows, cursor),
             ChoosePurpose::Plugin(mut choices) => {
                 if cursor < choices.len() {
@@ -2304,9 +2337,8 @@ impl App {
         });
     }
 
-    /// Compare (view only): two files under the cursors are compared by
-    /// content; otherwise the two folders are compared by name, size and
-    /// date, and the differences are selected in both panels.
+    /// Compare two files: the files under the cursors are compared line by
+    /// line (or by content when they are not text).
     fn compare(&mut self) {
         let a = self.workspace.active();
         let b = self.workspace.inactive();
@@ -2326,6 +2358,17 @@ impl App {
                 }
             });
         }
+        self.set_error(
+            "Compare two files: put the cursor on a file in each panel (Compare folders compares folders)",
+        );
+    }
+
+    /// Compare folders: the two listings are compared by name, size and date.
+    /// Files missing from one side are shown in light red, the files that
+    /// differ are selected, in both panels.
+    fn compare_folders(&mut self) {
+        let a = self.workspace.active();
+        let b = self.workspace.inactive();
         let (only_a, only_b, different) = compare_listings(a, b);
         let active = self.workspace.active_side();
         let summary = format!(
@@ -2334,13 +2377,16 @@ impl App {
             only_b.len() + different.1.len(),
             different.0.len() + different.1.len()
         );
-        for (side, names) in
-            [(active, [only_a, different.0]), (active.other(), [only_b, different.1])]
+        for (side, only, different) in
+            [(active, only_a, different.0), (active.other(), only_b, different.1)]
         {
             let panel = self.workspace.side_mut(side).panel_mut();
             panel.clear_selection();
-            for name in names.iter().flatten() {
+            for name in &different {
                 panel.set_selected(name, true);
+            }
+            for name in &only {
+                panel.set_missing(name);
             }
         }
         self.compare_marks = true;

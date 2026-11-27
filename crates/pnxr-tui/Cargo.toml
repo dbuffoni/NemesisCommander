@@ -20,6 +20,9 @@ futures.workspace = true
 image.workspace = true
 ratatui.workspace = true
 crossterm.workspace = true
+# Pictures in the terminal: kitty, iTerm2 and sixel graphics, and block characters
+# as the fallback. Protocol detection is ours (environment), not a terminal query.
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
 
 [features]

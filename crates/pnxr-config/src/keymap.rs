@@ -157,7 +157,8 @@ actions! {
     BarRow        = "view.bar-row",         View, false, "Bottom bar: next row (Shift / Ctrl)", "BarRow", ["Ctrl+F"];
     // Tools
     Search        = "tools.search",         Tools, true,  "Search…",                  "Search", ["Ctrl+F2"];
-    Compare       = "tools.compare",        Tools, false, "Compare files / folders",  "Compare", ["Ctrl+F3"];
+    Compare       = "tools.compare",        Tools, false, "Compare two files",        "Compare", ["Ctrl+F3"];
+    CompareFolders = "tools.compare-folders", Tools, false, "Compare folders",        "CmpDirs", [];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", "CmpHash", [];
     Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     "Sync", ["Ctrl+F4"];
     GenerateFiles = "tools.generate-files", Tools, false, "Generate random text files…", "Generate", [];
@@ -170,7 +171,6 @@ actions! {
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           "Queue", ["Ctrl+J"];
     RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     "Plugins", ["Ctrl+F9", "Ctrl+X"];
     AiScript      = "tools.ai-script",      Tools, false, "Write a script with AI…",  "AIScript", [];
-    InstallServe  = "tools.install-serve",  Tools, false, "Install pnxr serve on a server…", "Install", [];
     // App
     Help          = "app.help",             App, true,  "Show main shortcuts",        "Help", ["F1"];
     Menu          = "app.commands",         App, true,  "Commands",                   "Commands", ["F9"];
@@ -178,7 +178,12 @@ actions! {
     ExportConfig  = "app.export-config",    App, false, "Export settings to file…",   "ExpConf", [];
     ImportConfig  = "app.import-config",    App, false, "Import settings from file…", "ImpConf", [];
     Choose        = "app.choose",           App, false, "Choose and exit (pnxr pick)", "Choose", ["Ctrl+F10"];
+    InstallServe  = "tools.install-serve",  App, false, "Install pnxr serve on a server…", "Install", [];
+    InstallCommand = "app.install-command", App, false, "Install the pnxr command…", "InstCmd", [];
+    AiProviders   = "app.ai-providers",     App, false, "AI providers…",              "AIProv", [];
+    MessageLog    = "app.messages",         App, false, "Messages…",                  "Messages", [];
     About         = "app.about",            App, false, "About Pairnox", "About", [];
+    QuitKeepFolder = "app.quit-keep-folder", App, false, "Quit without changing the shell's folder", "QuitHere", [];
     Quit          = "app.quit",             App, true,  "Quit",                       "Quit", ["F10"];
 }
 
@@ -336,7 +341,10 @@ impl Action {
                 "Searches files by name and, if you want, by content, in this folder and below, also on remote locations."
             }
             Action::Compare => {
-                "Compares the two files under the cursors (line by line), or the two folders by name, size and date: the differences are selected, and Esc clears them."
+                "Compares the two files under the cursors, line by line. Put the cursors on files, not folders; Compare folders does the folders."
+            }
+            Action::CompareFolders => {
+                "Compares the two folders by name, size and date: files missing from one side are shown in light red, files that differ are selected, and Esc clears the marks."
             }
             Action::CompareHash => {
                 "Compares the two folders by the checksum of each file, so equal names with different content are found."
@@ -386,6 +394,18 @@ impl Action {
             }
             Action::Choose => {
                 "Only in pnxr pick: gives the marked items, the item under the cursor or, when asked for a folder, the current folder to the program that started pnxr pick."
+            }
+            Action::QuitKeepFolder => {
+                "Quits the terminal interface and leaves the shell in the folder it was in before, even if the shell function of `pnxr shell-init` is set up to follow the active panel."
+            }
+            Action::AiProviders => {
+                "Chooses which AI service writes scripts and rename rules: Anthropic, OpenRouter, OpenAI, a local model or any server that speaks the OpenAI API, each with its address, model and key."
+            }
+            Action::MessageLog => {
+                "Lists the messages shown on the status line since Pairnox started, errors included, newest first. c copies the highlighted one, a copies them all."
+            }
+            Action::InstallCommand => {
+                "Puts the pnxr command in a folder on your PATH, so that you can start it from any terminal; also removes it and shows where it is installed."
             }
             Action::About => {
                 "Shows the logo, the version and the commit this build was made from, the licence and where the source is."

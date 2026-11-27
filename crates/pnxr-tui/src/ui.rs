@@ -22,7 +22,8 @@ use pnxr_frontend::view::{
     scroll_offset, size_text, tab_title,
 };
 use pnxr_frontend::{
-    App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
+    App, ChooseDialog, ChoosePurpose, InputDialog, Overlay, TextField, Viewer, display_location,
+    side_index,
 };
 
 const SIZE_WIDTH: usize = 9;
@@ -32,8 +33,13 @@ fn bold() -> Style {
     Style::new().add_modifier(Modifier::BOLD)
 }
 
+/// Secondary text (footers, the info line, headers, the inactive panel):
+/// the terminal's own text colour, dimmed. A fixed grey cannot be readable on
+/// both a dark and a light terminal ("bright black" is nearly invisible on
+/// many dark themes); the dimmed default always keeps the contrast the
+/// user's theme gives its text.
 fn dim() -> Style {
-    Style::new().fg(Color::DarkGray)
+    Style::new().add_modifier(Modifier::DIM)
 }
 
 fn highlight() -> Style {
@@ -42,6 +48,7 @@ fn highlight() -> Style {
 
 /// Draws the whole screen.
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    crate::graphics::use_setting(app.context().config.viewer.terminal_images);
     // Documents are laid out for the width they get: the whole screen in
     // the viewer, one panel in the quick view (both inside a border).
     let width = frame.area().width as usize;
@@ -284,9 +291,12 @@ fn draw_panel(frame: &mut Frame, app: &mut App, side: SideId, area: Rect) {
             style = style.add_modifier(Modifier::BOLD);
         }
         if entry.is_hidden() {
-            style = style.fg(Color::DarkGray);
+            style = style.add_modifier(Modifier::DIM);
         }
-        if panel.is_selected(&entry.name) {
+        if panel.is_missing(&entry.name) {
+            // Present here, absent in the other panel: light red.
+            style = style.fg(Color::Rgb(0xff, 0x8a, 0x8a)).add_modifier(Modifier::BOLD);
+        } else if panel.is_selected(&entry.name) {
             style = style.fg(Color::Rgb(0x6f, 0xa3, 0xff)).add_modifier(Modifier::BOLD);
         }
         if i == cursor {
@@ -454,10 +464,12 @@ fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
         let width = key_bar_width(area.width as usize);
         let label = if width < 6 { key_bar_narrow(app, n) } else { key_bar_label(app, n) };
         let label = fit(&label, width).trim_end().to_owned();
-        spans.push(Span::raw(format!("F{n}")));
+        spans.push(Span::styled(format!("F{n}"), dim()));
+        // The terminal's own colours, swapped: always readable, on dark and
+        // on light themes (black on bright cyan was harsh).
         spans.push(Span::styled(
             format!("{label:<width$}"),
-            Style::new().fg(Color::Black).bg(Color::Cyan),
+            Style::new().add_modifier(Modifier::REVERSED),
         ));
         spans.push(Span::raw(" "));
     }
@@ -610,19 +622,53 @@ fn draw_text(
         keys = wrap_keys(&pnxr_frontend::hints::with_scroll(hint), inner_width);
     }
     let room = room_for(&keys);
-    let logo = logo && body.len() + usize::from(about::LOGO_ROWS) <= room;
-    if logo {
+    // The largest logo that fits above the whole text.
+    let logo_rows = if logo {
+        about::LOGO_SIZES.iter().copied().find(|rows| body.len() + usize::from(*rows) <= room)
+    } else {
+        None
+    };
+    if let Some(rows) = logo_rows {
         // The logo takes the first rows of the box.
-        let blank = (0..about::LOGO_ROWS).map(|_| Line::raw(""));
+        let blank = (0..rows).map(|_| Line::raw(""));
         body.splice(0..0, blank);
     }
     let mut lines = scrolled_rows(body, room, scroll);
     lines.push(Line::raw(""));
     lines.extend(keys.into_iter().map(|row| Line::styled(row, dim())));
     let area = draw_box(frame, title, lines);
-    if logo {
-        let top = Rect::new(area.x + 1, area.y + 1, area.width.saturating_sub(2), about::LOGO_ROWS);
-        draw_image(frame, about::logo(), Zoom::default(), top);
+    if let Some(rows) = logo_rows {
+        let top = Rect::new(area.x + 1, area.y + 1, area.width.saturating_sub(2), rows);
+        draw_logo(frame, rows, top);
+    }
+}
+
+/// Draws the text logo of `rows` rows centred in `area`: half blocks for
+/// the shape, nothing (the terminal's background) around it.
+fn draw_logo(frame: &mut Frame, rows: u16, area: Rect) {
+    let cells = about::logo_cells(rows);
+    let width = cells.first().map_or(0, |row| row.len() as u16).min(area.width);
+    let left = area.x + (area.width - width) / 2;
+    let buffer = frame.buffer_mut();
+    let rgb = |c: [u8; 3]| Color::Rgb(c[0], c[1], c[2]);
+    for (y, row) in cells.iter().enumerate().take(usize::from(area.height)) {
+        for (x, cell) in row.iter().enumerate().take(usize::from(width)) {
+            let target = &mut buffer[(left + x as u16, area.y + y as u16)];
+            match (cell.upper, cell.lower) {
+                (None, None) => {
+                    target.set_char(' ');
+                }
+                (Some(up), None) => {
+                    target.set_char('▀').set_fg(rgb(up)).set_bg(Color::Reset);
+                }
+                (None, Some(down)) => {
+                    target.set_char('▄').set_fg(rgb(down)).set_bg(Color::Reset);
+                }
+                (Some(up), Some(down)) => {
+                    target.set_char('▀').set_fg(rgb(up)).set_bg(rgb(down));
+                }
+            }
+        }
     }
 }
 
@@ -926,15 +972,67 @@ fn draw_input(frame: &mut Frame, dialog: &InputDialog, hint: &str, scroll: &mut 
     });
 }
 
+/// Cuts `text` into rows of at most `width` columns at spaces. The first
+/// `hang` columns stay as they are on the first row (a padded column), and the
+/// rows after it start under the end of them. A word longer than a row is cut.
+fn wrap_row(text: &str, width: usize, hang: usize) -> Vec<String> {
+    let width = width.max(hang + 8);
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= width {
+        return vec![text.to_owned()];
+    }
+    let hang = hang.min(chars.len());
+    let prefix: String = chars[..hang].iter().collect();
+    let body: String = chars[hang..].iter().collect();
+    let indent = " ".repeat(hang);
+    let mut rows: Vec<String> = Vec::new();
+    let mut row = prefix;
+    let mut fresh = true;
+    for word in body.split(' ').filter(|w| !w.is_empty()) {
+        let mut word: Vec<char> = word.chars().collect();
+        let need = row.chars().count() + usize::from(!fresh) + word.len();
+        if !fresh && need > width {
+            rows.push(std::mem::replace(&mut row, indent.clone()));
+            fresh = true;
+        }
+        while row.chars().count() + usize::from(!fresh) + word.len() > width {
+            let room = width.saturating_sub(row.chars().count() + usize::from(!fresh)).max(1);
+            if !fresh {
+                row.push(' ');
+            }
+            row.extend(word.drain(..room.min(word.len())));
+            rows.push(std::mem::replace(&mut row, indent.clone()));
+            fresh = true;
+        }
+        if !word.is_empty() {
+            if !fresh {
+                row.push(' ');
+            }
+            row.extend(word);
+            fresh = false;
+        }
+    }
+    if !fresh || rows.is_empty() {
+        rows.push(row);
+    }
+    rows
+}
+
 /// Draws a list dialog; returns its page height.
 fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog, footer: &str) -> usize {
     let area = frame.area();
     let longest = dialog.items.iter().map(|i| i.chars().count()).max().unwrap_or(20);
     let filtering = dialog.keeps_size();
+    // The plugin list wraps long descriptions onto the next row instead of
+    // cutting them.
+    let wraps =
+        matches!(dialog.purpose, ChoosePurpose::PluginStore(_) | ChoosePurpose::MessageLog(_));
     // A list that is filtered while typing keeps one size whatever is left
     // in it; others fit their rows, but never less than half the screen.
     let width = if filtering {
         box_width(area) as usize
+    } else if wraps {
+        (area.width as usize * 8 / 10).max(60)
     } else {
         (longest + 4)
             .max(dialog.title.chars().count() + 6)
@@ -944,10 +1042,32 @@ fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog, footer: &str) -> usize 
     }
     .min(area.width.saturating_sub(2) as usize) as u16;
     let room = area.height.saturating_sub(2);
+    let inner_width = width.saturating_sub(2) as usize;
+    // The visual rows: (item, text). One per item unless the list wraps.
+    let visual: Vec<(usize, String)> = if wraps {
+        dialog
+            .items
+            .iter()
+            .enumerate()
+            .flat_map(|(i, item)| {
+                // A plugin row starts with its padded origin; a message does not.
+                let hang = if item.starts_with("Official ") || item.starts_with("Unofficial ") {
+                    11
+                } else {
+                    2
+                };
+                wrap_row(item, inner_width.saturating_sub(1), hang)
+                    .into_iter()
+                    .map(move |row| (i, row))
+            })
+            .collect()
+    } else {
+        dialog.items.iter().cloned().enumerate().collect()
+    };
     let height = if filtering {
         (area.height * 7 / 10).max(8).min(room)
     } else {
-        (dialog.items.len() as u16 + 3).clamp(5, room)
+        (visual.len() as u16 + 3).clamp(5, room)
     };
     let rect = centered(area, width, height);
     frame.render_widget(Clear, rect);
@@ -958,19 +1078,19 @@ fn draw_choose(frame: &mut Frame, dialog: &ChooseDialog, footer: &str) -> usize 
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
     let rows = inner.height as usize;
-    let offset = (dialog.cursor + 1).saturating_sub(rows);
+    // Scrolling is by visual row: the cursor's item stays in view.
+    let last_of_cursor = visual.iter().rposition(|(i, _)| *i == dialog.cursor).unwrap_or(0);
+    let offset = (last_of_cursor + 1).saturating_sub(rows);
     let lines: Vec<Line> = if dialog.items.is_empty() {
         vec![Line::styled("(nothing yet)", dim())]
     } else {
-        dialog
-            .items
+        visual
             .iter()
-            .enumerate()
             .skip(offset)
             .take(rows)
             .map(|(i, item)| {
                 let text = fit(item, inner.width as usize);
-                if i == dialog.cursor { Line::styled(text, highlight()) } else { Line::raw(text) }
+                if *i == dialog.cursor { Line::styled(text, highlight()) } else { Line::raw(text) }
             })
             .collect()
     };
@@ -1070,7 +1190,7 @@ fn rich_style(style: &pnxr_preview::rich::Style) -> Style {
         out = out.fg(Color::Blue).add_modifier(Modifier::UNDERLINED);
     }
     if style.mark {
-        out = out.fg(Color::DarkGray);
+        out = out.add_modifier(Modifier::DIM);
     }
     if style.removed {
         out = out.fg(Color::Red);
@@ -1080,7 +1200,7 @@ fn rich_style(style: &pnxr_preview::rich::Style) -> Style {
         Tone::Keyword => out = out.fg(Color::Magenta),
         Tone::Str => out = out.fg(Color::Green),
         Tone::Number => out = out.fg(Color::Yellow),
-        Tone::Comment => out = out.fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+        Tone::Comment => out = out.add_modifier(Modifier::DIM | Modifier::ITALIC),
         Tone::Name => out = out.fg(Color::Cyan),
     }
     out
@@ -1097,20 +1217,11 @@ fn draw_image(frame: &mut Frame, picture: &image::RgbaImage, zoom: Zoom, area: R
         cropped = image::imageops::crop_imm(picture, x, y, w, h).to_image();
         &cropped
     };
-    let cells = pnxr_frontend::viewer::image_cells(shown, area.width, area.height);
-    let height = cells.len() as u16;
-    let width = cells.first().map_or(0, |row| row.len() as u16);
-    let left = area.x + (area.width - width) / 2;
-    let top = area.y + (area.height - height) / 2;
-    let buffer = frame.buffer_mut();
-    for (y, row) in cells.iter().enumerate() {
-        for (x, (upper, lower)) in row.iter().enumerate() {
-            let cell = &mut buffer[(left + x as u16, top + y as u16)];
-            cell.set_char('▀');
-            cell.set_fg(Color::Rgb(upper[0], upper[1], upper[2]));
-            cell.set_bg(Color::Rgb(lower[0], lower[1], lower[2]));
-        }
+    if crate::graphics::draw_graphics(frame, shown, area) {
+        return;
     }
+    let sextants = crate::graphics::mode() == crate::graphics::Mode::Sextants;
+    crate::graphics::draw_blocks(frame, shown, area, sextants);
 }
 
 /// Draws the settings screen (Ctrl+,): options, shortcuts and commands.

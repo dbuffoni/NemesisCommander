@@ -130,8 +130,8 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`). While a
   filter is on, the line under the panel says `filter: … (Esc clears)`.
 - **Esc** clears the filter; with no filter it clears the selection (and,
-  right after **Ctrl+F3** compared two folders, the differences it selected in
-  both panels).
+  right after *Compare folders* (F9), the differences it marked in both
+  panels).
 - **Ctrl+↓** (or **Ctrl+U**) swaps the panels, **Ctrl+↑** opens
   this folder in the other one.
   **Ctrl+←** and **Ctrl+→** open the folder under the cursor in the left or
@@ -215,7 +215,7 @@ listed, and listings stop at 100 000 files (the footer says so).
 Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:
 one commit to push, two to pull) and a mark before each name: **M** changed or
 staged, **?** untracked, **!** ignored. A folder carries the mark of what is
-inside it. The marks are not the result of **Ctrl+F3** (Compare): they are what
+inside it. The marks are not the result of a comparison: they are what
 `git status` says now, read again every time the folder is listed, so they
 disappear when the file is committed or ignored. With the cursor on a marked
 entry, the line under the panel says what the mark means (for example
@@ -963,8 +963,15 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
 - **Tools/Write a script with AI…** (F9) asks what the script should do;
   Claude writes it with your Anthropic API key, `pnxr test` checks it, and
   Claude fixes it until it passes. It then appears under **Scripts**. From
-  the command line: `pnxr ai new "description"` (key: `pnxr ai key` or
-  `ANTHROPIC_API_KEY`).
+  the command line: `pnxr ai new "description"`. Anthropic is the default;
+  **Settings, AI providers…** (also in the Pairnox menu) adds OpenRouter,
+  OpenAI, a local model (Ollama, LM Studio) or any server that speaks the
+  OpenAI API, each with its address, model and key, and says which is the
+  default. A key comes from the provider's variable (`ANTHROPIC_API_KEY`...) or
+  a private file in the settings folder (`pnxr ai key --provider NAME` reads it
+  from standard input); when there is none, the command asks for it and says
+  how to get one. `pnxr ai providers` lists them, `--provider` and `--model`
+  choose for one run.
 
 - **Panel columns and viewers from plugins.** A manifest can declare
   `"columns": [{"id": "pages", "title": "Pages", "match": ["*.pdf"],
@@ -1032,7 +1039,7 @@ jobs. Every command accepts the same locations as the panels.
 | `pnxr mcp` | Serve file tools to an AI assistant over MCP (see Assistants) |
 | `pnxr run` / `pnxr plugin` | Scripts and plugins (`pnxr run --guide`: the guide for AI assistants) |
 | `pnxr test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
-| `pnxr ai new` / `pnxr ai rename` / `pnxr ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
+| `pnxr ai new` / `pnxr ai rename` / `pnxr ai key` / `pnxr ai providers` | Scripts, plugins and multi-rename rules written by an AI (Anthropic, OpenRouter, OpenAI, local); save a key; list the providers |
 | `pnxr agent --stdio`, `pnxr serve`, `pnxr tls` | The server side (Linux) |
 
 **`pnxr pick`** turns the terminal interface into a file chooser for scripts:
@@ -1189,13 +1196,13 @@ on the settings screen (Ctrl+,).
 | Tools | |
 |---|---|
 | Ctrl+F2 | Search |
-| Ctrl+F3 | Compare files or folders |
+| Ctrl+F3 | Compare two files |
 | Ctrl+F4 | Synchronize folders |
 | Ctrl+F5 | Find duplicate files |
 | Ctrl+Shift+F | Flat (branch) view |
 | Ctrl+F7 | Disk usage of this folder |
 | Ctrl+F8 | Disks and partitions |
-| (F9 only) | Compare folders by content, Saved searches, Save the last search |
+| (F9 only) | Compare folders (missing files in light red), Compare folders by content, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
 | Ctrl+F9, Ctrl+X | Plugins and scripts |
 | Ctrl+F11, Ctrl+Shift+G | Git actions |
@@ -1210,3 +1217,26 @@ on the settings screen (Ctrl+,).
 | F10 | Quit |
 
 Every command, with all its shortcuts, is in the [command list (F9)](#commands-f9).
+
+
+## The pnxr command, messages and pictures in the terminal (0.7.1)
+
+- **Pairnox menu, Install the pnxr command…** puts a `pnxr` launcher in
+  `~/.local/bin` (or a folder you type) so that the terminal interface and the
+  commands start from any terminal, also from the AppImage or the app bundle.
+  The same window shows where the command is, removes it, and adds or removes
+  the `pnxr shell-init` line in `~/.bashrc`, `~/.zshrc` or fish's
+  `config.fish`, so that quitting leaves the shell in the folder you were in.
+  **Quit without changing the shell's folder** (F9) ends without that.
+  *Install pnxr serve on a server…* is in the same menu.
+- **Messages…** (Pairnox menu, F9) lists what the status line said since
+  start, errors included. `c` copies the highlighted message, `a` all of them.
+- **Compare two files** (Ctrl+F3) compares the files under the two cursors.
+  **Compare folders** (F9) compares the listings by name, size and date: files
+  missing from one side are light red, files that differ are selected, Esc
+  clears both.
+- **Pictures in the terminal.** The terminal interface uses kitty graphics,
+  iTerm2 images or sixel when the terminal is known to have them (not inside
+  tmux or screen); otherwise block characters. *Settings, Pictures in the
+  terminal* (or the variable `PNXR_IMAGES=kitty|iterm2|sixel|blocks|sextants`)
+  forces one; sextants are sharper but need a font that has them.

@@ -624,8 +624,9 @@ pub enum AiAction {
     /// Write a script (or a plugin) from a description: Claude writes it,
     /// `pnxr test` tries it on sample files, and Claude fixes what failed.
     /// A script that passes is saved among your scripts (F9, Scripts).
-    #[command(after_help = "Needs an Anthropic API key: ANTHROPIC_API_KEY, or one saved \
-        with `pnxr ai key`. Each try is one request to the Claude API, billed to that key.\n\n\
+    #[command(after_help = "Needs the API key of the provider (Anthropic unless Settings \
+        chooses another): its environment variable, or one saved with `pnxr ai key`. \
+        Each try is one request to the API, billed to that key.\n\n\
         Examples:\n  pnxr ai new \"move files older than 30 days into a folder named old\"\n  \
         pnxr ai new --plugin \"count the lines of the selected text files\"")]
     New {
@@ -644,9 +645,12 @@ pub enum AiAction {
         /// How many times Claude may try.
         #[arg(long, value_name = "N", default_value_t = 3)]
         tries: u32,
-        /// The Claude model.
-        #[arg(long, default_value = "claude-opus-5-5")]
-        model: String,
+        /// The model (the provider's own when absent).
+        #[arg(long)]
+        model: Option<String>,
+        /// The AI provider (the default one of Settings when absent).
+        #[arg(long, value_name = "NAME")]
+        provider: Option<String>,
         /// Replace a script or plugin with the same name.
         #[arg(long)]
         force: bool,
@@ -661,15 +665,25 @@ pub enum AiAction {
         /// The files (only their names are sent).
         #[arg(required = true)]
         paths: Vec<String>,
-        /// The Claude model.
-        #[arg(long, default_value = "claude-opus-5-5")]
-        model: String,
+        /// The model (the provider's own when absent).
+        #[arg(long)]
+        model: Option<String>,
+        /// The AI provider (the default one of Settings when absent).
+        #[arg(long, value_name = "NAME")]
+        provider: Option<String>,
         /// Print the rule and the new names as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Save an Anthropic API key (read from standard input) for `pnxr ai`.
-    Key,
+    /// Save the API key of a provider (read from standard input) for
+    /// `pnxr ai`; Anthropic unless `--provider` says otherwise.
+    Key {
+        /// The provider the key belongs to.
+        #[arg(long, value_name = "NAME")]
+        provider: Option<String>,
+    },
+    /// List the AI providers (set up in Settings) and whether each has a key.
+    Providers,
 }
 
 #[derive(Debug, Args)]
