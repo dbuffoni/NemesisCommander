@@ -442,7 +442,7 @@ Item {
                 clip: true
                 text: dialogs.view.rows.length === 0 ? "Nothing matches" : dialogs.view.help
                 wrapMode: Text.Wrap
-                color: dialogs.view.rows.length === 0 ? dialogs.theme.dim : dialogs.theme.accent
+                color: dialogs.view.rows.length === 0 ? dialogs.theme.dim : dialogs.theme.headingColor
             }
         }
     }
