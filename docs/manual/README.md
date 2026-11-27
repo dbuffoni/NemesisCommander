@@ -109,14 +109,14 @@ titles show the sort order with an arrow. Folders are bold and end in `/`;
 - **Enter** opens a folder (or an archive), **Backspace** goes to the parent.
 - **Ctrl+L** goes to any location: a path, `~/…`, or a URI such as
   `sftp://host/dir`.
-- **Ctrl+F3 / Ctrl+F4 / Ctrl+F5** sort by name, extension or date; pressing
+- **Ctrl+1 / Ctrl+2 / Ctrl+3** sort by name, extension or date; pressing
   the same one again reverses the order. (There is no "sort by size": use
   the disk usage list, **Ctrl+F7**, below.)
-- **Ctrl+F2** shows or hides hidden files, **Ctrl+R** reloads.
+- **Ctrl+H** shows or hides hidden files, **Ctrl+R** reloads.
 - **Ctrl+S** filters the listing as you type (`*.pdf`, `report`). While a
   filter is on, the line under the panel says `filter: … (Esc clears)`.
 - **Esc** clears the filter; with no filter it clears the selection (and,
-  right after **Shift+F3** compared two folders, the differences it selected in
+  right after **Ctrl+F3** compared two folders, the differences it selected in
   both panels).
 - **Ctrl+↓** (or **Ctrl+U**) swaps the panels, **Ctrl+↑** opens
   this folder in the other one.
@@ -164,7 +164,7 @@ does not tell is shown as `-`.
 The line under the panels describes the entry under the cursor (size, date,
 permissions, link target) or shows the last message. The bottom row lists
 what F1–F10 do, and it follows the keys you hold: with **Shift** down it shows
-what Shift+F1…F10 do (`Drives` at F1, `Search` at F7, `Pack` at F5, `Unpack` at F9),
+what Shift+F1…F10 do (`Drives` at F1, `Link` at F7, `Pack` at F5, `Unpack` at F6),
 with **Ctrl** or a combination with Shift likewise (Alt does not change the bar), and nothing for the keys that are not bound. In the
 window this follows the keyboard live (clicking a label with a modifier held
 runs that combination). In the terminal it works only where the terminal
@@ -190,7 +190,7 @@ drag a row out to your desktop or another application.
 
 ### The flat view
 
-**Ctrl+F6** lists every file below the current folder in one list, with the
+**Ctrl+Shift+F** lists every file below the current folder in one list, with the
 subfolder of each file in a *Folder* column, so you can see, sort, select and
 copy files from a whole tree at once. Press it again, or Backspace, to come
 back to the folder. Hidden files follow the usual setting, folders are not
@@ -201,7 +201,7 @@ listed, and listings stop at 100 000 files (the footer says so).
 Inside a git repository the panel shows the branch in its title (`⎇ main ↑1 ↓2`:
 one commit to push, two to pull) and a mark before each name: **M** changed or
 staged, **?** untracked, **!** ignored. A folder carries the mark of what is
-inside it. The marks are not the result of **Shift+F3** (Compare): they are what
+inside it. The marks are not the result of **Ctrl+F3** (Compare): they are what
 `git status` says now, read again every time the folder is listed, so they
 disappear when the file is committed or ignored. With the cursor on a marked
 entry, the line under the panel says what the mark means (for example
@@ -221,17 +221,17 @@ default; the destination can be edited before you confirm.
 | F4 | Edit the file in your editor |
 | F5 | Copy |
 | F6 | Move |
-| Shift+F6 or F2 | Rename |
+| F2 | Rename |
 | Shift+F2 | Rename many files with a template ([below](#renaming-many-files)) |
 | F9, Files/Multi-rename with AI… | Describe the new names; Claude writes the rule ([below](#renaming-many-files)) |
 | F7 | New folder |
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
-| Shift+F5 / Shift+F9 | Pack into an archive / unpack one |
-| Ctrl+E | Properties, and change the dates and permissions |
+| Shift+F5 / Shift+F6 | Pack into an archive / unpack one |
+| Shift+F4 or Ctrl+E | Properties, and change the dates and permissions |
 | F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
-| Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
+| Ctrl+F6 or Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
 
 | Copy | New folder | Delete |
 |---|---|---|
@@ -326,7 +326,7 @@ it is closed (for example `code --wait`) in Settings first.
 
 ### Links
 
-**Shift+F4** makes a symbolic link (relative or absolute) or a hard link, in the
+**Shift+F7** makes a symbolic link (relative or absolute) or a hard link, in the
 other panel's folder, to the selected items, with the same names. Only local
 folders can hold links; an existing name is never replaced.
 
@@ -394,7 +394,7 @@ and names (keys, types, tags, variables). Shell scripts, YAML, JSON, XML and
 HTML, SQL, TypeScript and JavaScript, Rust and Python are recognised by the
 file name, or by the `#!` line when the name does not say. The language shows
 in the footer. The same colours appear in the quick view and, for unchanged
-lines, in a comparison (Shift+F3). Files over 50 000 lines stay plain.
+lines, in a comparison (Ctrl+F3). Files over 50 000 lines stay plain.
 
 ![Text](images/viewer-text.png)
 
@@ -479,7 +479,7 @@ gives the hex dump.
 
 ## Searching and comparing
 
-**Shift+F7** searches below the current folder by name mask (`*.rs;*.toml`,
+**Ctrl+F2** searches below the current folder by name mask (`*.rs;*.toml`,
 with `!` to exclude) and, optionally, by text the files contain (start either with `re:` for a regular
 expression, e.g. `re:^report-\d{2}`). Results
 appear in a list as they are found; Enter jumps to the chosen file in the
@@ -494,7 +494,7 @@ inside archives, up to three levels). Found files are listed with the archive
 in their path. On the command line it is
 `nmc find --archives`.
 
-**Shift+F3** compares: two files (one under the cursor in each panel) by
+**Ctrl+F3** compares: two files (one under the cursor in each panel) by
 content, or two folders, selecting the entries that differ. Two different
 text files open side by side, with the file of the panel you are in on the
 left: `-` marks lines only on the left, `+` lines only on the right and `~`
@@ -571,7 +571,7 @@ single compressed files (`.gz`, `.xz`, …) and RAR (reading only, with
 libarchive: RAR 3/4 and 5, solid archives included; encrypted archives and
 multi-volume sets are refused with a message). Shift+F5
 packs the selection into a new archive, choosing the format from the name;
-Shift+F9 unpacks.
+Shift+F6 unpacks.
 
 To protect an archive with a password, use the Pack question's **more
 options** (the key row says so: Ctrl+O, "format, level, password"): press **Ctrl+O** in it (the typed name,
@@ -1079,7 +1079,7 @@ on the settings screen (Ctrl+,).
 | F4 | Edit file |
 | F5 | Copy |
 | F6 | Move |
-| Shift+F6, F2 | Rename |
+| F2 | Rename |
 | Shift+F2 | Multi-rename (with a preview) |
 | (F9 only) | Multi-rename with AI |
 | F7 | New folder |
@@ -1087,11 +1087,11 @@ on the settings screen (Ctrl+,).
 | Shift+F8, Shift+Delete | Delete permanently |
 | Shift+F5 | Pack into archive |
 | Ctrl+O (in the Pack question) | More options: format, level, password |
-| Shift+F9 | Unpack archive (asks the password of an encrypted one) |
-| Ctrl+E | Properties, dates and permissions |
-| Ctrl+K | Checksum |
+| Shift+F6 | Unpack archive (asks the password of an encrypted one) |
+| Shift+F4, Ctrl+E | Properties, dates and permissions |
+| Ctrl+F6, Ctrl+K | Checksum |
 | Ctrl+P | Copy path to clipboard |
-| Shift+F4 | Create symlink or hard link |
+| Shift+F7 | Create symlink or hard link |
 | Ctrl+G | Add to basket |
 | (F9 only) | Export listing, Rename in the editor |
 
@@ -1125,21 +1125,23 @@ on the settings screen (Ctrl+,).
 | View | |
 |---|---|
 | Ctrl+R | Refresh |
-| Ctrl+F2 | Show hidden files |
+| Ctrl+H | Show hidden files |
 | Ctrl+S | Quick filter |
-| Ctrl+F3, Ctrl+F4, Ctrl+F5 | Sort by name, extension, date |
-| Ctrl+Q | Quick view in the other panel |
+| Ctrl+1, Ctrl+2, Ctrl+3 | Sort by name, extension, date |
+| Shift+F3, Ctrl+Q | Quick view in the other panel |
 
 | Tools | |
 |---|---|
-| Shift+F7 | Search |
-| Shift+F3 | Compare files or folders |
-| Ctrl+F6 | Flat (branch) view |
+| Ctrl+F2 | Search |
+| Ctrl+F3 | Compare files or folders |
+| Ctrl+F4 | Synchronize folders |
+| Ctrl+F5 | Find duplicate files |
+| Ctrl+Shift+F | Flat (branch) view |
 | Ctrl+F7 | Disk usage of this folder |
 | Ctrl+F8 | Disks and partitions |
-| (F9 only) | Compare folders by content, Synchronize folders, Find duplicate files, Find similar pictures, Saved searches, Save the last search |
+| (F9 only) | Compare folders by content, Find similar pictures, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
-| Ctrl+X | Plugins and scripts |
+| Ctrl+F9, Ctrl+X | Plugins and scripts |
 | (F9 only) | Write a script with AI |
 
 | NemesisCommander | |

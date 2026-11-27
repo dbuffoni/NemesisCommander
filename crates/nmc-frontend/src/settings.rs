@@ -9,7 +9,47 @@ use nmc_config::{Action, Config, KeyChord, Keymap, TransferProfile};
 use nmc_index::SortKey;
 use nmc_ops::{ConflictPolicy, VerifyMode};
 
-/// The text of the help window (F1 on the settings screen).
+/// The text of the help window (F1 on the settings screen) for the
+/// highlighted row: the full help of the option, then the overview.
+pub fn help_for(row: Row) -> (String, Vec<String>) {
+    let mut lines = Vec::new();
+    let title = match row {
+        Row::Option(field) => {
+            lines.push(field.label().to_owned());
+            lines.push(String::new());
+            lines.push(field.help().0.to_owned());
+            lines.push(String::new());
+            lines.extend(wrap(field.help().1, 76));
+            lines.push(String::new());
+            lines.push("─────".to_owned());
+            "Setting help".to_owned()
+        }
+        _ => "Settings help".to_owned(),
+    };
+    lines.extend(help_lines());
+    (title, lines)
+}
+
+/// `text` in lines of at most `width` characters, cut at spaces.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
+            lines.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
+/// The overview that follows the help of an option.
 pub fn help_lines() -> Vec<String> {
     [
         "Up/Down move, Left/Right/Enter change, Del = default, type to filter.",
@@ -48,8 +88,12 @@ pub enum Field {
     ConfirmDelete,
     /// Delete to the recycle bin.
     UseTrash,
-    /// Editor command for F4.
+    /// Editor command for F4, for both interfaces.
     Editor,
+    /// Editor command for F4 in the window.
+    GuiEditor,
+    /// Editor command for F4 in the terminal interface.
+    TerminalEditor,
     /// Command that opens a terminal in the folder.
     Terminal,
     /// Show hidden files.
@@ -66,6 +110,8 @@ pub enum Field {
     ArrowNavigation,
     /// Git marks and branch.
     GitStatus,
+    /// The `git` program.
+    GitExecutable,
     /// Jobs running at once.
     ParallelJobs,
     /// Files copied at once within a job.
@@ -115,6 +161,8 @@ pub enum FieldKind {
     Text,
     /// A font family: Enter lists the installed fonts.
     Font,
+    /// An editor: Enter lists known editors (typing a command is possible).
+    Editor,
 }
 
 const SORTS: [(SortKey, &str); 4] = [
@@ -146,10 +194,12 @@ const CONFLICTS: [(ConflictPolicy, &str); 7] = [
 
 impl Field {
     /// Every option, in screen order.
-    pub const ALL: [Field; 27] = [
+    pub const ALL: [Field; 30] = [
         Field::ConfirmDelete,
         Field::UseTrash,
         Field::Editor,
+        Field::GuiEditor,
+        Field::TerminalEditor,
         Field::Terminal,
         Field::ShowHidden,
         Field::HideDsStore,
@@ -157,7 +207,6 @@ impl Field {
         Field::Descending,
         Field::HumanSizes,
         Field::ArrowNavigation,
-        Field::GitStatus,
         Field::Icons,
         Field::AutoParallelism,
         Field::Profile,
@@ -174,19 +223,146 @@ impl Field {
         Field::FontFamily,
         Field::FontSize,
         Field::FixedFontFamily,
+        Field::GitStatus,
+        Field::GitExecutable,
     ];
 
     /// The section it is shown in.
     pub fn section(self) -> &'static str {
         use Field::*;
         match self {
-            ConfirmDelete | UseTrash | Editor | Terminal => "General",
-            ShowHidden | HideDsStore | Sort | Descending | HumanSizes | ArrowNavigation
-            | GitStatus | Icons => "Panels",
+            ConfirmDelete | UseTrash | Editor | GuiEditor | TerminalEditor | Terminal => "General",
+            ShowHidden | HideDsStore | Sort | Descending | HumanSizes | ArrowNavigation | Icons => {
+                "Panels"
+            }
+            GitStatus | GitExecutable => "Git",
             ParallelJobs | ParallelFiles | AutoParallelism | Profile | KeepStats | Verify
             | VerifyRemoteFast | Conflict | BandwidthLimit | Retries => "Transfers",
             Wrap | TabWidth | HexAbove => "Viewer",
             FontFamily | FontSize | FixedFontFamily => "Window fonts (not the terminal)",
+        }
+    }
+
+    /// The help of the option: a short line (always shown under the list)
+    /// and the full text (F1). Written here, next to the option, and used by
+    /// the screen, the search and the manual.
+    pub fn help(self) -> (&'static str, &'static str) {
+        use Field::*;
+        match self {
+            ConfirmDelete => (
+                "Ask before anything is deleted.",
+                "On: Delete (F8) asks first and lists what goes. Off: it deletes at once. Default: yes. Deleting permanently (Shift+F8) always asks.",
+            ),
+            UseTrash => (
+                "Delete to the recycle bin when the place has one.",
+                "On: F8 moves items to the recycle bin (trash) so they can be taken back. Off, or on a place that has no bin (servers), they are deleted for good. Default: yes.",
+            ),
+            Editor => (
+                "The editor for F4, in the window and in the terminal.",
+                "A command, for example `codium --wait`. {file} and {line} may be used; without {file} the file is added at the end. Empty: $VISUAL, then $EDITOR, then the system's. The two settings below override it for one interface. Enter lists known editors.",
+            ),
+            GuiEditor => (
+                "The editor for F4 in the window.",
+                "Used only by the window. A terminal editor (nvim, nano...) set here opens in a terminal window. Empty: the shared editor if it is a window editor, else the desktop's text editor. Enter lists known editors, installed ones first.",
+            ),
+            TerminalEditor => (
+                "The editor for F4 in the terminal interface.",
+                "Used only by the terminal interface, which gives the terminal to the editor and takes it back afterwards. A window editor set here starts detached and the interface stays usable. Empty: the shared editor if it is a terminal editor, then $VISUAL, $EDITOR, then vi.",
+            ),
+            Terminal => (
+                "The command that opens a terminal in the folder.",
+                "{dir} is the folder, {dir_url} the same as a URL; quotes keep spaces in one word. The process also starts in the folder, so a command with no {dir} works for terminals that follow it (Warp: /path/warp.appimage). Empty: the terminal of the desktop (xdg-terminal-exec, $TERMINAL, then known terminals). If the terminal fails, the message says what it printed.",
+            ),
+            ShowHidden => (
+                "Show files whose name starts with a dot.",
+                "Also Ctrl+H in the panels. Default: no.",
+            ),
+            HideDsStore => (
+                "Never list the .DS_Store files of macOS.",
+                "Even with hidden files shown. Default: no.",
+            ),
+            Sort => (
+                "How new panels are sorted.",
+                "name, extension, size or date. Ctrl+1, Ctrl+2 and Ctrl+3 change it for one panel.",
+            ),
+            Descending => (
+                "Reverse the order: largest, latest or last first.",
+                "Applies to the sort above. Default: no.",
+            ),
+            HumanSizes => ("Show sizes as 1.2 MiB instead of exact bytes.", "Default: yes."),
+            ArrowNavigation => (
+                "Left goes up a folder and Right enters the folder under the cursor.",
+                "The \"Lynx-like\" movement of Double Commander. Default: no.",
+            ),
+            Icons => (
+                "Draw a small icon for the kind of each file.",
+                "Outline icons for folders, pictures, archives, code... Default: yes.",
+            ),
+            ParallelJobs => (
+                "How many transfers run at the same time.",
+                "1 runs them one after the other. The others wait in the queue (Ctrl+J).",
+            ),
+            ParallelFiles => (
+                "Files copied at the same time within one job, when parallelism is fixed.",
+                "Used only when \"Parallelism of transfers\" is fixed.",
+            ),
+            AutoParallelism => (
+                "Automatic: the program finds how many files at once copy fastest.",
+                "automatic starts with 2 files at a time, adds files while they make the copy clearly faster, goes back when they do not help and lowers the number if the speed drops. fixed always uses \"Files at the same time\".",
+            ),
+            Profile => (
+                "How boldly the automatic mode adds files.",
+                "balanced: up to 8 files. max speed: up to 16, tries more often. discreet: up to 3, only for clear gains, leaves room for other work.",
+            ),
+            KeepStats => (
+                "Remember the level that worked for each server.",
+                "A small file keeps what worked and the limit per server so known servers start well. Deleted or renamed connections and old servers are dropped by themselves; off deletes it.",
+            ),
+            Verify => (
+                "Check copies after they are written.",
+                "no check, same size, same content (XXH3, fast) or same content (BLAKE3, full). More thorough checks take longer.",
+            ),
+            VerifyRemoteFast => (
+                "Ask agent and nmc serve servers to check content themselves.",
+                "The server hashes its copy, so the file is not read back over the network.",
+            ),
+            Conflict => (
+                "What to do when the destination file exists.",
+                "ask, overwrite, overwrite if newer, overwrite if the size differs, skip, keep both or stop with an error.",
+            ),
+            BandwidthLimit => {
+                ("Cap all transfers together, in KiB per second.", "0 means no limit.")
+            }
+            Retries => (
+                "How many times a network error is retried.",
+                "Each retry waits a little longer (5 s, 10 s, 20 s... up to 1.5 minutes).",
+            ),
+            Wrap => ("Wrap long lines in the viewer.", "Default: no (long lines scroll sideways)."),
+            TabWidth => ("Spaces a tab stands for in the viewer.", "Between 1 and 16."),
+            HexAbove => (
+                "Files bigger than this open as hex, in MiB.",
+                "Big files are not read as text. Default: 50 MiB.",
+            ),
+            FontFamily => (
+                "The font of all text in the window.",
+                "Default: JetBrainsMono Nerd Font Mono. If it is not installed the system's font is used. Enter lists the installed fonts; Delete returns to the default. The terminal interface uses the terminal's font.",
+            ),
+            FontSize => (
+                "The size of the text, in points.",
+                "Default: 11. 0 uses the size of the system. The window never shows text bigger than it can hold.",
+            ),
+            FixedFontFamily => (
+                "The font of columns, viewers and code.",
+                "A fixed-width font. Default: JetBrainsMono Nerd Font Mono; if it is not installed the system's monospace font is used.",
+            ),
+            GitStatus => (
+                "Mark changed files and show the branch inside Git repositories.",
+                "M changed, ? not tracked, ! ignored; the branch and how far it is from the upstream are in the panel title. Default: yes.",
+            ),
+            GitExecutable => (
+                "The git program to run.",
+                "A name on PATH or a full path. Empty: git. Git actions are disabled with a message when it is not found.",
+            ),
         }
     }
 
@@ -196,7 +372,9 @@ impl Field {
         match self {
             ConfirmDelete => "Ask before deleting",
             UseTrash => "Delete to the recycle bin",
-            Editor => "Editor (empty: $EDITOR or the system's)",
+            Editor => "Editor, both interfaces (empty: $EDITOR or the system's)",
+            GuiEditor => "Editor in the window (empty: the shared one, or the desktop's)",
+            TerminalEditor => "Editor in the terminal (empty: the shared one, $EDITOR, vi)",
             Terminal => "Terminal command, {dir} is the folder (empty: the system's)",
             ShowHidden => "Show hidden files",
             HideDsStore => "Always hide .DS_Store files",
@@ -205,6 +383,7 @@ impl Field {
             HumanSizes => "Sizes as KiB, MiB, GiB",
             ArrowNavigation => "← goes up, → enters a folder",
             GitStatus => "Git marks and branch in repositories",
+            GitExecutable => "Git program (empty: git)",
             Icons => "Icons for the kinds of files",
             ParallelJobs => "Jobs at the same time (1: one after the other)",
             ParallelFiles => "Files at the same time when Parallelism is fixed",
@@ -234,7 +413,8 @@ impl Field {
                 FieldKind::Toggle
             }
             Sort | Verify | Conflict | AutoParallelism | Profile => FieldKind::Choice,
-            Editor | Terminal => FieldKind::Text,
+            Terminal | GitExecutable => FieldKind::Text,
+            Editor | GuiEditor | TerminalEditor => FieldKind::Editor,
             FontFamily | FixedFontFamily => FieldKind::Font,
             FontSize => FieldKind::Number(0, 48),
             ParallelJobs => FieldKind::Number(1, 64),
@@ -255,6 +435,8 @@ impl Field {
             ConfirmDelete => on(g.confirm_delete),
             UseTrash => on(g.use_trash),
             Editor => g.editor.clone(),
+            GuiEditor => g.gui_editor.clone(),
+            TerminalEditor => g.terminal_editor.clone(),
             Terminal => g.terminal.clone(),
             ShowHidden => on(p.show_hidden),
             HideDsStore => on(p.hide_ds_store),
@@ -263,6 +445,7 @@ impl Field {
             HumanSizes => on(p.human_sizes),
             ArrowNavigation => on(p.arrow_navigation),
             GitStatus => on(p.git_status),
+            GitExecutable => config.git.executable.clone(),
             Icons => on(p.icons),
             ParallelJobs => t.parallel_jobs.to_string(),
             ParallelFiles => t.parallel_files.to_string(),
@@ -306,7 +489,8 @@ impl Field {
             Sort => p.sort = cycle(&SORTS, p.sort, delta),
             Verify => t.verify = cycle(&VERIFY, t.verify, delta),
             Conflict => t.conflict = cycle(&CONFLICTS, t.conflict, delta),
-            Editor | Terminal | FontFamily | FixedFontFamily => {}
+            Editor | GuiEditor | TerminalEditor | Terminal | GitExecutable | FontFamily
+            | FixedFontFamily => {}
             _ => {
                 let current: u64 = self.value(config).parse().unwrap_or(0);
                 let next = current.saturating_add_signed(delta);
@@ -338,7 +522,10 @@ impl Field {
         }
         match self {
             Field::Editor => config.general.editor = text.to_owned(),
+            Field::GuiEditor => config.general.gui_editor = text.to_owned(),
+            Field::TerminalEditor => config.general.terminal_editor = text.to_owned(),
             Field::Terminal => config.general.terminal = text.to_owned(),
+            Field::GitExecutable => config.git.executable = text.to_owned(),
             Field::FontFamily => config.appearance.font_family = text.to_owned(),
             Field::FixedFontFamily => config.appearance.fixed_font_family = text.to_owned(),
             _ => {}
@@ -351,7 +538,7 @@ impl Field {
         let defaults = Config::default();
         let value = self.value(&defaults);
         match self.kind() {
-            FieldKind::Number(..) | FieldKind::Text | FieldKind::Font => {
+            FieldKind::Number(..) | FieldKind::Text | FieldKind::Font | FieldKind::Editor => {
                 let _ = self.set(config, &value);
             }
             _ => {
@@ -488,7 +675,9 @@ impl SettingsScreen {
                     header = Some(row);
                     continue;
                 }
-                Row::Option(field) => format!("{} {}", field.section(), field.label()),
+                Row::Option(field) => {
+                    format!("{} {} {}", field.section(), field.label(), field.help().0)
+                }
                 Row::Command(command) => format!("share settings {}", command.label()),
             };
             if let Some(score) = crate::fuzzy::score(filter, &text) {
@@ -689,10 +878,31 @@ mod tests {
         assert_eq!(screen.current(), Row::Option(Field::ConfirmDelete));
         screen.move_cursor(-1);
         assert_eq!(screen.current(), Row::Option(Field::ConfirmDelete), "stays on the first");
-        screen.move_cursor(4);
+        screen.move_cursor(7);
         assert_eq!(screen.current(), Row::Option(Field::ShowHidden), "over the Panels title");
         screen.move_cursor(1000);
         assert_eq!(screen.current(), Row::Command(Command::EditFile));
+    }
+
+    #[test]
+    fn every_option_has_help_and_a_title_finds_its_whole_section() {
+        for field in Field::ALL {
+            let (short, long) = field.help();
+            assert!(!short.is_empty() && !long.is_empty(), "{field:?} has no help");
+        }
+        let mut screen = SettingsScreen::new();
+        screen.set_filter("git");
+        let options: Vec<Field> = screen
+            .rows
+            .iter()
+            .filter_map(|r| if let Row::Option(f) = r { Some(*f) } else { None })
+            .collect();
+        assert_eq!(options, [Field::GitStatus, Field::GitExecutable], "the Git section");
+        screen.set_filter("transfers");
+        assert!(screen.rows.contains(&Row::Option(Field::Retries)), "all of Transfers");
+        screen.set_filter("popular tools unknown");
+        screen.set_filter("mark changed files");
+        assert!(screen.rows.contains(&Row::Option(Field::GitStatus)), "the help text is searched");
     }
 
     #[test]

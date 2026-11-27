@@ -1115,7 +1115,7 @@ fn draw_settings(frame: &mut Frame, app: &App, screen: &nmc_frontend::settings::
     let rect =
         centered(area, area.width.saturating_sub(4).min(100), area.height.saturating_sub(2).max(8));
     frame.render_widget(Clear, rect);
-    let rows = rect.height.saturating_sub(2) as usize;
+    let rows = rect.height.saturating_sub(3) as usize;
     let view = nmc_frontend::view::settings_view(app, screen, rows);
     let hint_style = if view.recording { Style::new().fg(Color::Yellow) } else { dim() };
     let block = Block::bordered()
@@ -1123,6 +1123,20 @@ fn draw_settings(frame: &mut Frame, app: &App, screen: &nmc_frontend::settings::
         .title_bottom(Line::styled(format!(" {} ", view.hint), hint_style));
     let inner = block.inner(rect);
     frame.render_widget(block, rect);
+    // The short help of the highlighted option takes the last row.
+    let (inner, help_row) = if inner.height > 1 {
+        let list = Rect { height: inner.height - 1, ..inner };
+        let help = Rect { y: inner.y + inner.height - 1, height: 1, ..inner };
+        (list, Some(help))
+    } else {
+        (inner, None)
+    };
+    if let Some(help_row) = help_row {
+        frame.render_widget(
+            Paragraph::new(Line::styled(fit(&view.help, help_row.width as usize), dim())),
+            help_row,
+        );
+    }
     let width = inner.width as usize;
     let value_width = (width / 3).clamp(12, 40);
     let label_width = width.saturating_sub(value_width + 3);

@@ -288,6 +288,8 @@ pub struct SettingsView {
     pub percent: usize,
     /// The keys of the highlighted row, or what to do while recording.
     pub hint: String,
+    /// The short help of the highlighted option (F1 opens the full text).
+    pub help: String,
     /// Waiting for a new shortcut.
     pub recording: bool,
 }
@@ -541,9 +543,9 @@ impl Screen {
                 Vec::new()
             },
             fonts: FontsView {
-                family: app.context().config.appearance.font_family.clone(),
+                family: app.usable_font(&app.context().config.appearance.font_family),
                 size: app.context().config.appearance.font_size,
-                fixed_family: app.context().config.appearance.fixed_font_family.clone(),
+                fixed_family: app.usable_font(&app.context().config.appearance.fixed_font_family),
             },
         }
     }
@@ -904,7 +906,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         },
         // The window's title and hint lines take some of the rows.
         Overlay::Settings(screen) => {
-            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(4)))
+            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(5)))
         }
     })
 }
@@ -943,7 +945,7 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
     } else {
         (format!("Find: {}_{}", screen.filter, crate::hints::SEP), "Esc: clear")
     };
-    let typing = if screen.filter.is_empty() { Some("Type: find") } else { None };
+    let typing = if screen.filter.is_empty() { Some("F1: help, Type: find") } else { None };
     let mut parts: Vec<&str> = match screen.current() {
         Row::Option(field) => match field.kind() {
             FieldKind::Toggle | FieldKind::Choice => {
@@ -953,7 +955,7 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
                 vec!["Enter: type a value", "←/→: less / more", "Delete: default"]
             }
             FieldKind::Text => vec!["Enter: type a value", "Delete: default"],
-            FieldKind::Font => vec!["Enter: choose", "Delete: default"],
+            FieldKind::Font | FieldKind::Editor => vec!["Enter: choose", "Delete: default"],
         },
         _ => vec!["Enter: run"],
     };
@@ -965,6 +967,10 @@ pub fn settings_view(app: &App, screen: &SettingsScreen, rows: usize) -> Setting
         cursor: screen.cursor - offset,
         percent: if total <= rows { 100 } else { (offset + rows) * 100 / total },
         hint,
+        help: match screen.current() {
+            Row::Option(field) => field.help().0.to_owned(),
+            _ => String::new(),
+        },
         recording: false,
     }
 }

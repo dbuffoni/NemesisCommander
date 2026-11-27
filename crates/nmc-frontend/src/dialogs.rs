@@ -537,6 +537,16 @@ pub enum ChoosePurpose {
         /// The rows' font families.
         names: Vec<String>,
     },
+    /// An editor command for a setting; the first row is the default and the
+    /// last lets the user type a command, back to the settings afterwards.
+    Editor {
+        /// The option.
+        field: Field,
+        /// The screen to go back to.
+        screen: Box<SettingsScreen>,
+        /// The command of each row except the last ("" is the default).
+        commands: Vec<String>,
+    },
     /// Groups of similar pictures, after a row that puts the extra copies
     /// in the basket.
     Similar(Vec<Vec<crate::similar::Picture>>),

@@ -498,8 +498,9 @@ impl App {
         }
         let Some(dir) = path.to_local_path() else { return };
         let path = path.clone();
+        let exe = self.context.config.git.program().to_owned();
         self.spawn_task(async move {
-            let status = tokio::task::spawn_blocking(move || crate::git::read(&dir))
+            let status = tokio::task::spawn_blocking(move || crate::git::read_with(&exe, &dir))
                 .await
                 .ok()
                 .flatten()
@@ -831,6 +832,15 @@ impl App {
         fonts.sort_by_key(|f| f.to_lowercase());
         fonts.dedup();
         self.fonts = fonts;
+    }
+
+    /// `family` if the window has that font installed (or does not know
+    /// the installed fonts), else empty: the window then uses the system
+    /// font, or `monospace` for the fixed-width one.
+    pub fn usable_font(&self, family: &str) -> String {
+        let known = self.fonts.is_empty()
+            || self.fonts.iter().any(|f| f.eq_ignore_ascii_case(family.trim()));
+        if known { family.to_owned() } else { String::new() }
     }
 
     /// The settings and key map in use.
@@ -1570,7 +1580,9 @@ impl App {
                         if let Some(cancel) = self.search_cancel.take() {
                             cancel.cancel();
                         }
-                        if let ChoosePurpose::Font { screen, .. } = dialog.purpose {
+                        if let ChoosePurpose::Font { screen, .. }
+                        | ChoosePurpose::Editor { screen, .. } = dialog.purpose
+                        {
                             return Some(Overlay::Settings(*screen));
                         }
                         return None;
@@ -1943,7 +1955,7 @@ impl App {
             Action::Disks => self.show_disks(),
             Action::SavedSearches => self.open_saved_searches(),
             Action::SaveSearch if self.last_search.is_none() => {
-                self.set_error("Search first (Shift+F7), then save that search")
+                self.set_error("Search first (Ctrl+F2), then save that search")
             }
             Action::SaveSearch => {
                 self.ask("Save search", "Name for this search:", "", InputPurpose::NameSearch)
@@ -2653,6 +2665,21 @@ impl App {
                 }
                 self.overlay = Some(Overlay::Settings(*screen));
             }
+            ChoosePurpose::Editor { field, screen, commands } => match commands.get(cursor) {
+                Some(command) => {
+                    self.setting_typed(field, command);
+                    self.overlay = Some(Overlay::Settings(*screen));
+                }
+                None => {
+                    let value = field.value(&self.context.config);
+                    self.overlay = Some(Overlay::Input(InputDialog::new(
+                        "Settings",
+                        &format!("{}:", field.label()),
+                        &value,
+                        InputPurpose::SettingValue { field, screen },
+                    )));
+                }
+            },
             ChoosePurpose::ImportMode(bundle) => {
                 let mode = if cursor == 0 { ImportMode::Replace } else { ImportMode::Merge };
                 self.context.config = bundle.apply(&self.context.config, mode);
@@ -2863,6 +2890,7 @@ impl App {
             return;
         }
         match path.to_local_path().filter(|_| path.scheme() == "file") {
+            Some(local) if self.edit_in_terminal(&local) => {}
             Some(local) => {
                 self.external = Some(External {
                     command: self.editor_command(&local),
@@ -2874,26 +2902,60 @@ impl App {
         }
     }
 
-    /// The editor command line for `file`: the configured editor, then
-    /// `$VISUAL`, `$EDITOR` (in a terminal only), and finally a platform
-    /// default.
-    fn editor_command(&self, file: &Path) -> Vec<String> {
-        let configured = self.context.config.general.editor.trim().to_owned();
-        let from_environment = if self.graphical {
-            Vec::new()
-        } else {
-            vec![
-                std::env::var("VISUAL").unwrap_or_default(),
-                std::env::var("EDITOR").unwrap_or_default(),
-            ]
-        };
-        let editor = std::iter::once(configured)
+    /// A window with a terminal editor set: opens it in a terminal window.
+    /// Returns `false` when the editor does not need that.
+    fn edit_in_terminal(&mut self, file: &Path) -> bool {
+        let (editor, needs_terminal) = self.editor_choice();
+        if !needs_terminal {
+            return false;
+        }
+        let program = crate::editors::command_line(&editor, file, 1);
+        let dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
+        let candidates = crate::terminal::run_in(
+            &self.context.config.general.terminal,
+            std::env::var("TERMINAL").ok().as_deref(),
+            &dir,
+            &program,
+            std::env::consts::OS,
+        );
+        match crate::terminal::launch(&candidates, Some(&dir)) {
+            Ok(_) => self.set_status(format!(
+                "{} is open in a terminal; refresh (Ctrl+R) when you are done",
+                program[0]
+            )),
+            Err(e) => self.set_error(e),
+        }
+        true
+    }
+
+    /// The editor for this interface: its own setting; then the shared
+    /// `editor` and `$VISUAL` / `$EDITOR` when they suit the interface (a
+    /// window does not run a terminal editor, a terminal does not wait for a
+    /// window one it cannot see); then the platform's default. The bool says
+    /// that the editor needs a terminal and the interface is a window.
+    fn editor_choice(&self) -> (String, bool) {
+        let general = &self.context.config.general;
+        let own = if self.graphical { &general.gui_editor } else { &general.terminal_editor };
+        if !own.trim().is_empty() {
+            let needs_terminal = self.graphical
+                && crate::editors::kind_of(own) == Some(crate::editors::Kind::Terminal);
+            return (own.trim().to_owned(), needs_terminal);
+        }
+        let from_environment = [
+            std::env::var("VISUAL").unwrap_or_default(),
+            std::env::var("EDITOR").unwrap_or_default(),
+        ];
+        let editor = std::iter::once(general.editor.trim().to_owned())
             .chain(from_environment)
-            .find(|e| !e.trim().is_empty())
+            .filter(|e| !e.trim().is_empty())
+            .find(|e| crate::editors::suits(e, self.graphical))
             .unwrap_or_else(|| default_editor(self.graphical).into());
-        let mut command: Vec<String> = editor.split_whitespace().map(str::to_owned).collect();
-        command.push(file.display().to_string());
-        command
+        (editor, false)
+    }
+
+    /// The editor command line for `file` (see [`Self::editor_choice`]).
+    fn editor_command(&self, file: &Path) -> Vec<String> {
+        crate::editors::command_line(&self.editor_choice().0, file, 1)
     }
 
     /// Called by the main loop after an external program ended.

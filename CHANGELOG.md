@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0
+
+Not published yet.
+
+- Function keys: Shift+F is the advanced variant of the plain key (Shift+F3
+  quick view, Shift+F4 properties, Shift+F6 unpack, Shift+F7 link) and
+  Ctrl+F holds the tools (Ctrl+F2 search, Ctrl+F3 compare, Ctrl+F4
+  synchronize, Ctrl+F5 duplicates, Ctrl+F6 checksum, Ctrl+F9 plugins). The
+  duplicate rename on Shift+F6 is gone. Moved: hidden files Ctrl+H, sorting
+  Ctrl+1/2/3, flat view Ctrl+Shift+F. Letter shortcuts stay as aliases; keys
+  you set yourself are not touched.
+- Open terminal: the system's default terminal is found with
+  `xdg-terminal-exec` first (Ptyxis and GNOME Console on Fedora Atomic), every
+  terminal is told the folder with its own option and starts in it, the
+  environment of the AppImage is not passed on (it broke other AppImages such as
+  Warp), a terminal that fails shows what it said, and the setting accepts
+  quotes and `{dir_url}`.
+- The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
+  is not installed the system fonts are used.
+
 ## 0.4.1
 
 The first release to be published since 0.2.0; it includes everything in

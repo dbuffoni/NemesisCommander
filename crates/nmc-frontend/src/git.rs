@@ -35,10 +35,16 @@ impl GitStatus {
     }
 }
 
-/// Reads the status of `dir`; `None` outside a repository or without git.
+/// Reads the status of `dir` with the system's `git`.
 pub fn read(dir: &Path) -> Option<GitStatus> {
+    read_with("git", dir)
+}
+
+/// Reads the status of `dir` with the program `exe`; `None` outside a
+/// repository or without git.
+pub fn read_with(exe: &str, dir: &Path) -> Option<GitStatus> {
     let git = |args: &[&str]| -> Option<Vec<u8>> {
-        let output = Command::new("git")
+        let output = Command::new(exe)
             .arg("-C")
             .arg(dir)
             .args(args)

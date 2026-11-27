@@ -765,7 +765,7 @@ async fn bookmarks_are_saved_and_opened() {
 /// commands answer to Shift+F too.
 #[tokio::test]
 async fn shift_function_keys_do_what_the_alt_ones_do() {
-    for (key, title) in [("Shift+F5", "Pack"), ("Shift+F7", "Search"), ("Shift+F1", "Drives")] {
+    for (key, title) in [("Shift+F5", "Pack"), ("Ctrl+F2", "Search"), ("Shift+F1", "Drives")] {
         let mut h = Harness::new().await;
         h.focus("docs");
         h.key(key);
@@ -871,7 +871,7 @@ async fn tabs_open_and_close() {
 #[tokio::test]
 async fn search_by_content_and_jump_to_the_hit() {
     let mut h = Harness::new().await;
-    h.key("Shift+F7");
+    h.key("Ctrl+F2");
     h.type_text("*.txt");
     h.key("Enter");
     h.type_text("NEEDLE");
@@ -894,7 +894,7 @@ async fn compare_selects_differences() {
     filetime_copy(&h.path("left/a.txt"), &h.path("right/a.txt"));
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     let left = h.app.workspace().side(SideId::Left).panel();
     assert!(left.is_selected("notes.txt") && left.is_selected("docs"));
     assert!(!left.is_selected("a.txt"), "identical files are not marked");
@@ -917,7 +917,7 @@ async fn compare_two_files() {
     h.focus("a.txt");
     h.key("Tab");
     h.focus("a.txt");
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     h.settle().await;
     assert_eq!(h.status(), "Files are identical");
 }
@@ -955,7 +955,7 @@ async fn unpack_queues_a_copy_of_the_members() {
     h.key("Enter");
     h.settle().await;
     h.focus("docs.zip");
-    h.key("Shift+F9");
+    h.key("Shift+F6");
     h.settle().await;
     assert_eq!(fs::read_to_string(h.path("right/docs/readme.md")).unwrap(), "# readme\n");
 }
@@ -983,7 +983,7 @@ async fn unpacking_an_encrypted_archive_asks_the_password_first() {
     fs::remove_dir_all(h.path("left/docs")).unwrap();
     h.key("Tab");
     h.focus("locked.zip");
-    h.key("Shift+F9");
+    h.key("Shift+F6");
     h.settle().await;
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no password asked") };
     assert!(dialog.prompt.contains("locked.zip is encrypted"), "{}", dialog.prompt);
@@ -1375,7 +1375,7 @@ async fn esc_clears_what_compare_selected() {
     fs::write(h.path("right/only-there.txt"), "x").unwrap();
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     assert!(h.status().contains("Esc clears"), "{}", h.status());
     let marked = |h: &Harness| h.app.workspace.active().selection_summary().files;
     assert!(marked(&h) > 0);
@@ -1404,7 +1404,7 @@ async fn the_key_bar_follows_the_modifiers() {
     assert!(h.screen().contains("F5Copy"));
     h.app.set_modifiers(false, false, true);
     let screen = h.screen();
-    assert!(screen.contains("F5Pack") && screen.contains("F9Unpac"), "{screen}");
+    assert!(screen.contains("F5Pack") && screen.contains("F6Unpac"), "{screen}");
     assert!(!screen.contains("F5Copy"), "{screen}");
     // Alt does not change the bar.
     h.app.set_modifiers(false, true, false);
@@ -1825,7 +1825,7 @@ async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
     h.focus("a.txt");
     h.key("Tab");
     h.focus("a.txt");
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(_)))).await;
     let screen = h.screen();
     assert!(screen.contains("a.txt ↔ a.txt"), "{screen}");
@@ -1883,7 +1883,7 @@ async fn the_mouse_clicks_scrolls_and_drags_between_panels() {
 
 /// Runs the search dialogs: mask, text, conditions.
 async fn search(h: &mut Harness, mask: &str, content: &str, filters: &str) {
-    h.key("Shift+F7");
+    h.key("Ctrl+F2");
     h.type_text(mask);
     h.key("Enter");
     h.type_text(content);
@@ -1975,7 +1975,7 @@ async fn the_listing_is_exported_to_a_file_or_the_clipboard() {
 async fn links_are_made_in_the_other_panel() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("Shift+F4");
+    h.key("Shift+F7");
     assert_eq!(results(&h).len(), 3);
     h.key("Enter"); // relative symbolic link
     h.settle().await;
@@ -1983,7 +1983,7 @@ async fn links_are_made_in_the_other_panel() {
     assert_eq!(fs::read_link(&link).unwrap(), PathBuf::from("../left/a.txt"));
     assert_eq!(fs::read_to_string(&link).unwrap(), "alpha\n");
 
-    h.key("Shift+F4");
+    h.key("Shift+F7");
     h.key("Down");
     h.key("Down"); // hard link
     h.key("Enter");
@@ -2605,7 +2605,7 @@ async fn choosing_does_nothing_outside_pick_mode() {
 #[tokio::test]
 async fn the_flat_view_lists_files_below_with_their_folder() {
     let mut h = Harness::new().await;
-    h.key("Ctrl+F6");
+    h.key("Ctrl+Shift+F");
     h.settle().await;
     let screen = h.screen();
     // (The title may be cut on long temporary paths; the column says it too.)
@@ -2619,10 +2619,10 @@ async fn the_flat_view_lists_files_below_with_their_folder() {
     let screen = h.screen();
     assert!(!screen.contains("Folder "), "Backspace leaves the flat view: {screen}");
     assert!(h.app.is_running());
-    h.key("Ctrl+F6");
+    h.key("Ctrl+Shift+F");
     h.settle().await;
-    assert!(h.screen().contains("Folder "), "Ctrl+F6 enters it again");
-    h.key("Ctrl+F6");
+    assert!(h.screen().contains("Folder "), "Ctrl+Shift+F enters it again");
+    h.key("Ctrl+Shift+F");
     h.settle().await;
     assert!(!h.screen().contains("Folder "), "and leaves it");
     assert!(screen.contains("docs"), "{screen}");
@@ -3344,7 +3344,7 @@ async fn the_key_bar_follows_the_modifiers_held() {
     assert!(plain.contains("F7Mkdir"), "{plain}");
     h.app.set_modifiers(false, false, true);
     let shifted = h.screen();
-    assert!(shifted.contains("F7Search"), "Shift+F7 is the search: {shifted}");
+    assert!(shifted.contains("F7Link"), "Shift+F7 is the link: {shifted}");
     assert!(!shifted.contains("F7Mkdir"));
     h.app.set_modifiers(true, false, false);
     assert_ne!(h.screen(), plain, "Ctrl changes the bar too");
@@ -3511,16 +3511,16 @@ async fn every_dialog_has_a_key_row_in_one_convention() {
         ("copy", &["F5"]),
         ("move", &["F6"]),
         ("mkdir", &["F7"]),
-        ("rename", &["Shift+F6"]),
+        ("rename", &["F2"]),
         ("delete", &["F8"]),
         ("delete forever", &["Shift+F8"]),
-        ("search", &["Shift+F7"]),
+        ("search", &["Ctrl+F2"]),
         ("drives", &["Shift+F1"]),
         ("bookmarks", &["Ctrl+D"]),
         ("properties", &["Ctrl+E"]),
         ("pack", &["Shift+F5"]),
         ("copy path", &["Ctrl+P"]),
-        ("link", &["Shift+F4"]),
+        ("link", &["Shift+F7"]),
         ("disks", &["Ctrl+F8"]),
         ("disk usage", &["Ctrl+F7"]),
         ("viewer", &["F3"]),

@@ -26,6 +26,7 @@ mod dialogs;
 pub mod diff;
 pub mod disks;
 pub mod drives;
+pub mod editors;
 pub mod export;
 pub mod frecency;
 pub mod fuzzy;
