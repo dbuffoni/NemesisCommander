@@ -808,7 +808,13 @@ async fn viewer_colours_source_files_by_language() {
     use ratatui::style::Color;
     assert_eq!(colour_of("fn main"), Some(Color::Magenta), "keyword");
     assert_eq!(colour_of("42"), Some(Color::Yellow), "number");
-    assert_eq!(colour_of("// answer"), Some(Color::DarkGray), "comment");
+    // A comment is dimmed text in the terminal's own colour, not a fixed grey.
+    let comment = (0..buffer.area.height).find_map(|y| {
+        let row: String = (0..buffer.area.width).map(|x| buffer[(x, y)].symbol()).collect();
+        let x = row[..row.find("// answer")?].chars().count() as u16;
+        Some(buffer[(x, y)].modifier)
+    });
+    assert!(comment.is_some_and(|m| m.contains(ratatui::style::Modifier::DIM)), "comment");
     assert!(h.screen().contains("Rust"), "the language is named");
     // Plain text stays plain.
     h.key("Esc");
@@ -1172,11 +1178,14 @@ async fn compare_selects_differences() {
     filetime_copy(&h.path("left/a.txt"), &h.path("right/a.txt"));
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Ctrl+F3");
+    h.app.perform(Action::CompareFolders);
     let left = h.app.workspace().side(SideId::Left).panel();
     assert!(left.is_selected("notes.txt") && left.is_selected("docs"));
     assert!(!left.is_selected("a.txt"), "identical files are not marked");
-    assert!(h.app.workspace().side(SideId::Right).panel().is_selected("only-right.txt"));
+    let right = h.app.workspace().side(SideId::Right).panel();
+    assert!(right.is_selected("only-right.txt"));
+    // What the other side lacks is shown in light red, not as a plain selection.
+    assert!(right.is_missing("only-right.txt") && left.is_missing("docs"));
     assert!(h.status().contains("Compared folders"));
 }
 
@@ -1716,7 +1725,7 @@ async fn esc_clears_what_compare_selected() {
     fs::write(h.path("right/only-there.txt"), "x").unwrap();
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Ctrl+F3");
+    h.app.perform(Action::CompareFolders);
     assert!(h.status().contains("Esc clears"), "{}", h.status());
     let marked = |h: &Harness| h.app.workspace.active().selection_summary().files;
     assert!(marked(&h) > 0);
@@ -4162,4 +4171,91 @@ async fn plugin_results_are_sorted_marked_and_deleted_after_a_question() {
     h.press(KeyPress::char('y'));
     h.settle().await;
     assert!(!notes.exists() && a.exists());
+}
+
+#[tokio::test]
+async fn compare_with_a_folder_under_a_cursor_explains_and_selects_nothing() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Ctrl+F3");
+    assert!(h.status().contains("Compare two files"), "{}", h.status());
+    assert_eq!(h.app.workspace.active().selection_summary().files, 0);
+    assert!(!h.app.workspace.active().is_selected("docs"));
+}
+
+#[tokio::test]
+async fn the_message_log_keeps_messages_and_copies_them() {
+    let mut h = Harness::new().await;
+    h.focus("docs");
+    h.key("Ctrl+F3");
+    h.app.perform(Action::MessageLog);
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("the log") };
+    assert!(dialog.items.iter().any(|i| i.contains("error") && i.contains("Compare two files")));
+    h.key("c");
+    assert!(h.app.take_clipboard().unwrap().contains("Compare two files"));
+    h.key("a");
+    let all = h.app.take_clipboard().unwrap();
+    assert!(all.lines().count() >= 1 && all.contains("Compare two files"));
+}
+
+#[tokio::test]
+async fn install_serve_and_the_pnxr_command_are_in_the_pairnox_menu() {
+    use pnxr_config::Category;
+    assert_eq!(Action::InstallServe.category(), Category::App);
+    assert_eq!(Action::InstallCommand.category(), Category::App);
+    assert_eq!(Action::MessageLog.category(), Category::App);
+}
+
+#[cfg(feature = "scripting")]
+#[tokio::test]
+async fn the_ai_key_is_asked_for_when_missing_and_saved_where_it_was_typed() {
+    // Anthropic reads its key from a variable nobody sets, and there is no
+    // key file in this test's settings folder.
+    let mut h = Harness::with_settings(|c| {
+        let mut anthropic = pnxr_config::AiProvider::anthropic();
+        anthropic.key_env = "PNXR_TEST_NO_SUCH_KEY".into();
+        c.ai.set(anthropic);
+    })
+    .await;
+    h.app.perform(Action::AiScript);
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("the key question") };
+    assert!(dialog.secret, "the key is not shown");
+    assert!(dialog.preview.iter().any(|l| l.contains("console.anthropic.com")));
+    assert!(dialog.preview.iter().any(|l| l.contains("ANTHROPIC_API_KEY")));
+}
+
+#[tokio::test]
+async fn ai_providers_are_added_edited_and_made_the_default() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::AiProviders);
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("the providers") };
+    assert!(dialog.title.contains("AI providers") && dialog.items[0].contains("anthropic"));
+    // F7 offers the ready-made ones; the first is OpenRouter.
+    h.key("F7");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.ai.providers.len(), 1);
+    assert_eq!(h.app.context().config.ai.providers[0].name, "openrouter");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("the provider window") };
+    assert!(dialog.title.contains("openrouter"));
+    // Move to "Make this the default provider" and press Enter.
+    for _ in 0..6 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert_eq!(h.app.context().config.ai.default, "openrouter");
+    // The model is typed in a question.
+    h.key("Up");
+    h.key("Up");
+    h.key("Up");
+    h.key("Enter");
+    let Some(Overlay::Input(_)) = h.app.overlay() else { panic!("the model question") };
+}
+
+#[tokio::test]
+async fn the_pnxr_command_window_lists_what_can_be_done() {
+    let mut h = Harness::new().await;
+    h.app.perform(Action::InstallCommand);
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("the window") };
+    assert!(dialog.items[0].starts_with("Status:"), "{:?}", dialog.items);
+    assert!(dialog.items.iter().any(|i| i.contains("another folder")));
 }

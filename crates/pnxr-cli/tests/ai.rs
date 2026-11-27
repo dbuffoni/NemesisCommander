@@ -19,6 +19,15 @@ type Seen = Arc<Mutex<Vec<(String, Value)>>>;
 /// A server that answers each request with the next of `answers` (the
 /// text Claude would write); returns its URL and the requests it got.
 fn fake_api(answers: Vec<Value>) -> (String, Seen) {
+    serve(answers, false)
+}
+
+/// The same for the OpenAI chat API (OpenRouter, local servers).
+fn fake_openai(answers: Vec<Value>) -> (String, Seen) {
+    serve(answers, true)
+}
+
+fn serve(answers: Vec<Value>, openai: bool) -> (String, Seen) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let seen: Seen = Arc::default();
@@ -42,14 +51,22 @@ fn fake_api(answers: Vec<Value>) -> (String, Seen) {
             let mut body = vec![0; length];
             reader.read_exact(&mut body).unwrap();
             record.lock().unwrap().push((headers, serde_json::from_slice(&body).unwrap()));
-            let reply = json!({
-                "id": "msg_1", "type": "message", "role": "assistant",
-                "model": "claude-opus-5-5", "stop_reason": "end_turn",
-                "content": [
-                    { "type": "thinking", "thinking": "", "signature": "sig" },
-                    { "type": "text", "text": answer.to_string() }
-                ]
-            })
+            let reply = if openai {
+                json!({
+                    "id": "chat_1", "object": "chat.completion",
+                    "choices": [{ "index": 0, "finish_reason": "stop",
+                        "message": { "role": "assistant", "content": answer.to_string() } }]
+                })
+            } else {
+                json!({
+                    "id": "msg_1", "type": "message", "role": "assistant",
+                    "model": "claude-opus-5-5", "stop_reason": "end_turn",
+                    "content": [
+                        { "type": "thinking", "thinking": "", "signature": "sig" },
+                        { "type": "text", "text": answer.to_string() }
+                    ]
+                })
+            }
             .to_string();
             let response = format!(
                 "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\
@@ -201,4 +218,55 @@ fn rename_rules_are_written_and_checked() {
     assert_eq!(first["output_config"]["format"]["schema"]["required"][1], "template");
     let retry = seen[1].1["messages"][2]["content"].as_str().unwrap();
     assert!(retry.contains("fails"), "{retry}");
+}
+
+/// A provider added in Settings (an OpenAI-compatible server) is used with
+/// its own address, model and key, and the answer is read from its reply.
+#[test]
+fn an_openai_compatible_provider_writes_a_script() {
+    let script = json!({
+        "summary": "Prints hello.",
+        "files": [{ "path": "hello.ts", "content": "pnxr.print('hello');" }]
+    });
+    let (url, seen) = fake_openai(vec![script]);
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("config")).unwrap();
+    fs::write(
+        dir.path().join("config/config.toml"),
+        "[ai]\ndefault = \"router\"\n\n[[ai.providers]]\nname = \"router\"\nkind = \"openai\"\n\
+         base_url = \"http://unused.invalid/v1\"\nmodel = \"vendor/some-model\"\n\
+         key_env = \"PNXR_TEST_ROUTER_KEY\"\n",
+    )
+    .unwrap();
+    pnxr(&dir, &url)
+        .env("PNXR_TEST_ROUTER_KEY", "router-key")
+        .env_remove("ANTHROPIC_API_KEY")
+        .args(["ai", "new", "say", "hello"])
+        .assert()
+        .success()
+        .stdout(contains("asking vendor/some-model").and(contains("Prints hello.")));
+    assert!(dir.path().join("data/scripts/hello.ts").exists());
+    let seen = seen.lock().unwrap();
+    let (headers, body) = &seen[0];
+    assert!(headers.starts_with("POST /chat/completions"), "{headers}");
+    assert!(headers.contains("authorization: Bearer router-key"), "{headers}");
+    assert_eq!(body["model"], "vendor/some-model");
+    assert_eq!(body["messages"][0]["role"], "system");
+    assert_eq!(body["response_format"]["type"], "json_object");
+}
+
+#[test]
+fn providers_are_listed_with_their_keys() {
+    let dir = TempDir::new().unwrap();
+    pnxr(&dir, "http://127.0.0.1:9")
+        .env_remove("ANTHROPIC_API_KEY")
+        .args(["ai", "providers"])
+        .assert()
+        .success()
+        .stdout(contains("anthropic").and(contains("no key")));
+    pnxr(&dir, "http://127.0.0.1:9")
+        .args(["ai", "providers"])
+        .assert()
+        .success()
+        .stdout(contains("ANTHROPIC_API_KEY"));
 }

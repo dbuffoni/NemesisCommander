@@ -104,7 +104,8 @@ async fn ai_scripts_start_with_a_question() {
     assert!(app.run_command("tools.ai-script"));
     match Screen::of(&mut app, 10, 20).overlay {
         Some(OverlayView::Input { title, .. }) if cfg!(feature = "scripting") => {
-            assert_eq!(title, "Write a script with AI")
+            // Without a key the first question is for the key (0.7.1).
+            assert!(title == "Write a script with AI" || title == "AI key needed", "{title}")
         }
         None if !cfg!(feature = "scripting") => {}
         other => panic!("{other:?}"),

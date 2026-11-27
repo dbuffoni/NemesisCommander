@@ -5,6 +5,7 @@
 //! a [`ProviderRegistry`] with every provider this build supports, instead of
 //! assembling those pieces themselves.
 
+pub mod command_install;
 pub mod desktop;
 pub mod remotes;
 pub mod sync;

@@ -40,6 +40,86 @@ pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 /// Rows of text the logo takes in a terminal.
 pub const LOGO_ROWS: u16 = 10;
 
+/// One cell of the logo drawn with half blocks: the colours of its upper and
+/// lower half (`None`: transparent, the terminal's own background shows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LogoCell {
+    /// The upper half.
+    pub upper: Option<[u8; 3]>,
+    /// The lower half.
+    pub lower: Option<[u8; 3]>,
+}
+
+/// The sizes of the text logo, in rows (it is twice as many pixels high and
+/// as many wide): the largest that fits is used.
+pub const LOGO_SIZES: [u16; 2] = [LOGO_ROWS, 6];
+
+const BLUE: [u8; 3] = [0x1E, 0x88, 0xE5];
+
+/// The colour of the logo at `(x, y)`, in a square where the disc has radius
+/// 1 around the origin; `px` is the size of one pixel in those units, so that
+/// thin strokes (the ring, the chevrons) never get thinner than a pixel.
+fn logo_color(x: f64, y: f64, px: f64) -> Option<[u8; 3]> {
+    let r = x.hypot(y);
+    if r > 1.0 {
+        return None;
+    }
+    let ring = (0.096_f64).max(px * 1.05);
+    if r > 1.0 - ring {
+        return Some(BLUE);
+    }
+    // The chevrons: two strokes each, blue, as in the picture (> <).
+    let half = (0.056_f64).max(px * 0.55);
+    let segment = |ax: f64, ay: f64, bx: f64, by: f64| {
+        let (dx, dy) = (bx - ax, by - ay);
+        let t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
+        (x - (ax + t * dx)).hypot(y - (ay + t * dy))
+    };
+    let (tip, near, far) = (0.44, 0.136, 0.264);
+    let on_chevron = |sign: f64| {
+        let (nx, tx) = (sign * near, sign * tip);
+        segment(nx, -far, tx, 0.0) <= half || segment(tx, 0.0, nx, far) <= half
+    };
+    if on_chevron(-1.0) || on_chevron(1.0) {
+        return Some(BLUE);
+    }
+    Some(if x < 0.0 { [255, 255, 255] } else { [0, 0, 0] })
+}
+
+/// The logo for a terminal, drawn with half blocks from the shape itself
+/// (not from a shrunken picture), `rows` cells high and as many wide:
+/// a crisp ring and chevrons, and the terminal's background around it.
+pub fn logo_cells(rows: u16) -> Vec<Vec<LogoCell>> {
+    let size = usize::from(rows) * 2;
+    let px = 2.0 / size as f64;
+    const SAMPLES: usize = 4;
+    let pixel = |col: usize, row: usize| -> Option<[u8; 3]> {
+        let (mut sum, mut covered) = ([0u32; 3], 0u32);
+        for sy in 0..SAMPLES {
+            for sx in 0..SAMPLES {
+                let x = -1.0 + (col as f64 + (sx as f64 + 0.5) / SAMPLES as f64) * px;
+                let y = -1.0 + (row as f64 + (sy as f64 + 0.5) / SAMPLES as f64) * px;
+                if let Some(c) = logo_color(x, y, px) {
+                    covered += 1;
+                    for i in 0..3 {
+                        sum[i] += u32::from(c[i]);
+                    }
+                }
+            }
+        }
+        // More than half covered: the pixel is drawn, in the average colour.
+        (covered * 2 > (SAMPLES * SAMPLES) as u32)
+            .then(|| [0, 1, 2].map(|i| (sum[i] / covered) as u8))
+    };
+    (0..usize::from(rows))
+        .map(|row| {
+            (0..size)
+                .map(|col| LogoCell { upper: pixel(col, row * 2), lower: pixel(col, row * 2 + 1) })
+                .collect()
+        })
+        .collect()
+}
+
 /// The decoded logo.
 pub fn logo() -> &'static RgbaImage {
     static LOGO: OnceLock<RgbaImage> = OnceLock::new();
@@ -108,6 +188,29 @@ pub fn dialog() -> MessageDialog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_text_logo_has_a_ring_a_white_half_and_a_black_half() {
+        let cells = logo_cells(10);
+        assert_eq!(cells.len(), 10);
+        assert!(cells.iter().all(|row| row.len() == 20));
+        // The corners are outside the disc: nothing is drawn (no black box).
+        for corner in [(0, 0), (0, 19), (9, 0), (9, 19)] {
+            let cell = cells[corner.0][corner.1];
+            assert!(cell.upper.is_none() || cell.lower.is_none(), "{corner:?} {cell:?}");
+        }
+        assert_eq!((cells[0][0].upper, cells[9][19].lower), (None, None));
+        let colors: Vec<[u8; 3]> =
+            cells.iter().flatten().flat_map(|c| [c.upper, c.lower]).flatten().collect();
+        for wanted in [BLUE, [255, 255, 255], [0, 0, 0]] {
+            assert!(colors.contains(&wanted), "{wanted:?} is missing");
+        }
+        // The ring closes: every row touches blue at both ends of the disc.
+        let ring = |row: &Vec<LogoCell>| {
+            row.iter().flat_map(|c| [c.upper, c.lower]).flatten().any(|c| c == BLUE)
+        };
+        assert!(cells.iter().all(ring));
+    }
 
     #[test]
     fn the_logo_is_a_square_picture() {

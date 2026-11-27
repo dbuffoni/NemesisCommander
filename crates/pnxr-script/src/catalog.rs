@@ -118,6 +118,10 @@ pub struct Entry {
     pub listed_in: String,
     /// Whether the official repository lists it.
     pub official: bool,
+    /// Its manifest uses something this version of `pnxr` does not know, so
+    /// it is listed but cannot be installed here.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_newer: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -176,12 +180,27 @@ pub fn scan(root: &Path, spec: &RepositorySpec) -> (Vec<Entry>, Vec<String>) {
                     subdir: format!("{PLUGINS_FOLDER}/{}", name.to_string_lossy()),
                     listed_in: spec.url.clone(),
                     official,
+                    needs_newer: false,
                 });
             }
-            Err(PluginError::Manifest { message, .. }) if !dir.join(plugin::MANIFEST).exists() => {
-                problems.push(format!("{}: {message}", dir.display()));
+            Err(PluginError::Manifest { .. }) if !dir.join(plugin::MANIFEST).exists() => {
+                problems.push(format!(
+                    "{}: {}/{} has no {}",
+                    spec.url,
+                    PLUGINS_FOLDER,
+                    name.to_string_lossy(),
+                    plugin::MANIFEST
+                ));
             }
-            Err(e) => problems.push(format!("{}: {e}", spec.url)),
+            Err(e) => match lenient_entry(&dir.join(plugin::MANIFEST), &name, spec, official) {
+                Some(entry) => entries.push(entry),
+                None => problems.push(format!(
+                    "{}: plugin {}: {}",
+                    spec.url,
+                    name.to_string_lossy(),
+                    short_reason(&e)
+                )),
+            },
         }
     }
     if let Ok(text) = fs::read_to_string(folder.join(INDEX)) {
@@ -204,6 +223,7 @@ pub fn scan(root: &Path, spec: &RepositorySpec) -> (Vec<Entry>, Vec<String>) {
                         subdir: item.subdir.unwrap_or_default(),
                         listed_in: spec.url.clone(),
                         official,
+                        needs_newer: false,
                     });
                 }
             }
@@ -285,6 +305,43 @@ pub fn available(
     (entries, problems)
 }
 
+/// What is wrong with a manifest, without the path of the checkout it was
+/// read from.
+fn short_reason(error: &PluginError) -> String {
+    match error {
+        PluginError::Manifest { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// A catalogue entry for a plugin whose `plugin.json` this version cannot
+/// read in full (a field it does not know, from a newer `pnxr`): the few
+/// fields every version understands are enough to list it. `None` when even
+/// those are missing.
+fn lenient_entry(
+    manifest: &Path,
+    folder: &std::ffi::OsStr,
+    spec: &RepositorySpec,
+    official: bool,
+) -> Option<Entry> {
+    let value: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(manifest).ok()?).ok()?;
+    let text = |key: &str| value.get(key).and_then(|v| v.as_str()).map(str::to_owned);
+    Some(Entry {
+        name: text("name")?,
+        version: text("version")?,
+        description: text("description").unwrap_or_default(),
+        author: text("author"),
+        license: text("license"),
+        repository: spec.url.clone(),
+        reference: spec.reference.clone(),
+        subdir: format!("{PLUGINS_FOLDER}/{}", folder.to_string_lossy()),
+        listed_in: spec.url.clone(),
+        official,
+        needs_newer: true,
+    })
+}
+
 /// Picks the entry named `wanted`: `name` or `name@repository` (a part of
 /// the repository's URL, or `official`). A name in several repositories
 /// goes to the official one, and is otherwise an error naming the choices.
@@ -323,6 +380,12 @@ pub fn find<'a>(entries: &'a [Entry], wanted: &str) -> Result<&'a Entry, PluginE
 
 /// Installs the catalogue entry and records its source.
 pub fn install(entry: &Entry, plugins_dir: &Path, lock: &mut Lock) -> Result<Plugin, PluginError> {
+    if entry.needs_newer {
+        return Err(PluginError::Source(format!(
+            "{} {} needs a newer Pairnox: update Pairnox, then install it",
+            entry.name, entry.version
+        )));
+    }
     let spec = RepositorySpec { url: entry.repository.clone(), reference: entry.reference.clone() };
     let subdir = (!entry.subdir.is_empty()).then_some(entry.subdir.as_str());
     source::install(&spec.as_source(), subdir, plugins_dir, lock)
@@ -351,6 +414,9 @@ impl Row {
 
     /// `installed 1.0`, `installed 1.0, update 1.1` or empty.
     pub fn state(&self) -> String {
+        if self.entry.needs_newer {
+            return "requires newer Pairnox".into();
+        }
         match (&self.installed, self.update) {
             (Some(v), true) => format!("installed {v}, update {}", self.entry.version),
             (Some(v), false) => format!("installed {v}"),
@@ -412,7 +478,32 @@ mod tests {
             subdir: format!("plugins/{name}"),
             listed_in: repo.into(),
             official,
+            needs_newer: false,
         }
+    }
+
+    #[test]
+    fn a_manifest_with_a_newer_field_is_listed_but_cannot_be_installed() {
+        let dir = tempfile::tempdir().unwrap();
+        plugin(dir.path(), "old", "old", "1.0.0");
+        let folder = dir.path().join("plugins/newer");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(
+            folder.join("plugin.json"),
+            r#"{"name":"newer","version":"2.0.0","description":"d","future_field":1}"#,
+        )
+        .unwrap();
+        let spec = RepositorySpec { url: "https://example.org/x.git".into(), reference: None };
+        let (entries, problems) = scan(dir.path(), &spec);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(entries.len(), 2);
+        let newer = entries.iter().find(|e| e.name == "newer").unwrap();
+        assert!(newer.needs_newer);
+        let row = Row { entry: newer.clone(), installed: None, update: false };
+        assert_eq!(row.state(), "requires newer Pairnox");
+        let mut lock = Lock::load(&dir.path().join("lock.json")).unwrap();
+        let err = install(newer, dir.path(), &mut lock).unwrap_err().to_string();
+        assert!(err.contains("newer Pairnox"), "{err}");
     }
 
     #[test]

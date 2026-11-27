@@ -256,7 +256,7 @@ Rectangle {
             Layout.fillHeight: true
             clip: true
             visible: panel.view !== null && !panel.view.quick_view
-            readonly property var blank: ({ cursor: false, selected: false, hidden: false,
+            readonly property var blank: ({ cursor: false, selected: false, missing: false, hidden: false,
                 dir: false, name: "", folder: "", size: "", date: "", cells: [], git: "", icon: "", icon_color: "",
                 url: "" })
 
@@ -310,10 +310,12 @@ Rectangle {
                         }
                         color: strong ? palette.highlight
                              : entry.cursor ? panel.theme.lineColor
+                             : entry.missing ? panel.theme.missingTint
                              : entry.selected ? panel.theme.selectionTint
                              : "transparent"
                         readonly property color textColor:
                             strong ? palette.highlightedText
+                            : entry.missing ? panel.theme.missingText
                             : entry.selected ? panel.theme.selectedText
                             : entry.hidden ? panel.theme.dim
                             : palette.text
@@ -322,7 +324,7 @@ Rectangle {
                             visible: entry.selected
                             width: 3
                             height: parent.height
-                            color: panel.theme.brandBlue
+                            color: entry.missing ? panel.theme.missingText : panel.theme.brandBlue
                         }
                         RowLayout {
                             anchors.fill: parent

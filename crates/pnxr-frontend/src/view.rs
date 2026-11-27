@@ -132,6 +132,9 @@ pub struct RowView {
     pub hidden: bool,
     /// Part of the selection.
     pub selected: bool,
+    /// Selected because the other panel lacks it (a folder comparison):
+    /// shown in light red.
+    pub missing: bool,
     /// Under the cursor.
     pub cursor: bool,
     /// Git mark: `M` changed, `?` untracked, `!` ignored, empty for none.
@@ -238,9 +241,9 @@ pub enum OverlayView {
         footer: String,
         /// The rows change while the list is open: the window keeps one size.
         keeps_size: bool,
-        /// A row too long for the window loses its end (a description), not
-        /// its middle (a path).
-        cut_end: bool,
+        /// A row too long for the window goes on to the next line (a plugin
+        /// description) instead of losing its middle (a path).
+        wrap: bool,
     },
     /// Information to read.
     Message {
@@ -781,6 +784,7 @@ fn row_view(
         dir: entry.is_dir(),
         hidden: entry.is_hidden(),
         selected: panel.is_selected(&entry.name),
+        missing: panel.is_missing(&entry.name),
         cursor,
         git: git_mark(git, &entry.name),
         icon: icon.map(|i| i.shape.id().to_owned()).unwrap_or_default(),
@@ -901,7 +905,10 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             cursor: dialog.cursor,
             footer: app.with_back(dialog.footer.clone()),
             keeps_size: dialog.keeps_size(),
-            cut_end: matches!(dialog.purpose, crate::ChoosePurpose::PluginStore(_)),
+            wrap: matches!(
+                dialog.purpose,
+                crate::ChoosePurpose::PluginStore(_) | crate::ChoosePurpose::MessageLog(_)
+            ),
         },
         Overlay::Message(dialog) => OverlayView::Message {
             title: dialog.title.clone(),

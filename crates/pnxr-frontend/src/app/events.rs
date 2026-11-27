@@ -98,11 +98,15 @@ impl App {
     }
 
     pub(super) fn set_status(&mut self, text: impl Into<String>) {
-        self.status = Some(Status { text: text.into(), error: false });
+        let text = text.into();
+        self.log_message(&text, false);
+        self.status = Some(Status { text, error: false });
     }
 
     pub(super) fn set_error(&mut self, text: impl Into<String>) {
-        self.status = Some(Status { text: text.into(), error: true });
+        let text = text.into();
+        self.log_message(&text, true);
+        self.status = Some(Status { text, error: true });
     }
 
     /// Applies the result of background work.
@@ -313,12 +317,18 @@ impl App {
                 }
                 self.reload_panels(None);
             }
-            AppEvent::Compared { marks, message } => {
+            AppEvent::Compared { marks, missing, message } => {
                 for (side, names) in marks {
                     let panel = self.workspace.side_mut(side).panel_mut();
                     panel.clear_selection();
                     for name in &names {
                         panel.set_selected(name, true);
+                    }
+                }
+                for (side, names) in missing {
+                    let panel = self.workspace.side_mut(side).panel_mut();
+                    for name in &names {
+                        panel.set_missing(name);
                     }
                 }
                 self.compare_marks = true;

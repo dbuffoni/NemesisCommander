@@ -10,14 +10,16 @@
 //!   importing them back. There is deliberately no synchronization between
 //!   machines; moving settings is an explicit export/import.
 
+pub mod ai;
 mod config;
 pub mod export;
 pub mod keymap;
 mod paths;
 
+pub use ai::{AiKind, AiProvider, AiSettings};
 pub use config::{
     Bookmark, Config, ConfigError, Connection, GeneralSettings, PanelSettings, PluginRepository,
-    PluginSettings, SavedSearch, TransferProfile, TransferSettings, ViewerSettings,
+    PluginSettings, SavedSearch, TerminalImages, TransferProfile, TransferSettings, ViewerSettings,
 };
 pub use export::{ExportBundle, ImportMode};
 pub use keymap::{

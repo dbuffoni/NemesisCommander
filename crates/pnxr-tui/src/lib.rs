@@ -12,6 +12,7 @@
 //! * [`run`]: the main loop, and handing the terminal to an editor.
 
 mod clipboard;
+mod graphics;
 mod mouse;
 mod terminal;
 mod ui;

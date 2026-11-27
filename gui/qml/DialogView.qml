@@ -53,11 +53,13 @@ Item {
         // The rows are as wide as the window; a longer row is cut in the
         // middle, where a path keeps its start and its end.
         property bool keepsSize: false
-        // Descriptions are cut at the end instead.
-        property bool cutsEnd: false
+        // Descriptions go on to the next line instead.
+        property bool wraps: false
         Layout.fillWidth: true
         // Whole rows only: a row is never cut in half.
-        Layout.preferredHeight: Math.max(1, Math.floor((keepsSize ? dialogs.height * 0.6
+        Layout.preferredHeight: wraps
+            ? Math.max(dialogs.theme.rowHeight, Math.min(contentHeight, dialogs.height * 0.6))
+            : Math.max(1, Math.floor((keepsSize ? dialogs.height * 0.6
             : Math.min(contentHeight, dialogs.height * 0.6)) / dialogs.theme.rowHeight))
             * dialogs.theme.rowHeight
         implicitWidth: 480
@@ -86,13 +88,16 @@ Item {
         delegate: Component {
             Rectangle {
                 width: ListView.view.width
-                height: dialogs.theme.rowHeight
+                height: list.wraps ? Math.max(dialogs.theme.rowHeight, rowText.implicitHeight + 4)
+                                   : dialogs.theme.rowHeight
                 color: index === list.cursor ? palette.highlight : "transparent"
                 Label {
+                    id: rowText
                     anchors.verticalCenter: parent.verticalCenter
                     x: 4
                     width: parent.width - 12
-                    elide: list.cutsEnd ? Text.ElideRight : Text.ElideMiddle
+                    wrapMode: list.wraps ? Text.Wrap : Text.NoWrap
+                    elide: list.wraps ? Text.ElideNone : Text.ElideMiddle
                     font: list.fixed ? Qt.font({ family: dialogs.theme.fixedFont.family,
                                                  preferShaping: false,
                                                  pointSize: dialogs.theme.fixedFont.pointSize * list.shrink })
@@ -588,7 +593,7 @@ Item {
             CursorList {
                 fixed: true
                 keepsSize: dialogs.view.keeps_size
-                cutsEnd: dialogs.view.cut_end
+                wraps: dialogs.view.wrap
                 cursor: dialogs.view.cursor
                 model: dialogs.view.items
             }

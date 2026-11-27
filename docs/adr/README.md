@@ -56,6 +56,7 @@ that still names it.
 | 0060 | [Finding similar pictures is a plugin](0060-similar-images-plugin.md) | Accepted |
 | 0061 | [Ports and adapters for the interfaces](0061-ports-and-adapters.md) | Accepted |
 | 0062 | [Plugin defaults for keys, and a list of results](0062-plugin-key-defaults-and-results.md) | Accepted |
+| 0063 | [AI providers, the pnxr command and pictures in the terminal](0063-ai-providers-and-terminal-pictures.md) | Accepted |
 
 Template:
 

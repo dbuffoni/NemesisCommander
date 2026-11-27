@@ -270,6 +270,22 @@ pub enum InputPurpose {
     AiScript,
     /// Install `pnxr serve` on the typed server.
     InstallServe,
+    /// The folder to put the `pnxr` command in.
+    InstallCommandFolder,
+    /// The API key of this AI provider, and what to do once it is saved.
+    AiKey {
+        /// The provider.
+        provider: String,
+        /// What comes next.
+        then: crate::app::AiThen,
+    },
+    /// A text of this AI provider.
+    AiProviderField {
+        /// The provider.
+        provider: String,
+        /// Which text.
+        field: crate::app::AiField,
+    },
     /// The `sudo` password of the server, to turn lingering on; the text is
     /// the install it belongs to (the install is run again with it).
     InstallLinger(String),
@@ -302,6 +318,7 @@ impl InputPurpose {
     pub fn preview_rows(&self) -> usize {
         match self {
             InputPurpose::InstallServe => 10,
+            InputPurpose::AiKey { .. } => 11,
             purpose if purpose.is_address() => 8,
             InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 8,
             InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => 6,
@@ -529,6 +546,17 @@ pub enum ChoosePurpose {
     Plugin(Vec<crate::app::PluginChoice>),
     /// The plugins of the repositories (Enter installs or updates).
     PluginStore(Vec<crate::app::StoreRow>),
+    /// The AI providers (their names).
+    AiProviders(Vec<String>),
+    /// The ready-made providers to add.
+    AiPresets(Vec<pnxr_config::AiProvider>),
+    /// The rows of one AI provider (its name).
+    AiProvider(String),
+    /// The rows of "Install the pnxr command".
+    InstallCommand(Vec<crate::app::InstallRow>),
+    /// The messages of the status line (c copies one, a copies all): the
+    /// texts, newest first.
+    MessageLog(Vec<String>),
     /// The plugin repositories (Enter switches the official one).
     PluginRepos(Vec<crate::app::RepoRow>),
     /// Copy these items' paths in the chosen form.

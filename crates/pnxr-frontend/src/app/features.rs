@@ -533,6 +533,12 @@ impl App {
         if let Some(handled) = self.plugin_store_key(dialog, press) {
             return Some(handled);
         }
+        if let Some(handled) = self.ai_providers_key(dialog, press) {
+            return Some(handled);
+        }
+        if let Some(handled) = self.message_log_key(dialog, press) {
+            return Some(handled);
+        }
         if let Some(handled) = self.function_key_list_key(dialog, press) {
             return Some(handled);
         }
@@ -781,7 +787,8 @@ impl App {
                         paths.iter().filter_map(|p| p.split('/').next()).collect();
                     names.into_iter().map(str::to_owned).collect()
                 };
-                let (mut marks_a, mut marks_b) = (top(&only_a), top(&only_b));
+                let (missing_a, missing_b) = (top(&only_a), top(&only_b));
+                let (mut marks_a, mut marks_b) = (Vec::new(), Vec::new());
                 let different = top(&differ);
                 marks_a.extend(different.iter().cloned());
                 marks_b.extend(different.iter().cloned());
@@ -799,6 +806,7 @@ impl App {
                 );
                 Ok(AppEvent::Compared {
                     marks: vec![(active, marks_a), (active.other(), marks_b)],
+                    missing: vec![(active, missing_a), (active.other(), missing_b)],
                     message,
                 })
             }
