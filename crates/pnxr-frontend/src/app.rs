@@ -346,6 +346,8 @@ pub struct App {
     pub conflicts: VecDeque<PendingConflict>,
     /// Servers the install of `pnxr serve` was already offered for.
     install_offered: HashSet<String>,
+    /// The computer's terminals, Git and disks (a fake in tests).
+    host: Arc<dyn crate::ports::HostTools>,
     /// The questions that led to the one on screen, for going back.
     history: Vec<Overlay>,
     /// The message of the status line.
@@ -509,8 +511,9 @@ impl App {
         let Some(dir) = path.to_local_path() else { return };
         let path = path.clone();
         let exe = self.context.config.git.program().to_owned();
+        let host = Arc::clone(&self.host);
         self.spawn_task(async move {
-            let status = tokio::task::spawn_blocking(move || crate::git::read_with(&exe, &dir))
+            let status = tokio::task::spawn_blocking(move || host.git_status(&exe, &dir))
                 .await
                 .ok()
                 .flatten()
@@ -737,6 +740,7 @@ impl App {
             overlay: None,
             conflicts: VecDeque::new(),
             install_offered: HashSet::new(),
+            host: Arc::new(crate::ports::SystemHost),
             history: Vec::new(),
             status,
             jobs: Vec::new(),
@@ -920,6 +924,11 @@ impl App {
             return;
         }
         self.offer_install(&host, error);
+    }
+
+    /// Uses `host` for terminals, Git and disks (tests put a fake).
+    pub fn set_host(&mut self, host: Arc<dyn crate::ports::HostTools>) {
+        self.host = host;
     }
 
     /// Runs `work` in the background; its result event ends the task.
@@ -3073,7 +3082,7 @@ impl App {
             &program,
             std::env::consts::OS,
         );
-        match crate::terminal::launch(&candidates, Some(&dir)) {
+        match self.host.launch_terminal(&candidates, Some(&dir)) {
             Ok(_) => self.set_status(format!(
                 "{} is open in a terminal; refresh (Ctrl+R) when you are done",
                 program[0]

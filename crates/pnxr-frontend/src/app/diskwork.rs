@@ -184,8 +184,9 @@ impl App {
     /// Shows the disks and partitions of this computer.
     pub(super) fn show_disks(&mut self) {
         self.set_status("Reading the disks…");
+        let host = std::sync::Arc::clone(&self.host);
         self.spawn_task(async move {
-            let listed = tokio::task::spawn_blocking(crate::disks::list)
+            let listed = tokio::task::spawn_blocking(move || host.disks())
                 .await
                 .unwrap_or_else(|e| Err(e.to_string()));
             match listed {

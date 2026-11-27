@@ -62,7 +62,7 @@ impl App {
             &place,
             std::env::consts::OS,
         );
-        match terminal::launch(&candidates, terminal::current_dir(&place)) {
+        match self.host.launch_terminal(&candidates, terminal::current_dir(&place)) {
             Ok(_) => self.set_status(format!("Terminal opened in {}", dir.display())),
             Err(e) => self.set_error(e),
         }
@@ -96,7 +96,7 @@ impl App {
             &place,
             std::env::consts::OS,
         );
-        match terminal::launch(&candidates, None) {
+        match self.host.launch_terminal(&candidates, None) {
             Ok(_) => self.set_status(format!("SSH session opened on {}", target.host)),
             Err(e) => self.set_error(e),
         }

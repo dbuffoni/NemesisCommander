@@ -3544,6 +3544,43 @@ async fn the_install_runs_through_the_remotes_of_the_context() {
     assert!(!matches!(h.app.overlay(), Some(Overlay::Confirm(_))));
 }
 
+/// Terminals, Git and disks go through `HostTools`: with the fake, no process
+/// is started (ADR 0061).
+#[tokio::test]
+async fn terminal_git_and_disks_go_through_the_host_port() {
+    use pnxr_frontend::disks::DiskRow;
+    use pnxr_frontend::git::GitStatus;
+    use pnxr_frontend::ports::FakeHost;
+    use std::sync::Arc;
+    let fake = Arc::new(FakeHost::new());
+    let mut h = Harness::new().await;
+    h.app.set_host(fake.clone());
+    h.app.graphical = true;
+
+    h.app.perform(Action::OpenTerminal);
+    let launches = fake.launches.lock().unwrap().clone();
+    assert_eq!(launches.len(), 1, "one terminal asked for");
+    assert_eq!(launches[0].1.as_deref(), Some(h.path("left").as_path()));
+
+    // Git: the panel marks come from the host, and so does the repository check.
+    h.app.perform(Action::Git);
+    assert!(!matches!(h.app.overlay(), Some(Overlay::Choose(_))), "no repository by default");
+    *fake.git.lock().unwrap() = Some(GitStatus { branch: "main".into(), ..GitStatus::default() });
+    h.app.perform(Action::Git);
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "the Git actions are offered");
+    h.key("Esc");
+
+    // Disks: whatever the host lists is shown.
+    fake.disks.lock().unwrap().push(DiskRow {
+        name: "fakedisk0".into(),
+        kind: "disk".into(),
+        ..DiskRow::default()
+    });
+    h.app.perform(Action::Disks);
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Choose(_)))).await;
+    assert!(h.screen().contains("fakedisk0"), "{}", h.screen());
+}
+
 #[tokio::test]
 async fn binary_files_show_their_properties_and_hex_on_request() {
     let mut h = Harness::new().await;

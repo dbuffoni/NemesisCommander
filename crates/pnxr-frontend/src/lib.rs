@@ -37,6 +37,7 @@ pub mod icons;
 mod input;
 pub mod install;
 pub mod masks;
+pub mod ports;
 pub mod preview;
 pub mod properties;
 pub mod renames;
