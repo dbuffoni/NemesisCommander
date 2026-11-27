@@ -376,6 +376,8 @@ async fn the_mask_dialog_shows_matches_cycles_actions_and_remembers() {
     assert_eq!(h.app.workspace().active().selection_summary().files, 2);
 }
 
+// Permission bits exist on Unix only.
+#[cfg(unix)]
 #[tokio::test]
 async fn f1_in_a_list_explains_the_row_under_the_cursor() {
     let mut h = Harness::new().await;
