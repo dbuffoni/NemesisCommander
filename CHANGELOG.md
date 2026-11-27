@@ -2,7 +2,7 @@
 
 ## 0.5.0
 
-Not published yet.
+Released 2026-11-27.
 
 - **NemesisCommander is now Pairnox, the program `pnxr`** (`pnxr-gui` for the
   window): crates, environment variables (`PNXR_*`), script global, agent
