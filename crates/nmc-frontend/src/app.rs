@@ -35,6 +35,7 @@ use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
 mod archives;
+mod checksums;
 mod diskwork;
 mod features;
 mod generate;
@@ -48,6 +49,7 @@ mod properties;
 mod settings_screen;
 mod terminal;
 
+pub use checksums::ChecksumJob;
 pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
 pub use plugins::{PluginChoice, plugin_short_name};
@@ -2570,6 +2572,7 @@ impl App {
                     done(result.map(|()| format!("{verb}: {count} {noun}")), None)
                 });
             }
+            ConfirmPurpose::ChecksumOverwrite(job) => self.write_checksum_files(*job, true),
             ConfirmPurpose::Forget(what) => self.forget(what),
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
             ConfirmPurpose::UninstallPlugin(name) => self.uninstall_plugin(&name),
@@ -2665,6 +2668,9 @@ impl App {
                     self.setting_typed(field, name);
                 }
                 self.overlay = Some(Overlay::Settings(*screen));
+            }
+            ChoosePurpose::Checksums { base, sources, verify } => {
+                self.checksum_chosen(base, sources, verify, cursor);
             }
             ChoosePurpose::Editor { field, screen, commands } => match commands.get(cursor) {
                 Some(command) => {
@@ -3056,42 +3062,6 @@ impl App {
                 message: result.unwrap_or_else(|e: nmc_vfs::VfsError| e.to_string()),
                 reload: false,
                 focus: None,
-            }
-        });
-    }
-
-    fn checksum_current(&mut self) {
-        let panel = self.workspace.active();
-        let Some(path) = panel.current_path() else { return };
-        if panel.current_entry().is_some_and(|e| e.is_dir()) {
-            return self.set_error("Checksums are computed for files");
-        }
-        let registry = self.context.registry.clone();
-        self.set_status("Computing checksums…");
-        self.spawn_task(async move {
-            let result = async {
-                let provider = registry.provider_for(&path).await?;
-                let mut lines = vec![format!("{}", path.file_name().unwrap_or(""))];
-                for (name, algorithm) in
-                    [("BLAKE3", HashAlgorithm::Blake3), ("SHA-256", HashAlgorithm::Sha256)]
-                {
-                    let digest = nmc_ops::checksum(provider.as_ref(), &path, algorithm).await?;
-                    lines.push(format!("{name:<8} {digest}"));
-                }
-                Ok::<_, nmc_vfs::VfsError>(lines)
-            }
-            .await;
-            match result {
-                Ok(lines) => AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
-                    title: "Checksums".into(),
-                    lines,
-                    then: None,
-                    then_choose: None,
-                    back_to_settings: None,
-                    logo: false,
-                    busy: false,
-                }))),
-                Err(e) => done(Err(e), None),
             }
         });
     }

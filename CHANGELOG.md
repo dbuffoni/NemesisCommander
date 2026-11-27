@@ -17,6 +17,17 @@ Not published yet.
   environment of the AppImage is not passed on (it broke other AppImages such as
   Warp), a terminal that fails shows what it said, and the setting accepts
   quotes and `{dir_url}`.
+- Properties is one dialog (the separate "Change dates and permissions" is
+  gone): it opens read-only, `e` or F2 turns on editing with a check box for
+  each permission, the octal number kept in step and a checked date.
+- Checksums: Enter in the Checksums window, or Ctrl+K on a selection or a
+  folder, writes checksum files (`SHA256SUMS`, `B3SUMS`, `name.sha256`,
+  `name.b3`) that `sha256sum -c` and `b3sum --check` accept, and a checksum
+  file can be checked; `nmc hash --write / --per-file / --check`.
+- Settings: separate editors for the window and the terminal, a list of open
+  source editors (installed ones first), a Git section, the help of the
+  selected setting under the list (F1 for all of it), and Find also matches
+  section titles and help.
 - The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
   is not installed the system fonts are used.
 

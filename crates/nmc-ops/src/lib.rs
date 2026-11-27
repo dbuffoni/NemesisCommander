@@ -16,6 +16,7 @@
 //! top of exactly the same behavior.
 
 pub mod attributes;
+pub mod checksums;
 pub mod conflict;
 pub mod copy;
 pub mod delete;

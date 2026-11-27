@@ -35,8 +35,10 @@ impl App {
     /// The list for `state`, the cursor on row `cursor`.
     pub(super) fn properties_dialog(mut state: PropsState, cursor: usize) -> ChooseDialog {
         let items = state.items();
-        let first = if state.edit { state.rows.iter().position(|r| *r != PropRow::Info) } else { None };
-        let mut dialog = ChooseDialog::new("Properties", items, ChoosePurpose::Properties(Box::new(state)));
+        let first =
+            if state.edit { state.rows.iter().position(|r| *r != PropRow::Info) } else { None };
+        let mut dialog =
+            ChooseDialog::new("Properties", items, ChoosePurpose::Properties(Box::new(state)));
         let editing = matches!(&dialog.purpose, ChoosePurpose::Properties(s) if s.edit);
         dialog.cursor = if editing && cursor == 0 { first.unwrap_or(0) } else { cursor };
         dialog.footer = if editing {

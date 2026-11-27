@@ -411,6 +411,8 @@ pub enum ConfirmPurpose {
     InstallServe(String),
     /// Forget something the user saved (the list it came from opens again).
     Forget(Forget),
+    /// Replace the checksum files that exist and write them all.
+    ChecksumOverwrite(Box<crate::app::ChecksumJob>),
     /// A server of a saved `scs://` location does not answer: offer to
     /// install `nmc serve` there (its host).
     OfferInstall(String),
@@ -543,6 +545,16 @@ pub enum ChoosePurpose {
         screen: Box<SettingsScreen>,
         /// The rows' font families.
         names: Vec<String>,
+    },
+    /// Checksum files to write for `sources` (relative to `base`), and, when
+    /// the cursor is on a checksum file, to check it (the first row).
+    Checksums {
+        /// The folder the names are relative to.
+        base: VfsPath,
+        /// The files and folders to hash.
+        sources: Vec<VfsPath>,
+        /// A checksum file that can be checked.
+        verify: Option<VfsPath>,
     },
     /// The Properties of the items: read-only until `e` or F2.
     Properties(Box<crate::properties::PropsState>),

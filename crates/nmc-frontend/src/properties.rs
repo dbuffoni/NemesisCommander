@@ -245,7 +245,10 @@ impl PropsState {
             let e = &self.entries[0];
             match (e.uid, e.gid) {
                 (Some(uid), Some(gid)) => {
-                    add(PropRow::Info, format!("Owner:        user {uid}, group {gid} (not changed here)"));
+                    add(
+                        PropRow::Info,
+                        format!("Owner:        user {uid}, group {gid} (not changed here)"),
+                    );
                 }
                 _ => {}
             }
@@ -293,7 +296,8 @@ mod tests {
     fn state(modes: &[u32]) -> PropsState {
         let entries: Vec<Entry> =
             modes.iter().enumerate().map(|(i, m)| entry(&format!("f{i}"), *m)).collect();
-        let targets = entries.iter().map(|e| VfsPath::parse(&format!("/tmp/{}", e.name)).unwrap()).collect();
+        let targets =
+            entries.iter().map(|e| VfsPath::parse(&format!("/tmp/{}", e.name)).unwrap()).collect();
         PropsState::new(targets, entries, "/tmp".into())
     }
 

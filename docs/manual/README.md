@@ -230,7 +230,7 @@ default; the destination can be edited before you confirm.
 | Shift+F5 / Shift+F6 | Pack into an archive / unpack one |
 | Shift+F4 or Ctrl+E | Properties: opens read-only; `e` or F2 turns on editing of the date (`now`, `2026-11-17`, `10:30`) and permissions (a check box for each, with the octal number), Ctrl+S applies |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
-| Ctrl+F6 or Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
+| Ctrl+F6 or Ctrl+K | Checksum: the digests of one file; Enter writes checksum files (`SHA256SUMS`, `B3SUMS`, `name.sha256`, `name.b3`, in the format of `sha256sum -c` and `b3sum --check`) for the file, the selection or folders; on a checksum file the first row checks the files it lists. In the command line: `nmc hash --write FILE paths`, `--per-file`, `--check FILE` |
 
 | Copy | New folder | Delete |
 |---|---|---|

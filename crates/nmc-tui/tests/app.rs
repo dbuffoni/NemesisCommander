@@ -1036,6 +1036,43 @@ async fn checksums_and_properties() {
     assert!(dialog.footer.contains("e or F2: edit"), "opens read-only: {}", dialog.footer);
 }
 
+#[tokio::test]
+async fn checksum_files_are_written_and_checked() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Ctrl+K");
+    h.settle().await;
+    assert!(matches!(h.app.overlay(), Some(Overlay::Message(_))));
+    h.key("Enter"); // the list of checksum files to write
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert!(dialog.items[0].contains("SHA256SUMS"), "{:?}", dialog.items);
+    h.key("Enter");
+    h.settle().await;
+    let text = fs::read_to_string(h.path("left/SHA256SUMS")).unwrap();
+    assert!(text.ends_with("  a.txt\n"), "{text}");
+    assert!(h.status().contains("Wrote SHA256SUMS"), "{}", h.status());
+    // On the checksum file the first row checks it.
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("SHA256SUMS");
+    h.key("Ctrl+K");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert!(dialog.items[0].starts_with("Check the files listed in SHA256SUMS"));
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("the result") };
+    assert!(message.lines[0].contains("1 OK, 0 FAILED"), "{:?}", message.lines);
+    h.key("Esc");
+    // Writing again asks before it replaces the file.
+    h.focus("a.txt");
+    h.key("Ctrl+K");
+    h.settle().await;
+    h.key("Enter");
+    h.key("Enter");
+    h.settle().await;
+    assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))), "asks to replace");
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn permissions_can_be_changed() {
