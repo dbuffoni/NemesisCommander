@@ -86,7 +86,7 @@ jobs:
       - run: python3 scripts/third_party.py --check
       - name: No trace of the old name
         run: |
-          if git grep -nIiE 'nemesis|\bnmc\b|nmc[-_]|NMC_' -- . ':!docs/adr' ':!CHANGELOG.md' ':!.github/workflows/ci.yml'; then
+          if git grep -nIiE 'nemesis|\bnmc\b|nmc[-_]|NMC_' -- . ':!docs/adr' ':!CHANGELOG.md' ':!README.md' ':!.github/workflows/ci.yml'; then
             echo "The old name NemesisCommander / nmc is still used (see above)"; exit 1
           fi
       # The desktop interface needs Qt: it is checked in the `gui` job.
