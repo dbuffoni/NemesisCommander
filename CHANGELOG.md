@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.1 (in progress)
+
+Fixes from the visual check of the 0.6.0 window on the desktop.
+
+- The command list shows the function key and button name of every command
+  next to its shortcuts.
+- The window draws no font ligatures: `rw-r--r--`, `->` and diffs show the
+  characters they have.
+- Checksums and Git output use the fixed-width font and a window wide enough
+  for their lines; help tables shrink a little before they wrap. A missing file
+  in a checksum check no longer shows its whole address, and a checksum file is
+  titled "Check or write checksums".
+- A long Git branch name no longer covers the drive button of a narrow panel.
+- Lists longer than their window show a scroll bar.
+- Settings: names without a value use the whole row. The editor list says what
+  the default of each setting does and no longer repeats "(terminal)".
+- Key rows: Properties no longer offers "Enter: choose" or two Enter entries,
+  and Multi-rename names Ctrl+O and F1.
+- Image duplicates plugin 1.0.1: the report shows paths from the panel's folder.
+
 ## 0.6.0 (in progress)
 
 - **Internal: ports and adapters** (ADR 0061). Saved logins moved to a new crate

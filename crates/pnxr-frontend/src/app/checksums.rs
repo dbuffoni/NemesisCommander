@@ -52,7 +52,9 @@ impl App {
             items.push(format!("Check the files listed in {}", file.file_name().unwrap_or("")));
         }
         items.extend(WRITE_ROWS.iter().map(|(label, ..)| (*label).to_owned()));
-        let title = if sources.len() == 1 && verify.is_none() {
+        let title = if verify.is_some() {
+            "Check or write checksums".to_owned()
+        } else if sources.len() == 1 {
             "Write a checksum file".to_owned()
         } else {
             format!("Write checksum files for {}", Self::count_text(&sources))
@@ -110,6 +112,7 @@ impl App {
                     back: false,
                     logo: false,
                     busy: false,
+                    fixed: true,
                 }))),
                 Err(e) => done(Err(e), None),
             }
@@ -206,10 +209,9 @@ impl App {
                             Verdict::Missing(why) => format!("MISSING  {name} ({why})"),
                         });
                     }
-                    AppEvent::Show(Box::new(Overlay::Message(MessageDialog::new(
-                        "Check checksums",
-                        lines,
-                    ))))
+                    AppEvent::Show(Box::new(Overlay::Message(
+                        MessageDialog::new("Check checksums", lines).with_fixed_font(),
+                    )))
                 }
                 Err(e) => done(Err(e), None),
             }

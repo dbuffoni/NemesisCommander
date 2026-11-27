@@ -261,6 +261,8 @@ pub enum OverlayView {
         logo_url: Option<String>,
         /// The same for a light theme.
         logo_url_light: Option<String>,
+        /// The text has columns: show it in the fixed-width font.
+        fixed: bool,
     },
     /// F3: the viewer.
     Viewer(ViewerView),
@@ -910,6 +912,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
             hint: app.with_back(dialog.hint()),
             scroll_hint: crate::hints::with_scroll(&app.with_back(dialog.hint())),
             busy: dialog.busy,
+            fixed: dialog.fixed,
             logo_url: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.0)).flatten(),
             logo_url_light: dialog.logo.then(|| crate::about::logo_urls().map(|u| u.1)).flatten(),
         },

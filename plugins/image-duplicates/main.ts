@@ -135,6 +135,14 @@ const roots = (): string[] => {
   return chosen;
 };
 
+/** A path as the report shows it: from the panel's folder when it is below. */
+const shown = (path: string): string => {
+  const base = context.panel;
+  if (base === null) return path;
+  const prefix = base.endsWith("/") ? base : `${base}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+};
+
 const command = context.command;
 if (command === "column:similar") {
   // One line per file of the folder, in order: the group of the file and how
@@ -168,7 +176,7 @@ if (command === "column:similar") {
       g.forEach((p, position) => {
         const same = position > 0 && p.hash === g[0].hash && p.width === g[0].width && p.height === g[0].height;
         const note = position === 0 ? "keep" : `${likeness(p.hash, g[0].hash)}%${same ? ", same picture" : ""}`;
-        pnxr.print(`  ${note.padEnd(20)} ${p.width}x${p.height}, ${human(p.bytes)}  ${p.path}`);
+        pnxr.print(`  ${note.padEnd(20)} ${p.width}x${p.height}, ${human(p.bytes)}  ${shown(p.path)}`);
       });
     });
   } else {
@@ -185,7 +193,7 @@ if (command === "column:similar") {
           target = pnxr.join(folder, `${p.name.slice(0, dot)} (${n})${p.name.slice(dot)}`);
         }
         await pnxr.rename(p.path, target);
-        pnxr.print(`${p.path} -> ${target}`);
+        pnxr.print(`${shown(p.path)} -> ${shown(target)}`);
         moved += 1;
       }
     }

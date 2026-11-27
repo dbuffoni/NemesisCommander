@@ -101,6 +101,7 @@ pub fn dialog() -> MessageDialog {
         back_to_settings: None,
         logo: true,
         busy: false,
+        fixed: false,
     }
 }
 

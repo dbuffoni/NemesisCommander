@@ -65,6 +65,12 @@ Item {
         clip: true
         onCursorChanged: positionViewAtIndex(cursor, ListView.Contain)
         onCountChanged: positionViewAtIndex(cursor, ListView.Contain)
+        boundsBehavior: Flickable.StopAtBounds
+        // A list longer than its window says so.
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AlwaysOn
+            visible: list.contentHeight > list.height + 2
+        }
         // Tables in the fixed font (disks, drives) shrink a little, so that
         // fewer columns are cut; never so much that they look like fine print.
         FontMetrics { id: tableMetrics; font: dialogs.theme.fixedFont }
@@ -85,9 +91,10 @@ Item {
                 Label {
                     anchors.verticalCenter: parent.verticalCenter
                     x: 4
-                    width: parent.width - 8
+                    width: parent.width - 12
                     elide: list.cutsEnd ? Text.ElideRight : Text.ElideMiddle
                     font: list.fixed ? Qt.font({ family: dialogs.theme.fixedFont.family,
+                                                 preferShaping: false,
                                                  pointSize: dialogs.theme.fixedFont.pointSize * list.shrink })
                                      : Qt.application.font
                     text: typeof modelData === "string" ? modelData : modelData.text
@@ -147,15 +154,39 @@ Item {
     }
 
     component Lines: Repeater {
+        id: textLines
+        // All lines are output of a program (checksums, git): fixed font.
+        property bool fixed: false
+        // The width the lines have.
+        property real room: 0
         // Indented examples and option tables (a run of spaces after the
         // text, or an option) use the fixed font, which keeps their columns.
+        function isColumns(line) {
+            return fixed || (line.startsWith("  ")
+                             && (line.trim().indexOf("  ") > 0 || line.indexOf(" --") > 1))
+        }
+        // The widest of those lines, at the normal size.
+        readonly property FontMetrics metrics: FontMetrics { font: dialogs.theme.fixedFont }
+        readonly property real widest: {
+            var width = 0 * metrics.height, list = model || []
+            for (var i = 0; i < list.length; i++)
+                if (isColumns(list[i]))
+                    width = Math.max(width, metrics.advanceWidth(list[i]))
+            return width
+        }
+        // They shrink together, so their columns stay aligned, but not so
+        // much that they look like fine print: then they wrap.
+        readonly property real shrink: room <= 0 || widest <= room ? 1
+            : Math.max(0.8, (room - 4) / widest)
         delegate: Label {
-            readonly property bool columns: modelData.startsWith("  ")
-                                            && (modelData.trim().indexOf("  ") > 0
-                                                || modelData.indexOf(" --") > 1)
+            readonly property bool columns: textLines.isColumns(modelData)
             Layout.fillWidth: true
             text: modelData
-            font: columns ? dialogs.theme.fixedFont : dialogs.theme.font
+            font: columns ? Qt.font({ family: dialogs.theme.fixedFont.family,
+                                      preferShaping: false,
+                                      pointSize: dialogs.theme.fixedFont.pointSize
+                                                 * textLines.shrink })
+                          : dialogs.theme.font
             wrapMode: Text.Wrap
             textFormat: Text.PlainText
         }
@@ -173,6 +204,7 @@ Item {
             hint: overflows ? dialogs.view.scroll_hint : dialogs.view.hint
             readonly property real gap: 32
             readonly property var bold: Qt.font({ family: dialogs.theme.font.family,
+                                                  preferShaping: false,
                                                   pointSize: dialogs.theme.font.pointSize,
                                                   bold: true })
             FontMetrics { id: boldMetrics; font: helpBox.bold }
@@ -275,8 +307,20 @@ Item {
                 dialogs.height / (dialogs.theme.rowHeight * 20)))
             hint: dialogs.view.hint
             hintColor: dialogs.view.recording ? dialogs.theme.accent : dialogs.theme.dim
+            id: commandsBox
             width: Math.min(dialogs.theme.width * 0.9, 1000)
             fixedHeight: Math.min(dialogs.theme.height * 0.9, 26 * dialogs.theme.rowHeight + 60)
+            // Shortcuts and function key are two columns, each as wide as
+            // its widest text in the rows shown.
+            FontMetrics { id: commandMetrics; font: dialogs.theme.fixedFont }
+            function columnWidth(field) {
+                var widest = 0 * commandMetrics.height, list = dialogs.view.rows
+                for (var i = 0; i < list.length; i++)
+                    widest = Math.max(widest, commandMetrics.advanceWidth(list[i][field]))
+                return Math.ceil(widest * sc) + (widest > 0 ? 2 : 0)
+            }
+            readonly property real keysWidth: columnWidth("keys")
+            readonly property real fkeyWidth: columnWidth("fkey")
             Flow {
                 Layout.fillWidth: true
                 spacing: 6
@@ -359,8 +403,23 @@ Item {
                             color: current ? palette.highlightedText : palette.windowText
                         }
                         Label {
+                            Layout.preferredWidth: commandsBox.keysWidth
+                            Layout.maximumWidth: rows.width * 0.3
+                            horizontalAlignment: Text.AlignRight
+                            elide: Text.ElideRight
                             text: modelData.keys
                             font.family: dialogs.theme.fixedFont.family
+                            font.preferShaping: false
+                            font.pointSize: dialogs.theme.fixedFont.pointSize * sc
+                            color: current ? palette.highlightedText : dialogs.theme.dim
+                        }
+                        Label {
+                            Layout.preferredWidth: commandsBox.fkeyWidth
+                            Layout.maximumWidth: rows.width * 0.4
+                            elide: Text.ElideRight
+                            text: modelData.fkey
+                            font.family: dialogs.theme.fixedFont.family
+                            font.preferShaping: false
                             font.pointSize: dialogs.theme.fixedFont.pointSize * sc
                             color: current ? palette.highlightedText : dialogs.theme.dim
                         }
@@ -471,7 +530,7 @@ Item {
                     id: previewLines
                     width: previewScroll.width
                     spacing: 0
-                    Lines { model: dialogs.view.preview }
+                    Lines { model: dialogs.view.preview; room: previewScroll.width }
                 }
             }
         }
@@ -502,7 +561,7 @@ Item {
                 ColumnLayout {
                     id: confirmLines
                     width: confirmScroll.width
-                    Lines { model: dialogs.view.lines }
+                    Lines { model: dialogs.view.lines; room: confirmScroll.width }
                 }
             }
         }
@@ -546,6 +605,18 @@ Item {
             // size while lines are added, and shows its end.
             readonly property bool log: dialogs.view.busy
             fixedHeight: log ? dialogs.height * 0.7 : 0
+            // Output of a program gets the width its lines need, up to the
+            // window.
+            FontMetrics { id: outputMetrics; font: dialogs.theme.fixedFont }
+            readonly property real wanted: {
+                var widest = 0 * outputMetrics.height, list = dialogs.view.lines
+                if (!dialogs.view.fixed)
+                    return 0
+                for (var i = 0; i < list.length; i++)
+                    widest = Math.max(widest, outputMetrics.advanceWidth(list[i]))
+                return widest + 40
+            }
+            width: Math.min(maxWidth, Math.max(theme.width * 0.6, 560, wanted))
             // About: the logo above the text.
             Image {
                 visible: !!dialogs.view.logo_url && dialogs.height >= 600
@@ -590,7 +661,11 @@ Item {
                 ColumnLayout {
                     id: messageLines
                     width: messageScroll.width
-                    Lines { model: messageBox.log ? [] : dialogs.view.lines }
+                    Lines {
+                        model: messageBox.log ? [] : dialogs.view.lines
+                        fixed: !!dialogs.view.fixed
+                        room: messageScroll.width
+                    }
                 }
             }
             ListView {
@@ -723,6 +798,7 @@ Item {
                         }
                         Label {
                             visible: !header && modelData.kind !== "command"
+                                     && (modelData.value !== "" || modelData.changed)
                             Layout.preferredWidth: parent.width * 0.38
                             elide: Text.ElideRight
                             text: (modelData.changed ? "• " : "") + modelData.value

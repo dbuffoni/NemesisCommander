@@ -43,12 +43,13 @@ impl App {
         dialog.cursor = if editing && cursor == 0 { first.unwrap_or(0) } else { cursor };
         dialog.footer = if editing {
             crate::hints::list(
-                "choose",
-                &["Space: switch a permission", "Enter: change", "Ctrl+S: apply"],
+                "change",
+                &["Space: switch a permission", "Ctrl+S: apply"],
                 "back to reading",
             )
         } else {
-            crate::hints::list("choose", &["e or F2: edit"], "close")
+            // Enter has nothing to choose here.
+            ["e or F2: edit", "Esc: close"].join(crate::hints::SEP)
         };
         dialog
     }

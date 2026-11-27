@@ -126,6 +126,7 @@ Item {
                         text: tinted ? viewer.styledLine(viewer.view.tinted[index].spans, 0)
                                      : modelData
                         font.family: viewer.theme.fixedFont.family
+                        font.preferShaping: false
                         font.pointSize: viewer.theme.fixedFont.pointSize * content.shrink
                         color: palette.text
                         height: viewer.theme.rowHeight
@@ -171,6 +172,7 @@ Item {
                             text: viewer.styledLine(modelData.spans, parent.level)
                             textFormat: Text.StyledText
                             font.family: viewer.theme.fixedFont.family
+                            font.preferShaping: false
                             font.pointSize: viewer.theme.fixedFont.pointSize
                                             * (parent.level === 1 ? 1.5 : parent.level === 2 ? 1.25 : 1)
                             color: parent.level > 0 && parent.level <= 2 ? viewer.theme.headingColor

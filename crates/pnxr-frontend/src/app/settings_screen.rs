@@ -204,7 +204,13 @@ impl App {
     /// installed ones first) and a row to type a command.
     fn editor_dialog(&mut self, field: Field, screen: SettingsScreen) -> Overlay {
         let window = !matches!(field, Field::TerminalEditor);
-        let suggestions = crate::editors::suggestions(window, &crate::editors::installed());
+        let default = match field {
+            Field::GuiEditor => "the shared one, or the desktop's",
+            Field::TerminalEditor => "the shared one, $EDITOR, vi",
+            _ => "$VISUAL / $EDITOR, then the system's",
+        };
+        let suggestions =
+            crate::editors::suggestions(window, &crate::editors::installed(), default);
         let mut items: Vec<String> = suggestions.iter().map(|s| s.label.clone()).collect();
         let commands: Vec<String> = suggestions.into_iter().map(|s| s.command).collect();
         items.push("Type a command myself…".to_owned());
@@ -490,6 +496,7 @@ impl App {
             back: false,
             logo: false,
             busy: false,
+            fixed: false,
         }));
     }
 }

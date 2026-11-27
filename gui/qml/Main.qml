@@ -39,6 +39,9 @@ ApplicationWindow {
     // The fonts of the settings; empty or 0 keeps the system's.
     readonly property var fonts: screen ? screen.fonts : null
     font.family: fonts && fonts.family ? fonts.family : Qt.application.font.family
+    // No ligatures: a diff, a log or `rw-r--r--` show the characters they
+    // have. (Scripts that need shaping to be legible keep it.)
+    font.preferShaping: false
     // The size of the settings, but never more than the window can show:
     // About and the long install questions are about 14 lines of 50 to 60
     // characters, which fit when a line is at most height / 28 points and
@@ -51,7 +54,8 @@ ApplicationWindow {
     font.pointSize: Math.min(wantedPointSize, fittingPointSize)
     readonly property font fixedFont: Qt.font({
         family: fonts && fonts.fixed_family ? fonts.fixed_family : "monospace",
-        pointSize: font.pointSize
+        pointSize: font.pointSize,
+        preferShaping: false
     })
     readonly property color accent: "#c8901a"
     readonly property color errorColor: "#c0392b"

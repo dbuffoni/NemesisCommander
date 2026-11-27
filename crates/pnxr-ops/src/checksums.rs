@@ -286,6 +286,8 @@ pub async fn check_checksums(
             Ok(provider) => match crate::checksum(provider.as_ref(), &path, algorithm).await {
                 Ok(hex) if hex.eq_ignore_ascii_case(&entry.hex) => Verdict::Ok,
                 Ok(_) => Verdict::Failed,
+                // The report names the file already: no full address.
+                Err(e) if e.is_not_found() => Verdict::Missing("not found".into()),
                 Err(e) => Verdict::Missing(e.to_string()),
             },
         };
@@ -386,7 +388,7 @@ mod tests {
         std::fs::remove_file(dir.path().join("sub dir/é.bin")).unwrap();
         let bad = check_checksums(&registry, &base.join("SHA256SUMS")).await.unwrap();
         assert_eq!(bad[0], ("a b.txt".to_owned(), Verdict::Failed));
-        assert!(matches!(bad[1].1, Verdict::Missing(_)));
+        assert_eq!(bad[1].1, Verdict::Missing("not found".into()), "no address");
     }
 
     #[tokio::test]

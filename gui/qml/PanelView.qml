@@ -166,6 +166,8 @@ Rectangle {
             Label {
                 visible: panel.view !== null && panel.view.branch !== ""
                 text: panel.view ? "\u2387 " + panel.view.branch : ""
+                Layout.maximumWidth: panel.width * 0.4
+                elide: Text.ElideRight
                 color: panel.theme.accent
             }
         }

@@ -1,6 +1,6 @@
 {
   "name": "image-duplicates",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Finds similar and duplicate pictures: groups them, shows how alike they are in panel columns, and moves the extra copies aside",
   "author": "Pairnox",
   "license": "MIT",

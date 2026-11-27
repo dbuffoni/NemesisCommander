@@ -162,10 +162,9 @@ impl App {
             match (row, result) {
                 (2 | 6 | 7 | 8, Ok(text)) => {
                     let title = ROWS[row].1;
-                    AppEvent::Show(Box::new(Overlay::Message(MessageDialog::new(
-                        title,
-                        lines_of(&text, 400),
-                    ))))
+                    AppEvent::Show(Box::new(Overlay::Message(
+                        MessageDialog::new(title, lines_of(&text, 400)).with_fixed_font(),
+                    )))
                 }
                 (_, Ok(message)) => done(Ok(message), None),
                 (_, Err(e)) => AppEvent::Show(Box::new(Overlay::Message(MessageDialog::new(

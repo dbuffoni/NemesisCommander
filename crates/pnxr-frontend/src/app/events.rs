@@ -380,6 +380,7 @@ impl App {
                             back_to_settings: None,
                             logo: false,
                             busy: false,
+                            fixed: false,
                         }));
                     }
                 }
