@@ -21,6 +21,7 @@ pub use config::{
 };
 pub use export::{ExportBundle, ImportMode};
 pub use keymap::{
-    Action, Category, Key, KeyChord, Keymap, LABEL_MAX, PluginKeyDefault, is_function_key, is_function_key_text,
+    Action, Category, Key, KeyChord, Keymap, LABEL_MAX, PluginKeyDefault, is_function_key,
+    is_function_key_text,
 };
 pub use paths::AppPaths;

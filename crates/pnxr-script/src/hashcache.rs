@@ -88,8 +88,8 @@ mod tests {
 
     #[test]
     fn a_line_is_read_back_and_a_damaged_one_is_ignored() {
-        let key = key("/p/a.jpg", 1234, Some(UNIX_EPOCH + std::time::Duration::from_millis(5)))
-            .unwrap();
+        let key =
+            key("/p/a.jpg", 1234, Some(UNIX_EPOCH + std::time::Duration::from_millis(5))).unwrap();
         assert_eq!(key, "/p/a.jpg\t1234\t5");
         let line = format!("{key}\t00ff00ff00ff00ff\t640\t480");
         let (read_key, info) = parse_line(&line).unwrap();

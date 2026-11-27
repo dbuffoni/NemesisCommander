@@ -319,7 +319,11 @@ mod tests {
         let backups = std::fs::read_dir(paths.config_file().parent().unwrap())
             .unwrap()
             .filter(|e| {
-                e.as_ref().unwrap().file_name().to_string_lossy().contains("before-shortcut-model-2")
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("before-shortcut-model-2")
             })
             .count();
         assert_eq!(backups, 1);

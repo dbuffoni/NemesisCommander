@@ -24,8 +24,8 @@ fn main() {
 #[cfg(windows)]
 fn embed_windows_icon() {
     if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "windows") {
-        let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../assets/branding/pairnox.ico");
+        let icon =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../assets/branding/pairnox.ico");
         println!("cargo:rerun-if-changed={}", icon.display());
         let mut resource = winresource::WindowsResource::new();
         resource.set_icon(icon.to_str().expect("the icon path is text"));

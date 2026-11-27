@@ -781,8 +781,7 @@ impl Keymap {
                 }
             }
             slots.insert(default.id.clone(), slot);
-            if let Some(label) = default.label.as_deref().map(str::trim).filter(|l| !l.is_empty())
-            {
+            if let Some(label) = default.label.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
                 default_labels.insert(default.id.clone(), label.to_owned());
             }
         }

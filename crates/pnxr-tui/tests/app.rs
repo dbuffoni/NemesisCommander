@@ -4148,7 +4148,10 @@ async fn plugin_results_are_sorted_marked_and_deleted_after_a_question() {
     let first = screen.find("best   a.txt").unwrap();
     let second = screen.find("95%    notes.txt").unwrap();
     assert!(second < first && screen.contains("sorted by Match ↑"), "sorted: {screen}");
-    assert!(screen.contains("[x] #1     95%    notes.txt"), "the mark stays with its file: {screen}");
+    assert!(
+        screen.contains("[x] #1     95%    notes.txt"),
+        "the mark stays with its file: {screen}"
+    );
 
     // Delete asks about the marked file only.
     h.key("Delete");

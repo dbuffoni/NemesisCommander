@@ -20,12 +20,12 @@ use pnxr_vfs::VfsPath;
 use pnxr_config::{Action, Category};
 
 use super::{App, AppEvent};
-use crate::input::KeyPress;
-use pnxr_config::Key;
 use crate::commands::{CommandEntry, SCRIPTS, Target, plugin_category};
 use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay,
 };
+use crate::input::KeyPress;
+use pnxr_config::Key;
 
 /// One row of the Ctrl+X list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -259,7 +259,11 @@ impl App {
 
 impl App {
     /// Shows what a plugin command found as a list to sort and mark.
-    pub(super) fn show_results(&mut self, results: crate::results::Results, plugin: Option<PathBuf>) {
+    pub(super) fn show_results(
+        &mut self,
+        results: crate::results::Results,
+        plugin: Option<PathBuf>,
+    ) {
         let dialog = Self::results_dialog(results, plugin, 0);
         self.overlay = Some(Overlay::Choose(dialog));
     }
@@ -284,7 +288,11 @@ impl App {
 
     /// Keys of a plugin's results list: marks, sort, trash and the plugin's
     /// own actions. `None` when the key is not one of them.
-    pub(super) fn results_key(&mut self, dialog: &mut ChooseDialog, press: &KeyPress) -> Option<bool> {
+    pub(super) fn results_key(
+        &mut self,
+        dialog: &mut ChooseDialog,
+        press: &KeyPress,
+    ) -> Option<bool> {
         let ChoosePurpose::PluginResults { results, plugin } = &mut dialog.purpose else {
             return None;
         };
@@ -815,8 +823,10 @@ mod default_key_tests {
     #[test]
     fn the_bundled_plugins_have_conflict_free_default_keys() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
-        let mut config = pnxr_config::Config::default();
-        config.plugin_defaults = plugin_key_defaults(&dir);
+        let config = pnxr_config::Config {
+            plugin_defaults: plugin_key_defaults(&dir),
+            ..Default::default()
+        };
         let image = config
             .plugin_defaults
             .iter()

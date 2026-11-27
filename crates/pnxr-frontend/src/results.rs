@@ -274,7 +274,10 @@ mod tests {
         assert_eq!(results.rows.len(), 4);
         assert_eq!(names(&results), ["a.jpg", "b.jpg", "c.png", "d.png"]);
         assert_eq!(results.action_for('m').unwrap().command, "move-marked");
-        assert!(Results::parse(r#"{"title":"x","columns":["A"],"rows":[{"path":"/a","cells":[]}]}"#).is_err());
+        assert!(
+            Results::parse(r#"{"title":"x","columns":["A"],"rows":[{"path":"/a","cells":[]}]}"#)
+                .is_err()
+        );
     }
 
     #[test]
@@ -297,7 +300,10 @@ mod tests {
     fn all_but_the_best_marks_the_extra_copies_and_undoes_itself() {
         let mut results = sample();
         results.toggle_all_but_best();
-        assert_eq!(results.marked().iter().map(|p| p.file_name().unwrap().to_owned()).collect::<Vec<_>>(), ["b.jpg", "d.png"]);
+        assert_eq!(
+            results.marked().iter().map(|p| p.file_name().unwrap().to_owned()).collect::<Vec<_>>(),
+            ["b.jpg", "d.png"]
+        );
         assert!(results.heading().contains("2 marked"), "{}", results.heading());
         results.toggle_all_but_best();
         assert_eq!(results.marked_count(), 0);
