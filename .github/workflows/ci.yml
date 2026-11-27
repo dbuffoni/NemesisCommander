@@ -84,8 +84,13 @@ jobs:
       - run: cargo fmt --all --check
       # Every dependency has a licence we may ship, and its notice is known.
       - run: python3 scripts/third_party.py --check
+      - name: No trace of the old name
+        run: |
+          if git grep -nIiE 'nemesis|\bnmc\b|nmc[-_]|NMC_' -- . ':!docs/adr' ':!CHANGELOG.md' ':!README.md' ':!.github/workflows/ci.yml'; then
+            echo "The old name NemesisCommander / nmc is still used (see above)"; exit 1
+          fi
       # The desktop interface needs Qt: it is checked in the `gui` job.
-      - run: cargo clippy --workspace --exclude nmc-gui --all-targets
+      - run: cargo clippy --workspace --exclude pnxr-gui --all-targets
 
   test:
     name: Test (${{ matrix.os }})
@@ -101,7 +106,7 @@ jobs:
     env:
       # The servers installed below must be there: a missing one fails the
       # test instead of skipping it.
-      NMC_REQUIRE_SERVERS: ${{ startsWith(matrix.os, 'ubuntu') && 'sftp,smb,ssh' || '' }}
+      PNXR_REQUIRE_SERVERS: ${{ startsWith(matrix.os, 'ubuntu') && 'sftp,smb,ssh' || '' }}
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -114,24 +119,24 @@ jobs:
         shell: bash
         run: rm -rf target/*/build/v8-* target/*/.fingerprint/v8-* target/*/deps/libv8-* target/*/deps/v8-*
       # OpenSSH's sftp-server and Samba, for the SFTP and SMB provider tests,
-      # and a private sshd for the `nmc serve install` test.
+      # and a private sshd for the `pnxr serve install` test.
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openssh-sftp-server openssh-server samba
-          sudo scripts/smb-test-server.sh /var/tmp/nmc-smb >> "$GITHUB_ENV"
+          sudo scripts/smb-test-server.sh /var/tmp/pnxr-smb >> "$GITHUB_ENV"
           sudo mkdir -p /run/sshd
-          scripts/ssh-test-server.sh /var/tmp/nmc-ssh >> "$GITHUB_ENV"
+          scripts/ssh-test-server.sh /var/tmp/pnxr-ssh >> "$GITHUB_ENV"
       # A throwaway keychain, so the Keychain tests do not need the login one.
       - if: runner.os == 'macOS'
         run: |
-          security create-keychain -p ci "$RUNNER_TEMP/nmc.keychain"
-          security set-keychain-settings "$RUNNER_TEMP/nmc.keychain"
-          security unlock-keychain -p ci "$RUNNER_TEMP/nmc.keychain"
-          security default-keychain -s "$RUNNER_TEMP/nmc.keychain"
-      - run: cargo test --workspace --exclude nmc-gui
+          security create-keychain -p ci "$RUNNER_TEMP/pnxr.keychain"
+          security set-keychain-settings "$RUNNER_TEMP/pnxr.keychain"
+          security unlock-keychain -p ci "$RUNNER_TEMP/pnxr.keychain"
+          security default-keychain -s "$RUNNER_TEMP/pnxr.keychain"
+      - run: cargo test --workspace --exclude pnxr-gui
       # RAR is read with the bundled libarchive (feature `rar`, on in releases).
-      - run: cargo test -p nmc-archive --features rar
+      - run: cargo test -p pnxr-archive --features rar
       # No unRAR code in the release (ADR 0050).
       - name: No unrar crate
         shell: bash
@@ -165,13 +170,13 @@ jobs:
             qml6-module-qtquick-controls qml6-module-qtquick-layouts \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             qml6-module-qtqml-workerscript qml6-module-qtqml-models
-      - run: cargo clippy -p nmc-gui --all-targets
-      # The window runs plugins through the `nmc` program next to it: build
+      - run: cargo clippy -p pnxr-gui --all-targets
+      # The window runs plugins through the `pnxr` program next to it: build
       # it first, on its own so the window does not link the script engine
       # (ADR 0020).
-      - run: cargo build -p nmc-cli
+      - run: cargo build -p pnxr-cli
       # The window tests use Qt's offscreen platform: no display needed.
-      - run: cargo test -p nmc-gui
+      - run: cargo test -p pnxr-gui
 
   gui-other:
     name: Desktop interface (${{ matrix.os }})
@@ -206,9 +211,9 @@ jobs:
       # its header, which the current Xcode's clang rejects.
       - if: runner.os == 'macOS'
         run: echo "CXXFLAGS=-include arm_acle.h" >> "$GITHUB_ENV"
-      # The window runs plugins through the `nmc` program next to it.
-      - run: cargo build -p nmc-cli
-      - run: cargo test -p nmc-gui
+      # The window runs plugins through the `pnxr` program next to it.
+      - run: cargo build -p pnxr-cli
+      - run: cargo test -p pnxr-gui
         env:
           QT_QPA_PLATFORM: offscreen
 
@@ -223,7 +228,7 @@ jobs:
   # ---- The full tier: heavy checks against real servers ----------------------
   # Everything below runs only when `plan` says `full` (nightly, Run workflow,
   # or a pull request labelled `full-ci`). A missing server fails the test
-  # (NMC_REQUIRE_SERVERS) instead of skipping it.
+  # (PNXR_REQUIRE_SERVERS) instead of skipping it.
 
   s3-webdav-faults:
     name: S3 (MinIO), WebDAV (Apache), network faults
@@ -231,7 +236,7 @@ jobs:
     if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-24.04
     env:
-      NMC_REQUIRE_SERVERS: "1"
+      PNXR_REQUIRE_SERVERS: "1"
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -242,11 +247,11 @@ jobs:
       - name: Start MinIO, Apache mod_dav and toxiproxy
         run: scripts/heavy/up.sh >> "$GITHUB_ENV"
       - name: S3 against MinIO
-        run: cargo test -p nmc-s3 --test real_server
+        run: cargo test -p pnxr-s3 --test real_server
       - name: WebDAV against Apache mod_dav
-        run: cargo test -p nmc-webdav --test real_server
+        run: cargo test -p pnxr-webdav --test real_server
       - name: S3 with network faults (toxiproxy)
-        run: cargo test -p nmc-s3 --test faults
+        run: cargo test -p pnxr-s3 --test faults
       - if: failure()
         run: |
           docker compose -f scripts/heavy/compose.yml logs --tail 200
@@ -259,7 +264,7 @@ jobs:
     timeout-minutes: 30
     runs-on: ubuntu-24.04
     env:
-      NMC_REQUIRE_SERVERS: "1"
+      PNXR_REQUIRE_SERVERS: "1"
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -272,11 +277,11 @@ jobs:
         run: ONLY_DAV=1 NEXTCLOUD=1 scripts/heavy/up.sh >> "$GITHUB_ENV"
       - name: WebDAV against Nextcloud
         run: |
-          NMC_TEST_DAV_ORIGIN=$NMC_TEST_NEXTCLOUD_ORIGIN \
-          NMC_TEST_DAV_BASE=$NMC_TEST_NEXTCLOUD_BASE \
-          NMC_TEST_DAV_USER=$NMC_TEST_NEXTCLOUD_USER \
-          NMC_TEST_DAV_PASSWORD=$NMC_TEST_NEXTCLOUD_PASSWORD \
-          cargo test -p nmc-webdav --test real_server
+          PNXR_TEST_DAV_ORIGIN=$PNXR_TEST_NEXTCLOUD_ORIGIN \
+          PNXR_TEST_DAV_BASE=$PNXR_TEST_NEXTCLOUD_BASE \
+          PNXR_TEST_DAV_USER=$PNXR_TEST_NEXTCLOUD_USER \
+          PNXR_TEST_DAV_PASSWORD=$PNXR_TEST_NEXTCLOUD_PASSWORD \
+          cargo test -p pnxr-webdav --test real_server
       - if: failure()
         run: docker compose -f scripts/heavy/compose.yml --profile nextcloud logs --tail 200
 
@@ -294,7 +299,7 @@ jobs:
           - { name: SMB 3, min: SMB3, signing: auto }
           - { name: SMB 3 with signing required, min: SMB3, signing: mandatory }
     env:
-      NMC_REQUIRE_SERVERS: "smb"
+      PNXR_REQUIRE_SERVERS: "smb"
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -303,8 +308,8 @@ jobs:
           cache-on-failure: true
           key: heavy
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends samba
-      - run: sudo SMB_MIN_PROTOCOL=${{ matrix.min }} SMB_SIGNING=${{ matrix.signing }} scripts/smb-test-server.sh /var/tmp/nmc-smb >> "$GITHUB_ENV"
-      - run: cargo test -p nmc-smb
+      - run: sudo SMB_MIN_PROTOCOL=${{ matrix.min }} SMB_SIGNING=${{ matrix.signing }} scripts/smb-test-server.sh /var/tmp/pnxr-smb >> "$GITHUB_ENV"
+      - run: cargo test -p pnxr-smb
 
   ssh:
     name: SSH (${{ matrix.variant }})
@@ -317,7 +322,7 @@ jobs:
       matrix:
         variant: [passphrase, changed-hostkey]
     env:
-      NMC_REQUIRE_SERVERS: "ssh"
+      PNXR_REQUIRE_SERVERS: "ssh"
     steps:
       - uses: actions/checkout@v4
       - run: rustup show active-toolchain || rustup toolchain install
@@ -329,13 +334,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends openssh-server
           sudo mkdir -p /run/sshd
-      - run: SSH_VARIANT=${{ matrix.variant }} scripts/ssh-test-server.sh /var/tmp/nmc-ssh >> "$GITHUB_ENV"
+      - run: SSH_VARIANT=${{ matrix.variant }} scripts/ssh-test-server.sh /var/tmp/pnxr-ssh >> "$GITHUB_ENV"
       - name: Key with a passphrase from an agent
         if: matrix.variant == 'passphrase'
-        run: cargo test -p nmc-cli --test install install_serve
+        run: cargo test -p pnxr-cli --test install install_serve
       - name: A changed host key is refused
         if: matrix.variant == 'changed-hostkey'
-        run: cargo test -p nmc-cli --test install a_changed_host_key
+        run: cargo test -p pnxr-cli --test install a_changed_host_key
 
   # A failed nightly must be seen: it opens (or comments on) one issue.
   nightly-alert:

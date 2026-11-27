@@ -1,0 +1,28 @@
+[package]
+name = "pnxr-index"
+description = "Sorting, filtering, selection masks and search (by name, size, date and content) for Pairnox."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+futures.workspace = true
+globset.workspace = true
+memchr.workspace = true
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "io-util"] }
+tokio-util.workspace = true
+
+[dev-dependencies]
+pnxr-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+proptest.workspace = true
+
+[lints]
+workspace = true

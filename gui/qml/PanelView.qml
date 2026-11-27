@@ -94,8 +94,8 @@ Rectangle {
     DropArea {
         anchors.fill: parent
         onDropped: (drop) => {
-            if (drop.formats.indexOf("application/x-nemesiscommander") >= 0) {
-                const part = drop.getDataAsString("application/x-nemesiscommander").split(":")
+            if (drop.formats.indexOf("application/x-pairnox") >= 0) {
+                const part = drop.getDataAsString("application/x-pairnox").split(":")
                 panel.theme.app.drag_rows(parseInt(part[0]), parseInt(part[1]), panel.side)
             } else if (drop.hasUrls) {
                 panel.theme.app.drop_files(panel.side, drop.urls.join("\n"))
@@ -170,7 +170,7 @@ Rectangle {
             }
         }
 
-        // The text of nmc_folder.md, at most a third of the panel.
+        // The text of pnxr_folder.md, at most a third of the panel.
         Text {
             Layout.fillWidth: true
             Layout.maximumHeight: panel.height / 3
@@ -287,9 +287,9 @@ Rectangle {
                         Drag.dragType: Drag.Automatic
                         Drag.supportedActions: Qt.CopyAction
                         Drag.mimeData: entry.url !== ""
-                            ? { "application/x-nemesiscommander": panel.side + ":" + index,
+                            ? { "application/x-pairnox": panel.side + ":" + index,
                                 "text/uri-list": entry.url }
-                            : { "application/x-nemesiscommander": panel.side + ":" + index }
+                            : { "application/x-pairnox": panel.side + ":" + index }
                         DragHandler {
                             id: rowDrag
                             target: null

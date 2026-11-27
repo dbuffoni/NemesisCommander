@@ -1,0 +1,17 @@
+#!/bin/sh
+# Starts Pairnox from the AppImage:
+#
+#   Pairnox.AppImage [LEFT] [RIGHT]   the window (pnxr-gui)
+#   Pairnox.AppImage pnxr [ARGS...]    the `pnxr` program: the terminal
+#                                              interface and the commands
+#
+# A link named `pnxr` to the AppImage starts `pnxr` directly.
+here=$(dirname "$(readlink -f "$0")")
+case "$(basename "${ARGV0:-$0}")" in
+    pnxr) exec "$here/pnxr" "$@" ;;
+esac
+if [ "${1:-}" = pnxr ]; then
+    shift
+    exec "$here/pnxr" "$@"
+fi
+exec "$here/pnxr-gui" "$@"

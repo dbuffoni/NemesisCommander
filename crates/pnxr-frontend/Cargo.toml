@@ -1,0 +1,51 @@
+[package]
+name = "pnxr-frontend"
+description = "The interactive application model shared by Pairnox's terminal and desktop interfaces."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+pnxr-hash.workspace = true
+pnxr-ops.workspace = true
+pnxr-transfer.workspace = true
+pnxr-index.workspace = true
+pnxr-archive.workspace = true
+pnxr-config.workspace = true
+pnxr-panel.workspace = true
+pnxr-app.workspace = true
+pnxr-agent.workspace = true
+pnxr-ssh.workspace = true
+pnxr-s3.workspace = true
+pnxr-preview.workspace = true
+async-trait.workspace = true
+similar.workspace = true
+tempfile.workspace = true
+regex.workspace = true
+bytes.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+image.workspace = true
+directories.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "sync", "time", "io-util"] }
+tokio-util.workspace = true
+pnxr-script = { workspace = true, optional = true }
+
+[features]
+# Plugin commands and scripts from the panels (Alt+X). On its own, scripts
+# run in the `pnxr` program next to this one (so V8 is not linked twice);
+# with `script-engine` they run in this process, on V8.
+scripting = ["dep:pnxr-script"]
+script-engine = ["scripting", "pnxr-script/engine"]
+
+[dev-dependencies]
+pnxr-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

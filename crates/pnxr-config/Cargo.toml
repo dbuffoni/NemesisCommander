@@ -1,0 +1,24 @@
+[package]
+name = "pnxr-config"
+description = "Pairnox settings, key bindings, bookmarks, connections and export/import to a file."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+pnxr-ops.workspace = true
+pnxr-index.workspace = true
+directories.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

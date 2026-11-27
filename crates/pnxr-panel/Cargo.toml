@@ -1,0 +1,22 @@
+[package]
+name = "pnxr-panel"
+description = "UI-independent model of Pairnox's dual-pane workspace: panels, tabs, selection, history."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+pnxr-index.workspace = true
+pnxr-archive.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+pnxr-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

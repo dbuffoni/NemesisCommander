@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Pairnox
+GenericName=File Manager
+Comment=Fast dual-pane file manager for local and remote files
+Exec=pairnox
+Icon=pairnox
+Terminal=false
+Categories=System;FileTools;FileManager;Utility;
+Keywords=files;file manager;commander;sftp;archive;

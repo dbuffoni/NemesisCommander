@@ -1,0 +1,116 @@
+//! `pnxr serve install` and `uninstall` against a real OpenSSH server. Start
+//! one with `scripts/ssh-test-server.sh`, which prints the variable this
+//! test reads (`PNXR_TEST_SSH_HOST`, an `ssh` host name that reaches this
+//! machine); without it the test is skipped. The server has no systemd, so
+//! its `systemctl` is a stand-in that runs the unit's command.
+//!
+//! The server side of the install is this user's own home folder.
+#![cfg(target_os = "linux")]
+
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+
+use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin;
+use predicates::prelude::*;
+use tempfile::TempDir;
+
+const PORT: &str = "17443";
+
+fn pnxr(dir: &TempDir) -> Command {
+    let mut command = Command::cargo_bin("pnxr").unwrap();
+    command
+        .env("PNXR_CONFIG_DIR", dir.path().join("config"))
+        .env("PNXR_DATA_DIR", dir.path().join("data"))
+        .env("PNXR_AGENT_BINARY", cargo_bin("pnxr"));
+    command
+}
+
+/// Removes what the test installed, even when it fails halfway.
+struct Cleanup<'a>(&'a TempDir, &'a str);
+
+impl Drop for Cleanup<'_> {
+    fn drop(&mut self) {
+        let _ = pnxr(self.0).args(["serve", "uninstall", self.1]).output();
+    }
+}
+
+#[test]
+fn install_serve_on_a_server_and_remove_it() {
+    let Ok(host) = std::env::var("PNXR_TEST_SSH_HOST") else {
+        skip("no SSH test server (see scripts/ssh-test-server.sh)");
+        return;
+    };
+    let dir = TempDir::new().unwrap();
+    let _cleanup = Cleanup(&dir, &host);
+    let home = PathBuf::from(std::env::var("HOME").unwrap());
+    let unit = home.join(".config/systemd/user/pnxr-serve.service");
+    let key = home.join(".config/pnxr/serve-tls/server.key");
+
+    pnxr(&dir)
+        .args(["serve", "install", &host, "--name", "localhost", "--port", PORT])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!("scs://localhost:{PORT}/")))
+        .stderr(predicate::str::contains("Issuing the certificate"));
+    let unit_text = fs::read_to_string(&unit).unwrap();
+    assert!(unit_text.contains(&format!("--listen 0.0.0.0:{PORT}")), "{unit_text}");
+    assert_eq!(fs::metadata(&key).unwrap().permissions().mode() & 0o777, 0o600);
+
+    // The new server answers over mutual TLS, from this controller only.
+    pnxr(&dir)
+        .args(["ls", &format!("scs://localhost:{PORT}{}", dir.path().display())])
+        .assert()
+        .success();
+
+    // Running it again keeps the certificates and the server keeps working.
+    pnxr(&dir)
+        .args(["serve", "install", &host, "--name", "localhost", "--port", PORT])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Keeping the certificates"));
+    pnxr(&dir)
+        .args(["ls", &format!("scs://localhost:{PORT}{}", dir.path().display())])
+        .assert()
+        .success();
+
+    pnxr(&dir).args(["serve", "uninstall", &host]).assert().success();
+    assert!(!unit.exists());
+    assert!(!key.exists());
+    pnxr(&dir)
+        .args(["ls", &format!("scs://localhost:{PORT}{}", dir.path().display())])
+        .assert()
+        .failure();
+}
+
+/// With `SSH_VARIANT=changed-hostkey` (scripts/ssh-test-server.sh) the
+/// server's key differs from the one in known_hosts: pnxr must refuse to
+/// connect and say why.
+#[test]
+fn a_changed_host_key_is_refused() {
+    let (Ok(host), Ok("changed-hostkey")) =
+        (std::env::var("PNXR_TEST_SSH_HOST"), std::env::var("PNXR_TEST_SSH_VARIANT").as_deref())
+    else {
+        eprintln!("skipping: not the changed-hostkey SSH variant");
+        return;
+    };
+    let dir = TempDir::new().unwrap();
+    pnxr(&dir)
+        .args(["ls", &format!("sftp://{host}/")])
+        .assert()
+        .failure()
+        .stderr(predicate::str::is_match("(?i)host key|identification").unwrap());
+}
+
+/// A missing test server skips the test, unless the nightly CI requires it
+/// (`PNXR_REQUIRE_SERVERS=1` for all servers, or a list like `sftp,smb`):
+/// a skipped test proves nothing there.
+fn skip(why: &str) {
+    let required = std::env::var("PNXR_REQUIRE_SERVERS").unwrap_or_default();
+    assert!(
+        !(required == "1" || required.split(',').any(|name| name == "ssh")),
+        "PNXR_REQUIRE_SERVERS asks for {why}"
+    );
+    eprintln!("skipping: {why}");
+}

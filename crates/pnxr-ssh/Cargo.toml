@@ -1,0 +1,16 @@
+[package]
+name = "pnxr-ssh"
+description = "Starting programs on other machines through the OpenSSH client, for Pairnox's SFTP and agent providers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+tokio = { workspace = true, features = ["process"] }
+
+[lints]
+workspace = true

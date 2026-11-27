@@ -8,7 +8,7 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "macos") {
         println!("cargo:rustc-link-arg-bins=-Wl,-headerpad_max_install_names");
     }
-    let module = QmlModule::new("NemesisCommander").qml_files([
+    let module = QmlModule::new("Pairnox").qml_files([
         "qml/Main.qml",
         "qml/PanelView.qml",
         "qml/ViewerView.qml",

@@ -1,0 +1,33 @@
+[package]
+name = "pnxr-vfs"
+description = "Virtual file system abstractions for Pairnox: URIs, entries, capabilities and the Provider trait."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bitflags.workspace = true
+bytes.workspace = true
+directories.workspace = true
+futures.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tokio-util.workspace = true
+# Name comparison across systems (NFC/NFD), ADR 0053.
+unicode-normalization = "0.1.24"
+
+[target.'cfg(windows)'.dependencies]
+# The Credential Manager (credential API only).
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+
+[dev-dependencies]
+proptest.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

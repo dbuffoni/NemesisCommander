@@ -1,9 +1,9 @@
 # Builds the distributable files:
 #
 # * the AppImage of the main application (x86_64): the window, with Qt
-#   bundled, and the `nmc` program, and
+#   bundled, and the `pnxr` program, and
 # * the Windows zip and the macOS disk image (installers.yml), and
-# * the agent: a static Linux `nmc` per architecture, built without the
+# * the agent: a static Linux `pnxr` per architecture, built without the
 #   terminal UI and desktop features, that controllers copy to servers.
 #
 # Every push to main builds them and keeps them as workflow artifacts; a
@@ -57,18 +57,18 @@ jobs:
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
             libxkbcommon-x11-0 libegl1 libgl1
-      - name: Build nmc and nmc-gui
+      - name: Build pnxr and pnxr-gui
         run: |
           echo "QMAKE=$QT_ROOT_DIR/bin/qmake" >> "$GITHUB_ENV"
           # Two builds: built together, Cargo would unify features and give
-          # nmc-gui nmc's script engine (V8) as well.
-          cargo build --release --locked -p nmc-cli --features rar
-          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p nmc-gui --features rar
+          # pnxr-gui pnxr's script engine (V8) as well.
+          cargo build --release --locked -p pnxr-cli --features rar
+          QMAKE="$QT_ROOT_DIR/bin/qmake" cargo build --release --locked -p pnxr-gui --features rar
       - name: Smoke test
         run: |
-          target/release/nmc --version
-          target/release/nmc keys | grep -q "Copy"
-          QT_QPA_PLATFORM=offscreen target/release/nmc-gui --self-test --keys=F1 | grep -q '"help"'
+          target/release/pnxr --version
+          target/release/pnxr keys | grep -q "Copy"
+          QT_QPA_PLATFORM=offscreen target/release/pnxr-gui --self-test --keys=F1 | grep -q '"help"'
       # Sizes and idle memory must stay within budget (raise one only on
       # purpose); the benchmark table is for reading, it never fails.
       - name: Footprint
@@ -77,12 +77,12 @@ jobs:
         run: |
           { echo "### Footprint"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
           ok=true
-          scripts/footprint.py size target/release/nmc 90 || ok=false
-          scripts/footprint.py size target/release/nmc-gui 35 || ok=false
-          scripts/footprint.py idle 20 -- target/release/nmc agent --stdio || ok=false
-          scripts/footprint.py idle 90 -- target/release/nmc-gui || ok=false
-          { echo; echo "### Benchmarks (nmc)"; } >> "$GITHUB_STEP_SUMMARY"
-          scripts/footprint.py bench target/release/nmc
+          scripts/footprint.py size target/release/pnxr 90 || ok=false
+          scripts/footprint.py size target/release/pnxr-gui 35 || ok=false
+          scripts/footprint.py idle 20 -- target/release/pnxr agent --stdio || ok=false
+          scripts/footprint.py idle 90 -- target/release/pnxr-gui || ok=false
+          { echo; echo "### Benchmarks (pnxr)"; } >> "$GITHUB_STEP_SUMMARY"
+          scripts/footprint.py bench target/release/pnxr
           $ok
       - name: Package
         run: packaging/linux/build-appimage.sh target/release "${GITHUB_REF_NAME//\//-}"
@@ -91,20 +91,20 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: 1
           QT_QPA_PLATFORM: offscreen
         run: |
-          chmod +x NemesisCommander-*.AppImage
-          ./NemesisCommander-*.AppImage nmc --version
-          ./NemesisCommander-*.AppImage --version
+          chmod +x Pairnox-*.AppImage
+          ./Pairnox-*.AppImage pnxr --version
+          ./Pairnox-*.AppImage --version
           # The window, with the bundled Qt and QML modules.
-          ./NemesisCommander-*.AppImage --self-test --keys="F1" | grep -q '"help"'
+          ./Pairnox-*.AppImage --self-test --keys="F1" | grep -q '"help"'
       - uses: actions/upload-artifact@v4
         with:
           name: appimage-x86_64
-          path: NemesisCommander-*.AppImage
+          path: Pairnox-*.AppImage
           if-no-files-found: error
       - name: AppImage footprint
         run: |
           { echo; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
-          scripts/footprint.py size NemesisCommander-*.AppImage 90
+          scripts/footprint.py size Pairnox-*.AppImage 90
 
   agent:
     name: Agent (${{ matrix.target }})
@@ -137,28 +137,28 @@ jobs:
       - name: Build the static agent
         # No default features: no terminal UI, no recycle bin, no scripting,
         # no SFTP/WebDAV/S3/SMB clients.
-        run: cargo zigbuild --release --locked -p nmc-cli --no-default-features --target ${{ matrix.target }}
+        run: cargo zigbuild --release --locked -p pnxr-cli --no-default-features --target ${{ matrix.target }}
       - name: Check it is static and starts
         run: |
-          bin=target/${{ matrix.target }}/release/nmc
+          bin=target/${{ matrix.target }}/release/pnxr
           file "$bin"
           file "$bin" | grep -Eq "statically linked|static-pie linked"
           if [ "${{ matrix.arch }}" = x86_64 ]; then "$bin" --version; fi
-          cp "$bin" "nmc-agent-linux-${{ matrix.arch }}"
-          ls -l "nmc-agent-linux-${{ matrix.arch }}"
+          cp "$bin" "pnxr-agent-linux-${{ matrix.arch }}"
+          ls -l "pnxr-agent-linux-${{ matrix.arch }}"
       - name: Footprint
         run: |
           { echo "### Agent footprint (${{ matrix.arch }})"; echo "| what | measured | budget | |"; echo "|---|---|---|---|"; } >> "$GITHUB_STEP_SUMMARY"
           ok=true
-          scripts/footprint.py size "nmc-agent-linux-${{ matrix.arch }}" 16 || ok=false
+          scripts/footprint.py size "pnxr-agent-linux-${{ matrix.arch }}" 16 || ok=false
           if [ "${{ matrix.arch }}" = x86_64 ]; then
-            scripts/footprint.py idle 12 -- "./nmc-agent-linux-${{ matrix.arch }}" agent --stdio || ok=false
+            scripts/footprint.py idle 12 -- "./pnxr-agent-linux-${{ matrix.arch }}" agent --stdio || ok=false
           fi
           $ok
       - uses: actions/upload-artifact@v4
         with:
           name: agent-${{ matrix.arch }}
-          path: nmc-agent-linux-${{ matrix.arch }}
+          path: pnxr-agent-linux-${{ matrix.arch }}
           if-no-files-found: error
 
   # Windows zip and macOS disk image (see installers.yml).

@@ -2,8 +2,8 @@
 # Starts a private Samba server for the SMB provider tests and prints the
 # environment variables the tests read. Needs smbd and root (or sudo):
 #
-#   set -a; eval "$(sudo scripts/smb-test-server.sh /var/tmp/nmc-smb)"; set +a
-#   cargo test -p nmc-smb
+#   set -a; eval "$(sudo scripts/smb-test-server.sh /var/tmp/pnxr-smb)"; set +a
+#   cargo test -p pnxr-smb
 #
 # The server listens on 127.0.0.1:4445, shares <dir>/share as "share", and
 # accepts the user "sctest" with password "sctest-pass". Files are created
@@ -61,6 +61,6 @@ for _ in $(seq 50); do
     sleep 0.1
 done
 
-echo "NMC_TEST_SMB_URL=smb://$user@127.0.0.1:$port/share"
-echo "NMC_TEST_SMB_PASSWORD=$password"
-echo "NMC_TEST_SMB_DIR=$dir/share"
+echo "PNXR_TEST_SMB_URL=smb://$user@127.0.0.1:$port/share"
+echo "PNXR_TEST_SMB_PASSWORD=$password"
+echo "PNXR_TEST_SMB_DIR=$dir/share"

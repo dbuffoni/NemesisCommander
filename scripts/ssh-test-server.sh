@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Starts a private OpenSSH server for the `nmc serve install` test and
+# Starts a private OpenSSH server for the `pnxr serve install` test and
 # prints the variable the test reads:
 #
-#   set -a; eval "$(scripts/ssh-test-server.sh /var/tmp/nmc-ssh)"; set +a
-#   cargo test -p nmc-cli --test install
+#   set -a; eval "$(scripts/ssh-test-server.sh /var/tmp/pnxr-ssh)"; set +a
+#   cargo test -p pnxr-cli --test install
 #
 # The server listens on 127.0.0.1:2299 and lets the current user in with a
-# new key. It adds a `Host nmc-test` entry to ~/.ssh/config (the test
-# connects to "nmc-test") and puts a fake `systemctl` and `loginctl` first
+# new key. It adds a `Host pnxr-test` entry to ~/.ssh/config (the test
+# connects to "pnxr-test") and puts a fake `systemctl` and `loginctl` first
 # in the PATH of its sessions: where there is no systemd user manager (a
 # container, a CI runner) the fake runs the unit's ExecStart in the
 # background, which is all the install needs to be checked end to end.
@@ -26,7 +26,7 @@ dir=$(cd "$dir" && pwd)
 
 variant=${SSH_VARIANT:-default}
 passphrase=
-[ "$variant" = passphrase ] && passphrase=nmc-key-passphrase
+[ "$variant" = passphrase ] && passphrase=pnxr-key-passphrase
 [ -f "$dir/id_ed25519" ] || ssh-keygen -q -t ed25519 -N "$passphrase" -f "$dir/id_ed25519"
 [ -f "$dir/host_key" ] || ssh-keygen -q -t ed25519 -N '' -f "$dir/host_key"
 cp "$dir/id_ed25519.pub" "$dir/authorized_keys"
@@ -34,8 +34,8 @@ cp "$dir/id_ed25519.pub" "$dir/authorized_keys"
 cat > "$dir/bin/systemctl" <<'FAKE'
 #!/bin/sh
 # Stand-in for `systemctl --user` without a systemd user manager.
-unit="$HOME/.config/systemd/user/nmc-serve.service"
-pidfile="$HOME/.cache/nmc-fake-systemd.pid"
+unit="$HOME/.config/systemd/user/pnxr-serve.service"
+pidfile="$HOME/.cache/pnxr-fake-systemd.pid"
 stop() {
     [ -f "$pidfile" ] && kill "$(cat "$pidfile")" 2>/dev/null
     rm -f "$pidfile"
@@ -86,11 +86,11 @@ else
     : > "$dir/known_hosts"
 fi
 
-if ! grep -q '^# nmc-test$' "$HOME/.ssh/config" 2>/dev/null; then
+if ! grep -q '^# pnxr-test$' "$HOME/.ssh/config" 2>/dev/null; then
     cat >> "$HOME/.ssh/config" <<CONF
 
-# nmc-test
-Host nmc-test
+# pnxr-test
+Host pnxr-test
     HostName 127.0.0.1
     Port $port
     IdentityFile $dir/id_ed25519
@@ -112,10 +112,10 @@ if [ "$variant" = passphrase ]; then
 fi
 if [ "$variant" != changed-hostkey ]; then
     for _ in 1 2 3 4 5 6 7 8 9 10; do
-        ssh -o BatchMode=yes nmc-test true 2>/dev/null && break
+        ssh -o BatchMode=yes pnxr-test true 2>/dev/null && break
         sleep 0.5
     done
-    ssh -o BatchMode=yes nmc-test true
+    ssh -o BatchMode=yes pnxr-test true
 fi
-echo "NMC_TEST_SSH_HOST=nmc-test"
-echo "NMC_TEST_SSH_VARIANT=$variant"
+echo "PNXR_TEST_SSH_HOST=pnxr-test"
+echo "PNXR_TEST_SSH_VARIANT=$variant"

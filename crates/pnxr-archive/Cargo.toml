@@ -1,0 +1,44 @@
+[package]
+name = "pnxr-archive"
+description = "Native archive and compression support for Pairnox: browse archives as folders, pack and unpack."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "io-util", "fs"] }
+tokio-util = { workspace = true, features = ["io"] }
+tempfile.workspace = true
+zip.workspace = true
+tar.workspace = true
+flate2.workspace = true
+liblzma.workspace = true
+bzip2.workspace = true
+zstd.workspace = true
+sevenz-rust2.workspace = true
+pnxr-libarchive = { workspace = true, optional = true }
+
+[features]
+default = []
+# Read-only RAR support through libarchive (BSD-2-Clause, built from source;
+# see docs/adr/0006-archives.md). Nothing here creates RAR files.
+rar = ["dep:pnxr-libarchive"]
+
+[dev-dependencies]
+pnxr-providers.workspace = true
+pnxr-ops.workspace = true
+tokio = { workspace = true, features = ["full"] }
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

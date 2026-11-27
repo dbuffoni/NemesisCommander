@@ -19,7 +19,7 @@ fn run(home: &Path, keys: &str, screenshot: Option<&Path>) -> Run {
 
 /// [`run`] with more arguments.
 fn run_with(home: &Path, keys: &str, screenshot: Option<&Path>, more: &[&str]) -> Run {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_nmc-gui"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_pnxr-gui"));
     command
         .arg("--self-test")
         .args(more)
@@ -32,15 +32,15 @@ fn run_with(home: &Path, keys: &str, screenshot: Option<&Path>, more: &[&str]) -
         .env("XDG_DATA_HOME", home.join("data"))
         // Windows and macOS ignore XDG: keep each test's settings and
         // transfer journal apart, or parallel tests lock each other out.
-        .env("NMC_CONFIG_DIR", home.join("config"))
-        .env("NMC_DATA_DIR", home.join("data"))
+        .env("PNXR_CONFIG_DIR", home.join("config"))
+        .env("PNXR_DATA_DIR", home.join("data"))
         .env("XDG_RUNTIME_DIR", home);
     if let Some(path) = screenshot {
         command.arg(format!("--screenshot={}", path.display()));
     }
-    let output = command.output().expect("nmc-gui runs");
+    let output = command.output().expect("pnxr-gui runs");
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    assert!(output.status.success(), "nmc-gui failed ({}): {stderr}", output.status);
+    assert!(output.status.success(), "pnxr-gui failed ({}): {stderr}", output.status);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let screen = serde_json::from_str(stdout.trim())
         .unwrap_or_else(|e| panic!("keys {keys:?}: {e}\nstdout: {stdout}\nstderr: {stderr}"));
@@ -132,7 +132,7 @@ fn about_shows_the_logo_from_a_file() {
     let path = url.trim_start_matches("file://");
     let path = if cfg!(windows) { path.trim_start_matches('/') } else { path };
     assert!(std::path::Path::new(path).exists(), "{url}");
-    assert!(about["lines"][0].as_str().unwrap().starts_with("NemesisCommander 0."), "{about}");
+    assert!(about["lines"][0].as_str().unwrap().starts_with("Pairnox 0."), "{about}");
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn the_command_list_finds_commands_and_takes_shortcuts() {
     let list = &found.screen["overlay"];
     assert_eq!(list["filter"], "sett");
     assert_eq!(list["categories"][0], "All");
-    assert_eq!(list["rows"][0]["name"], "NemesisCommander/Settings…", "{list}");
+    assert_eq!(list["rows"][0]["name"], "Pairnox/Settings…", "{list}");
     assert_eq!(list["rows"][0]["keys"], "Ctrl+, / Ctrl+F1");
     let ran = run(home.path(), "F9 s e t t Enter", None);
     assert_eq!(ran.screen["overlay"]["kind"], "settings");
@@ -185,7 +185,7 @@ fn keys_reach_the_application() {
 #[test]
 fn every_viewer_draws_cleanly() {
     let home = home();
-    for (name, data) in nmc_preview::samples::all() {
+    for (name, data) in pnxr_preview::samples::all() {
         std::fs::write(home.path().join("left").join(name), data).unwrap();
     }
     let shot = home.path().join("viewer.png");
@@ -309,8 +309,8 @@ fn plugin_columns_are_in_the_screen_description() {
     .unwrap();
     std::fs::write(
         plugin.join("main.ts"),
-        r#"if (nmc.context!.command === "column:chars") {
-  for (const file of nmc.context!.selection) nmc.print(String((await nmc.readText(file)).length));
+        r#"if (pnxr.context!.command === "column:chars") {
+  for (const file of pnxr.context!.selection) pnxr.print(String((await pnxr.readText(file)).length));
 }"#,
     )
     .unwrap();
@@ -331,7 +331,7 @@ fn plugin_columns_are_in_the_screen_description() {
 fn the_folder_text_keeps_its_formatting() {
     let home = home();
     std::fs::write(
-        home.path().join("left/nmc_folder.md"),
+        home.path().join("left/pnxr_folder.md"),
         "# Release files\n\nKeep **data.bin**.\n",
     )
     .unwrap();

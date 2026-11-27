@@ -2,11 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key><string>NemesisCommander</string>
-    <key>CFBundleDisplayName</key><string>NemesisCommander</string>
-    <key>CFBundleIdentifier</key><string>io.github.dbuffoni.nemesiscommander</string>
-    <key>CFBundleExecutable</key><string>nmc-gui</string>
-    <key>CFBundleIconFile</key><string>NemesisCommander</string>
+    <key>CFBundleName</key><string>Pairnox</string>
+    <key>CFBundleDisplayName</key><string>Pairnox</string>
+    <key>CFBundleIdentifier</key><string>io.github.dbuffoni.pairnox</string>
+    <key>CFBundleExecutable</key><string>pnxr-gui</string>
+    <key>CFBundleIconFile</key><string>Pairnox</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>@VERSION@</string>
     <key>CFBundleVersion</key><string>@VERSION@</string>

@@ -4,6 +4,12 @@
 
 Not published yet.
 
+- **NemesisCommander is now Pairnox, the program `pnxr`** (`pnxr-gui` for the
+  window): crates, environment variables (`PNXR_*`), script global, agent
+  protocol, certificates, folders and installers use the new name. Nothing is
+  migrated: settings, certificates (run `pnxr tls init`), scripts and plugins of
+  older installs are not read. Agents of the old and the new name cannot talk
+  to each other.
 - Function keys: Shift+F is the advanced variant of the plain key (Shift+F3
   quick view, Shift+F4 properties, Shift+F6 unpack, Shift+F7 link) and
   Ctrl+F holds the tools (Ctrl+F2 search, Ctrl+F3 compare, Ctrl+F4

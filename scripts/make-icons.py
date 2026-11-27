@@ -1,5 +1,5 @@
-"""Draws the NemesisCommander icon: assets/branding/nemesiscommander.svg (the
-tile), nemesiscommander-logo.svg and .png (the logo alone), the PNG sizes and
+"""Draws the Pairnox icon: assets/branding/pairnox.svg (the
+tile), pairnox-logo.svg and .png (the logo alone), the PNG sizes and
 the two marks for the About window, from one description of the shapes.
 
     scripts/make-icons.py            (needs node with Playwright's Chromium)
@@ -34,7 +34,7 @@ def logo_svg(plate=None, size=256):
     x, y = CENTRE[0] - SIDE / 2, CENTRE[1] - SIDE / 2
     back = f'<rect x="{x}" y="{y}" width="{SIDE}" height="{SIDE}" rx="56" fill="{plate}"/>\n  ' if plate else ""
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="{x} {y} {SIDE} {SIDE}">
-  <title>NemesisCommander</title>
+  <title>Pairnox</title>
   {back}{BODY}
 </svg>
 """
@@ -43,7 +43,7 @@ def logo_svg(plate=None, size=256):
 def tile_svg():
     s = 1.3
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <title>NemesisCommander</title>
+  <title>Pairnox</title>
   <rect width="512" height="512" rx="112" fill="{TILE}"/>
   <g transform="translate(256 256) scale({s}) translate(-{CENTRE[0]} -{CENTRE[1]})">
   {BODY}
@@ -72,20 +72,20 @@ if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     out = lambda name: os.path.join(OUT, name)
     work = tempfile.mkdtemp()
-    open(out("nemesiscommander.svg"), "w").write(tile_svg())
-    open(out("nemesiscommander-logo.svg"), "w").write(logo_svg())
-    jobs = [(out("nemesiscommander.svg"), out(f"nemesiscommander-{n}.png"), n, True)
+    open(out("pairnox.svg"), "w").write(tile_svg())
+    open(out("pairnox-logo.svg"), "w").write(logo_svg())
+    jobs = [(out("pairnox.svg"), out(f"pairnox-{n}.png"), n, True)
             for n in (16, 24, 32, 48, 64, 128, 256, 512)]
     # The logo for the README: on white, 1024 pixels.
     path = os.path.join(work, "logo-white.svg")
     open(path, "w").write(logo_svg(plate="#ffffff", size=1024))
-    jobs.append((path, out("nemesiscommander-logo.png"), 1024, False))
+    jobs.append((path, out("pairnox-logo.png"), 1024, False))
     # The marks: on a light theme the logo alone, on a dark one on a white plate
     # (the outline and the band are dark).
     for name, plate in {"light": None, "dark": "#ffffff"}.items():
         path = os.path.join(work, f"mark-{name}.svg")
         open(path, "w").write(logo_svg(plate=plate))
-        jobs.append((path, out(f"nemesiscommander-mark-{name}.png"), 256, True))
+        jobs.append((path, out(f"pairnox-mark-{name}.png"), 256, True))
     script = os.path.join(work, "render.js")
     open(script, "w").write(RENDER)
     subprocess.run(["node", script, json.dumps(jobs)], check=True,

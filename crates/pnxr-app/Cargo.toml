@@ -1,0 +1,44 @@
+[package]
+name = "pnxr-app"
+description = "Wires Pairnox together: settings, providers and the transfer manager, for every front end."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+pnxr-providers.workspace = true
+pnxr-archive.workspace = true
+pnxr-index.workspace = true
+futures.workspace = true
+pnxr-config.workspace = true
+pnxr-ops.workspace = true
+pnxr-transfer.workspace = true
+pnxr-agent.workspace = true
+async-trait.workspace = true
+pnxr-ssh.workspace = true
+pnxr-sftp = { workspace = true, optional = true }
+pnxr-webdav = { workspace = true, optional = true }
+pnxr-s3 = { workspace = true, optional = true }
+pnxr-smb = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["io-util"] }
+
+[features]
+default = ["desktop", "remote"]
+# Everything a desktop build wants (recycle bin, ...). Server builds of
+# `pnxr` disable it.
+desktop = ["pnxr-providers/trash"]
+# SFTP, WebDAV, S3 and SMB. Agent-only server builds leave them out: the
+# agent serves its own disk, and agent:// / scs:// stay in every build.
+remote = ["dep:pnxr-sftp", "dep:pnxr-webdav", "dep:pnxr-s3", "dep:pnxr-smb"]
+rar = ["pnxr-archive/rar"]
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

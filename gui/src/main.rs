@@ -1,15 +1,15 @@
-//! The `nmc-gui` program: reads the command line and opens the window (see
+//! The `pnxr-gui` program: reads the command line and opens the window (see
 //! the library for how the window works).
 
-const USAGE: &str = "usage: nmc-gui [LEFT] [RIGHT]\n\n\
-    Opens NemesisCommander's window with the two locations (folders or URLs\n\
+const USAGE: &str = "usage: pnxr-gui [LEFT] [RIGHT]\n\n\
+    Opens Pairnox's window with the two locations (folders or URLs\n\
     such as sftp://host/path); the current folder when left out.\n\n\
     For tests: --self-test [--keys=\"F1 Esc\"] [--screenshot=FILE.png] presses\n\
     the keys once the listings are loaded, prints the screen as JSON, saves\n\
     a picture of the window and quits.";
 
 fn main() {
-    let mut startup = nmc_gui::Startup::default();
+    let mut startup = pnxr_gui::Startup::default();
     let mut places = Vec::new();
     let (mut test, mut keys, mut shot) = (None, String::new(), None);
     for argument in std::env::args().skip(1) {
@@ -19,16 +19,16 @@ fn main() {
                 return;
             }
             "-V" | "--version" => {
-                println!("nmc-gui {}", env!("CARGO_PKG_VERSION"));
+                println!("pnxr-gui {}", env!("CARGO_PKG_VERSION"));
                 return;
             }
-            "--self-test" => test = Some(nmc_gui::SelfTest::default()),
+            "--self-test" => test = Some(pnxr_gui::SelfTest::default()),
             _ if argument.starts_with("--keys=") => keys = argument[7..].to_owned(),
             _ if argument.starts_with("--screenshot=") => shot = Some(argument[13..].to_owned()),
             _ if argument.starts_with("--size=") => match parse_size(&argument[7..]) {
                 Some(size) => startup.size = Some(size),
                 None => {
-                    eprintln!("nmc-gui: --size takes WIDTHxHEIGHT, such as 1280x800");
+                    eprintln!("pnxr-gui: --size takes WIDTHxHEIGHT, such as 1280x800");
                     std::process::exit(2);
                 }
             },
@@ -47,11 +47,11 @@ fn main() {
     let mut places = places.into_iter();
     startup.left = places.next();
     startup.right = places.next();
-    // A launcher written by `nmc desktop install` gets the current icon.
+    // A launcher written by `pnxr desktop install` gets the current icon.
     if startup.self_test.is_none() {
-        nmc_app::desktop::refresh();
+        pnxr_app::desktop::refresh();
     }
-    if !nmc_gui::run(startup) {
+    if !pnxr_gui::run(startup) {
         std::process::exit(1);
     }
 }

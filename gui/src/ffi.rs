@@ -91,12 +91,12 @@ pub mod qobject {
 }
 
 unsafe extern "C" {
-    fn nmc_set_window_icon(data: *const u8, length: u64);
+    fn pnxr_set_window_icon(data: *const u8, length: u64);
 }
 
 /// Adds a size (a PNG) to the icon of every window of the application.
 pub fn add_window_icon(png: &[u8]) {
     // SAFETY: the pointer and length describe `png`, which outlives the call;
     // Qt copies what it needs.
-    unsafe { nmc_set_window_icon(png.as_ptr(), png.len() as u64) }
+    unsafe { pnxr_set_window_icon(png.as_ptr(), png.len() as u64) }
 }

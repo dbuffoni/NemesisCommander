@@ -1,0 +1,42 @@
+[package]
+name = "pnxr-tui"
+description = "Pairnox's terminal user interface: two panels, keyboard driven, F1 for the main shortcuts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-frontend.workspace = true
+pnxr-preview.workspace = true
+pnxr-vfs.workspace = true
+pnxr-s3.workspace = true
+pnxr-config.workspace = true
+pnxr-panel.workspace = true
+pnxr-transfer.workspace = true
+pnxr-app.workspace = true
+futures.workspace = true
+image.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "sync", "time"] }
+
+[features]
+# Plugin commands and scripts (Alt+X), see pnxr-frontend.
+scripting = ["pnxr-frontend/script-engine"]
+
+[dev-dependencies]
+async-trait.workspace = true
+pnxr-agent.workspace = true
+pnxr-proto.workspace = true
+serde_json.workspace = true
+pnxr-ops.workspace = true
+image.workspace = true
+tempfile.workspace = true
+pnxr-providers.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true
