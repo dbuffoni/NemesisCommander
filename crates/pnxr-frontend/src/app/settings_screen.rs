@@ -379,10 +379,12 @@ impl App {
     /// Installs `pnxr serve` on the server typed in the dialog (the same as
     /// `pnxr serve install` on the command line), then shows the log.
     pub(super) fn install_serve(&mut self, text: &str) {
-        let options = match crate::install::parse(text, self.context.paths.tls_dir(), &*self.context.remotes) {
-            Ok(options) => options,
-            Err(e) => return self.set_error(e),
-        };
+        let options =
+            match crate::install::parse(text, self.context.paths.tls_dir(), &*self.context.remotes)
+            {
+                Ok(options) => options,
+                Err(e) => return self.set_error(e),
+            };
         // Nothing is touched on the server before the user has seen what
         // will be done and said yes.
         self.overlay = Some(Overlay::Confirm(ConfirmDialog {
@@ -401,10 +403,12 @@ impl App {
     /// [`start_install`](Self::start_install), with the `sudo` password of
     /// the server to turn lingering on if the install finds it off.
     pub(super) fn start_install_with(&mut self, text: &str, sudo: Option<String>) {
-        let mut options = match crate::install::parse(text, self.context.paths.tls_dir(), &*self.context.remotes) {
-            Ok(options) => options,
-            Err(e) => return self.set_error(e),
-        };
+        let mut options =
+            match crate::install::parse(text, self.context.paths.tls_dir(), &*self.context.remotes)
+            {
+                Ok(options) => options,
+                Err(e) => return self.set_error(e),
+            };
         options.sudo_password = sudo.map(pnxr_app::SudoPassword);
         let text = text.to_owned();
         let title = "Install pnxr serve";
@@ -452,8 +456,7 @@ impl App {
             dialog.field.text(),
             self.context.paths.tls_dir(),
             &*self.context.remotes,
-        )
-        {
+        ) {
             Ok(options) => options,
             Err(e) => return self.ask_again(dialog, e),
         };

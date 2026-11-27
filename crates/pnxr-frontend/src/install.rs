@@ -343,7 +343,11 @@ mod tests {
 
     #[test]
     fn the_server_and_options_are_read() {
-        let options = parse("me@nas.lan:2222 --root /data --root /srv --read-only --port 9000 --name nas", "/tls".into(), &FakeRemotes::new())
+        let options = parse(
+            "me@nas.lan:2222 --root /data --root /srv --read-only --port 9000 --name nas",
+            "/tls".into(),
+            &FakeRemotes::new(),
+        )
         .unwrap();
         assert_eq!(options.authority, "me@nas.lan:2222");
         assert_eq!(options.roots, ["/data", "/srv"]);
@@ -362,11 +366,16 @@ mod tests {
         assert!(hints("", &FakeRemotes::new())[0].starts_with("Examples"));
         assert!(hints("me@nas.lan", &FakeRemotes::new())[0].starts_with("✓ install on me@nas.lan"));
         assert!(hints("me@nas.lan --bogus", &FakeRemotes::new())[0].starts_with('✗'));
-        assert!(hints("me@nas.lan --root", &FakeRemotes::new())[0].starts_with('…'), "not typed yet is not an error");
+        assert!(
+            hints("me@nas.lan --root", &FakeRemotes::new())[0].starts_with('…'),
+            "not typed yet is not an error"
+        );
         let completing = hints("me@nas.lan --re", &FakeRemotes::new());
         assert!(completing.iter().any(|l| l.contains("--read-only")), "{completing:?}");
         assert!(completing.iter().any(|l| l.contains("--renew")), "{completing:?}");
-        assert!(hints("me@nas.lan ", &FakeRemotes::new()).iter().any(|l| l.contains("--read-only")));
+        assert!(
+            hints("me@nas.lan ", &FakeRemotes::new()).iter().any(|l| l.contains("--read-only"))
+        );
     }
 
     #[test]

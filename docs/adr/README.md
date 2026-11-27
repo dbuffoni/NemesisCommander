@@ -54,6 +54,7 @@ that still names it.
 | 0058 | [The Pairnox logo: three SVG masters, every raster made by a script](0058-pairnox-logo-and-icons.md) | Accepted |
 | 0059 | [Shortcut model: standard shortcuts and function keys with names](0059-shortcut-model.md) | Accepted |
 | 0060 | [Finding similar pictures is a plugin](0060-similar-images-plugin.md) | Accepted |
+| 0061 | [Ports and adapters for the interfaces](0061-ports-and-adapters.md) | Accepted |
 
 Template:
 

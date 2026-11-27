@@ -18,8 +18,8 @@ use std::sync::Arc;
 
 use pnxr_config::{AppPaths, Config, ConfigError, Keymap};
 use pnxr_ops::{ConflictPolicy, ConflictResolver, PlanOptions, RetryPolicy};
-use pnxr_transfer::{JobOptions, Journal, JournalError, ManagerOptions, TransferManager};
 use pnxr_secrets::{SecretStore, SystemSecrets};
+use pnxr_transfer::{JobOptions, Journal, JournalError, ManagerOptions, TransferManager};
 use pnxr_vfs::ProviderRegistry;
 
 /// Everything a front end needs to start.
@@ -51,7 +51,15 @@ impl AppContext {
         let config = Config::load(&paths.config_file())?;
         let (keymap, warnings) = Keymap::from_config(&config);
         let registry = Arc::new(build_registry_for(&paths));
-        Ok(AppContext { paths, config, keymap, warnings, registry, secrets: Arc::new(SystemSecrets), remotes: Arc::new(SystemRemotes) })
+        Ok(AppContext {
+            paths,
+            config,
+            keymap,
+            warnings,
+            registry,
+            secrets: Arc::new(SystemSecrets),
+            remotes: Arc::new(SystemRemotes),
+        })
     }
 
     /// Saves the settings back to the settings file.

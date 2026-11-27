@@ -603,7 +603,9 @@ pub const LABEL_MAX: usize = 12;
 /// Whether `chord` is a function key of the bottom bar: F1 to F10, bare or
 /// with Shift or Ctrl (never Alt).
 pub fn is_function_key(chord: &KeyChord) -> bool {
-    matches!(chord.key, Key::F(n) if (1..=10).contains(&n)) && !chord.alt && !(chord.ctrl && chord.shift)
+    matches!(chord.key, Key::F(n) if (1..=10).contains(&n))
+        && !chord.alt
+        && !(chord.ctrl && chord.shift)
 }
 
 /// [`is_function_key`] for chord text; text that is no chord is not one.
@@ -783,8 +785,9 @@ impl Keymap {
             }
             match text.parse::<KeyChord>() {
                 Ok(chord) if is_function_key(&chord) => entry.fkey = Some(chord),
-                Ok(chord) => warnings
-                    .push(format!("{chord} cannot be a function key (F1 to F10, with Shift or Ctrl) for {id}")),
+                Ok(chord) => warnings.push(format!(
+                    "{chord} cannot be a function key (F1 to F10, with Shift or Ctrl) for {id}"
+                )),
                 Err(e) => warnings.push(format!("{e} for {id}")),
             }
         }
@@ -816,7 +819,8 @@ impl Keymap {
         let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
         let mut fkey_by_id = BTreeMap::new();
         for (id, slot) in &slots {
-            let chords: Vec<KeyChord> = slot.fkey.iter().copied().chain(slot.shortcuts.iter().copied()).collect();
+            let chords: Vec<KeyChord> =
+                slot.fkey.iter().copied().chain(slot.shortcuts.iter().copied()).collect();
             if let Some(chord) = slot.fkey {
                 fkey_by_id.insert(id.clone(), chord);
             }
@@ -837,7 +841,8 @@ impl Keymap {
                 continue;
             }
             if name.chars().count() > LABEL_MAX {
-                warnings.push(format!("the short name of {id} is longer than {LABEL_MAX} characters"));
+                warnings
+                    .push(format!("the short name of {id} is longer than {LABEL_MAX} characters"));
                 continue;
             }
             short_names.insert(id.clone(), name.to_owned());
@@ -859,7 +864,14 @@ impl Keymap {
             }
         }
         (
-            Keymap { by_chord, by_action, extra_by_chord, by_extra, fkey_by_id, labels: short_names },
+            Keymap {
+                by_chord,
+                by_action,
+                extra_by_chord,
+                by_extra,
+                fkey_by_id,
+                labels: short_names,
+            },
             warnings,
         )
     }
@@ -877,10 +889,7 @@ impl Keymap {
     /// The short name the bottom bar shows for `id`: the custom one, else the
     /// command's built-in name (extra commands have none: `None`).
     pub fn label_for_id(&self, id: &str) -> Option<String> {
-        self.labels
-            .get(id)
-            .cloned()
-            .or_else(|| Action::from_id(id).map(|a| a.short().to_owned()))
+        self.labels.get(id).cloned().or_else(|| Action::from_id(id).map(|a| a.short().to_owned()))
     }
 
     /// Whether `id` has a short name of its own (not the built-in one).
@@ -895,7 +904,8 @@ impl Keymap {
         if self.fkey_for_id(&id) != Some(*chord) {
             return None;
         }
-        self.label_for_id(&id).or_else(|| Some(id.rsplit('.').next().unwrap_or(&id).chars().take(8).collect()))
+        self.label_for_id(&id)
+            .or_else(|| Some(id.rsplit('.').next().unwrap_or(&id).chars().take(8).collect()))
     }
 
     /// The plugin or script command bound to `chord`, if any.
@@ -1156,7 +1166,9 @@ mod tests {
         Keymap::build(
             &keys
                 .iter()
-                .map(|(id, list)| ((*id).to_owned(), list.iter().map(|k| (*k).to_owned()).collect()))
+                .map(|(id, list)| {
+                    ((*id).to_owned(), list.iter().map(|k| (*k).to_owned()).collect())
+                })
                 .collect(),
             &fkeys.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
             &labels.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
@@ -1187,7 +1199,11 @@ mod tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(keymap.action_for(&chord("F8")), Some(Action::Copy));
         assert_eq!(keymap.fkey_for_id("files.delete"), None);
-        assert_eq!(keymap.shortcuts_for_id("files.delete"), [chord("Delete")], "its shortcut stays");
+        assert_eq!(
+            keymap.shortcuts_for_id("files.delete"),
+            [chord("Delete")],
+            "its shortcut stays"
+        );
         assert_eq!(keymap.bar_label(&chord("F8")).as_deref(), Some("Copy"));
         assert_eq!(keymap.bar_label(&chord("F5")), None);
     }

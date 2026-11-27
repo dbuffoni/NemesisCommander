@@ -46,7 +46,8 @@ pub fn logo() -> &'static RgbaImage {
     LOGO.get_or_init(|| {
         // The 32 pixel icon has the thick ring, which survives being drawn
         // in 20 half-block cells.
-        image::load_from_memory(ICON_PNGS[1]).map_or_else(|_| RgbaImage::new(1, 1), |i| i.to_rgba8())
+        image::load_from_memory(ICON_PNGS[1])
+            .map_or_else(|_| RgbaImage::new(1, 1), |i| i.to_rgba8())
     })
 }
 

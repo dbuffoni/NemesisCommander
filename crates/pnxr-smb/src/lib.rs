@@ -19,12 +19,12 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{StreamExt, stream};
+use pnxr_secrets::netrc;
 use pnxr_vfs::{
     Capabilities, Entry, EntryKind, ListStream, Provider, ProviderFactory, ProviderRegistry,
     ReadStream, Result, SetAttributes, VfsError, VfsPath, WriteMode, WriteOptions, WriteSink,
     upload_sink,
 };
-use pnxr_secrets::netrc;
 use smb2::{ClientConfig, ErrorKind, FileTimes, RenameOptions, SmbClient, Tree};
 use tokio::sync::Mutex;
 use tokio_util::io::StreamReader;

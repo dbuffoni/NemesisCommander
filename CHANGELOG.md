@@ -2,6 +2,12 @@
 
 ## 0.6.0 (in progress)
 
+- **Internal: ports and adapters** (ADR 0061). Saved logins moved to a new crate
+  `pnxr-secrets`; the interfaces reach terminals, Git, disks, SSH, S3 keys and
+  the server install through ports (`HostTools`, `Remotes`, `SecretStore`) with
+  fakes for tests, and a test fails if a front-end crate depends on an adapter
+  crate. No change in behaviour.
+
 - **Find similar pictures is now a plugin**, `image-duplicates` (ADR 0060): it
   groups pictures by a perceptual hash, adds the panel columns Similar and
   Picture and a command that moves the extra copies aside. The built-in command,

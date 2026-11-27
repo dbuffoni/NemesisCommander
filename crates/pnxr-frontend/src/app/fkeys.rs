@@ -5,7 +5,9 @@
 use pnxr_config::{Key, KeyChord};
 
 use super::App;
-use crate::dialogs::{ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay};
+use crate::dialogs::{
+    ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay,
+};
 use crate::input::KeyPress;
 use crate::settings::{assign_fkey_to, clear_fkey_of, reset_keys, set_label_of};
 
@@ -116,7 +118,11 @@ impl App {
                         "{chord} belongs to {} now. Give it to {name} instead?",
                         self.command_label(&owner)
                     )],
-                    purpose: ConfirmPurpose::ReplaceFunctionKey { id, name, chord: chord.to_string() },
+                    purpose: ConfirmPurpose::ReplaceFunctionKey {
+                        id,
+                        name,
+                        chord: chord.to_string(),
+                    },
                 }));
             }
             None => self.give_function_key(&id, &name, chord),

@@ -94,13 +94,20 @@ pub trait Remotes: Send + Sync {
     /// Whether keys were typed for this session.
     fn s3_has_session(&self, profile: Option<&str>) -> bool;
     /// Saves S3 keys where the AWS tools read them; returns that file.
-    fn s3_save(&self, profile: Option<&str>, access: &str, secret: &str)
-    -> std::io::Result<PathBuf>;
+    fn s3_save(
+        &self,
+        profile: Option<&str>,
+        access: &str,
+        secret: &str,
+    ) -> std::io::Result<PathBuf>;
     /// The sentence an install error contains when lingering is off.
     fn linger_off(&self) -> &'static str;
     /// Tests an install without changing the server.
-    async fn check_serve(&self, options: &InstallOptions, found: Progress<'_>)
-    -> Result<(), String>;
+    async fn check_serve(
+        &self,
+        options: &InstallOptions,
+        found: Progress<'_>,
+    ) -> Result<(), String>;
     /// Installs `pnxr serve`; returns its `scs://` location.
     async fn install_serve(
         &self,
@@ -157,7 +164,12 @@ impl Remotes for SystemRemotes {
     }
 
     #[cfg(feature = "remote")]
-    fn s3_save(&self, profile: Option<&str>, access: &str, secret: &str) -> std::io::Result<PathBuf> {
+    fn s3_save(
+        &self,
+        profile: Option<&str>,
+        access: &str,
+        secret: &str,
+    ) -> std::io::Result<PathBuf> {
         pnxr_s3::settings::save(profile, access, secret)
     }
     #[cfg(not(feature = "remote"))]
@@ -169,7 +181,11 @@ impl Remotes for SystemRemotes {
         pnxr_agent::provision::LINGER_OFF
     }
 
-    async fn check_serve(&self, options: &InstallOptions, found: Progress<'_>) -> Result<(), String> {
+    async fn check_serve(
+        &self,
+        options: &InstallOptions,
+        found: Progress<'_>,
+    ) -> Result<(), String> {
         pnxr_agent::provision::check_serve(&to_agent(options), found).await
     }
 
@@ -263,7 +279,10 @@ mod tests {
 
     #[test]
     fn the_default_port_is_the_agents() {
-        assert_eq!(DEFAULT_SERVE_PORT, pnxr_agent::provision::InstallOptions::new("h", PathBuf::new()).port);
+        assert_eq!(
+            DEFAULT_SERVE_PORT,
+            pnxr_agent::provision::InstallOptions::new("h", PathBuf::new()).port
+        );
     }
 
     #[test]

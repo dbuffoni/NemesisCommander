@@ -72,7 +72,11 @@ impl App {
             let save = if self.context.secrets.available() {
                 format!("Save the login in {}", self.context.secrets.name())
             } else {
-                format!("Save the login in {} ({})", self.context.secrets.name(), self.context.secrets.missing())
+                format!(
+                    "Save the login in {} ({})",
+                    self.context.secrets.name(),
+                    self.context.secrets.missing()
+                )
             };
             vec![
                 "Ask for the password every time (kept in memory only)".to_owned(),
@@ -422,7 +426,11 @@ impl App {
                 if !typed.is_empty()
                     && let Ok(path) = VfsPath::parse(uri)
                 {
-                    self.context.remotes.s3_set_session(profile_of(&path).as_deref(), access, &typed);
+                    self.context.remotes.s3_set_session(
+                        profile_of(&path).as_deref(),
+                        access,
+                        &typed,
+                    );
                     self.context.registry.forget(&path);
                 }
                 (uri.clone(), String::new())

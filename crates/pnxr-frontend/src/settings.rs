@@ -876,9 +876,7 @@ pub fn reset_all_keys(config: &mut Config, functions: bool) {
 /// function key first, then its shortcuts.
 fn default_keys(id: &str) -> Vec<KeyChord> {
     Action::from_id(id)
-        .map(|action| {
-            action.default_fkey().into_iter().chain(action.default_shortcuts()).collect()
-        })
+        .map(|action| action.default_fkey().into_iter().chain(action.default_shortcuts()).collect())
         .unwrap_or_default()
 }
 

@@ -547,11 +547,7 @@ async fn a_function_key_is_refused_as_a_shortcut_and_the_function_key_stays() {
     h.type_text("refresh");
     h.key("Ctrl+K");
     h.key("Shift+F8");
-    assert!(
-        h.screen().contains("function key"),
-        "a hint to use the other action: {}",
-        h.screen()
-    );
+    assert!(h.screen().contains("function key"), "a hint to use the other action: {}", h.screen());
     assert!(h.app.context().config.keys.is_empty());
     assert!(h.app.context().config.fkeys.is_empty());
     // A shortcut given to a command with a function key keeps it.
@@ -3342,7 +3338,10 @@ async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let saved = &h.app.context().config.connections[1];
     assert_eq!(saved.uri, "dav://bob@files2.invalid/docs");
     assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
-    assert!(pnxr_secrets::keyring::lookup("files2.invalid", Some("bob")).is_none(), "nothing saved");
+    assert!(
+        pnxr_secrets::keyring::lookup("files2.invalid", Some("bob")).is_none(),
+        "nothing saved"
+    );
 
     // Opening it asks for the password (hidden), once per session.
     drive_row(&mut h, "second");

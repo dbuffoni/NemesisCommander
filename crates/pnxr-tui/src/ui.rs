@@ -18,8 +18,8 @@ use pnxr_frontend::icons::icon_for;
 use pnxr_frontend::preview::Zoom;
 use pnxr_frontend::view::{
     column_headers, commands_view, describe, entry_details, git_mark, git_of, job_how, job_line,
-    job_route, jobs_progress, jobs_summary, key_bar_label, key_bar_narrow, panel_footer, scroll_offset, size_text,
-    tab_title,
+    job_route, jobs_progress, jobs_summary, key_bar_label, key_bar_narrow, panel_footer,
+    scroll_offset, size_text, tab_title,
 };
 use pnxr_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
