@@ -4,7 +4,7 @@ about: Something does not work as the manual says
 labels: bug
 ---
 
-**Version** (`nmc --version`) and system:
+**Version** (`pnxr --version`) and system:
 
 **What happened, and what you expected:**
 

@@ -2,14 +2,14 @@
 resolver = "3"
 members = ["crates/*", "gui"]
 # The desktop interface needs Qt, so plain `cargo build` and `cargo test`
-# leave it out; build it with `-p nmc-gui`.
+# leave it out; build it with `-p pnxr-gui`.
 default-members = ["crates/*"]
 
 [workspace.package]
 version = "0.4.1"
 edition = "2024"
 rust-version = "1.92"
-repository = "https://github.com/dbuffoni/NemesisCommander"
+repository = "https://github.com/dbuffoni/Pairnox"
 license = "MIT"
 authors = ["Daniele Buffoni"]
 
@@ -35,30 +35,30 @@ debug = false
 # so that the whole workspace always agrees on a single version.
 [workspace.dependencies]
 # internal crates
-nmc-vfs = { path = "crates/nmc-vfs" }
-nmc-hash = { path = "crates/nmc-hash" }
-nmc-providers = { path = "crates/nmc-providers", default-features = false }
-nmc-ops = { path = "crates/nmc-ops" }
-nmc-transfer = { path = "crates/nmc-transfer" }
-nmc-index = { path = "crates/nmc-index" }
-nmc-archive = { path = "crates/nmc-archive" }
-nmc-libarchive = { path = "crates/nmc-libarchive" }
-nmc-config = { path = "crates/nmc-config" }
-nmc-panel = { path = "crates/nmc-panel" }
-nmc-app = { path = "crates/nmc-app", default-features = false }
-nmc-frontend = { path = "crates/nmc-frontend" }
-nmc-tui = { path = "crates/nmc-tui" }
-nmc-proto = { path = "crates/nmc-proto" }
-nmc-agent = { path = "crates/nmc-agent" }
-nmc-ssh = { path = "crates/nmc-ssh" }
-nmc-sftp = { path = "crates/nmc-sftp" }
-nmc-webdav = { path = "crates/nmc-webdav" }
-nmc-s3 = { path = "crates/nmc-s3" }
-nmc-smb = { path = "crates/nmc-smb" }
-nmc-tls = { path = "crates/nmc-tls" }
-nmc-script = { path = "crates/nmc-script", default-features = false }
-nmc-preview = { path = "crates/nmc-preview" }
-nmc-mcp = { path = "crates/nmc-mcp" }
+pnxr-vfs = { path = "crates/pnxr-vfs" }
+pnxr-hash = { path = "crates/pnxr-hash" }
+pnxr-providers = { path = "crates/pnxr-providers", default-features = false }
+pnxr-ops = { path = "crates/pnxr-ops" }
+pnxr-transfer = { path = "crates/pnxr-transfer" }
+pnxr-index = { path = "crates/pnxr-index" }
+pnxr-archive = { path = "crates/pnxr-archive" }
+pnxr-libarchive = { path = "crates/pnxr-libarchive" }
+pnxr-config = { path = "crates/pnxr-config" }
+pnxr-panel = { path = "crates/pnxr-panel" }
+pnxr-app = { path = "crates/pnxr-app", default-features = false }
+pnxr-frontend = { path = "crates/pnxr-frontend" }
+pnxr-tui = { path = "crates/pnxr-tui" }
+pnxr-proto = { path = "crates/pnxr-proto" }
+pnxr-agent = { path = "crates/pnxr-agent" }
+pnxr-ssh = { path = "crates/pnxr-ssh" }
+pnxr-sftp = { path = "crates/pnxr-sftp" }
+pnxr-webdav = { path = "crates/pnxr-webdav" }
+pnxr-s3 = { path = "crates/pnxr-s3" }
+pnxr-smb = { path = "crates/pnxr-smb" }
+pnxr-tls = { path = "crates/pnxr-tls" }
+pnxr-script = { path = "crates/pnxr-script", default-features = false }
+pnxr-preview = { path = "crates/pnxr-preview" }
+pnxr-mcp = { path = "crates/pnxr-mcp" }
 
 # async & utilities
 async-trait = "0.1.92"

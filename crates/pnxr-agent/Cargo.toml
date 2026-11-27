@@ -1,0 +1,34 @@
+[package]
+name = "pnxr-agent"
+description = "Pairnox's remote agent: `pnxr agent --stdio` over SSH, `pnxr serve` over mutual TLS, their agent:// and scs:// providers, and server-to-server copies."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+pnxr-vfs.workspace = true
+pnxr-hash.workspace = true
+pnxr-providers.workspace = true
+pnxr-proto.workspace = true
+pnxr-ssh.workspace = true
+pnxr-ops.workspace = true
+pnxr-tls.workspace = true
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
+async-trait.workspace = true
+bytes.workspace = true
+futures.workspace = true
+serde_json.workspace = true
+tonic = "0.14.9"
+tokio = { workspace = true, features = ["io-std", "io-util", "net", "process", "rt", "sync", "time"] }
+tokio-util = { workspace = true, features = ["io"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+blake3.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

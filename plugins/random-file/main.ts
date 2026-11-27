@@ -8,24 +8,24 @@
 //   plugin.json  what the plugin is called, which commands it adds to the
 //                Ctrl+X / F9 list, which locations it may touch (permissions)
 //                and its limits.
-//   main.ts      this script. NemesisCommander runs it once per command, in
+//   main.ts      this script. Pairnox runs it once per command, in
 //                its own isolate. There are no imports and no network: only
-//                standard JavaScript (ES2022) and the global `nmc`
-//                (`nmc run --types` prints every function with its comments).
+//                standard JavaScript (ES2022) and the global `pnxr`
+//                (`pnxr run --types` prints every function with its comments).
 //
 // Try it without touching your files:
-//   nmc test plugins/random-file
+//   pnxr test plugins/random-file
 // Install and use:
-//   nmc plugin install plugins/random-file
+//   pnxr plugin install plugins/random-file
 //   then press Ctrl+X (or F9) in a panel and pick "Create a file with random content".
 
 // ---- 1. What is this run about? -------------------------------------------
-// `nmc.context` says which command was picked (`command`, the `id` in
+// `pnxr.context` says which command was picked (`command`, the `id` in
 // plugin.json), the two panels' folders (`panel`, `other`) and the selected
-// entries (`selection`). It is null when the script is run with `nmc run`.
-const context = nmc.context;
+// entries (`selection`). It is null when the script is run with `pnxr run`.
+const context = pnxr.context;
 if (context === null || context.panel === null) {
-  throw new Error("run this from a panel (Ctrl+X) or with `nmc plugin run`");
+  throw new Error("run this from a panel (Ctrl+X) or with `pnxr plugin run`");
 }
 
 // TEMPLATE: plugins with several commands branch on `context.command` here:
@@ -124,16 +124,16 @@ const format = pick(formats);
 
 let path = "";
 do {
-  // nmc.join builds paths for any location (local, sftp://, zip://...).
-  path = nmc.join(context.panel, `random-${randomInt(100000)}.${format.extension}`);
-} while (await nmc.exists(path));
+  // pnxr.join builds paths for any location (local, sftp://, zip://...).
+  path = pnxr.join(context.panel, `random-${randomInt(100000)}.${format.extension}`);
+} while (await pnxr.exists(path));
 
 // ---- 5. Write the file -----------------------------------------------------
 // writeText for text, writeBytes for binary content. Both need the `write`
 // permission for this folder, which plugin.json asks for as "$PANEL".
 const content = format.make();
-if (typeof content === "string") await nmc.writeText(path, content);
-else await nmc.writeBytes(path, content);
+if (typeof content === "string") await pnxr.writeText(path, content);
+else await pnxr.writeBytes(path, content);
 
 // Anything printed is shown to the user when the command ends.
-nmc.print(`created ${nmc.basename(path)}`);
+pnxr.print(`created ${pnxr.basename(path)}`);

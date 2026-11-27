@@ -1,6 +1,6 @@
 [package]
-name = "nmc-gui"
-description = "NemesisCommander's desktop interface (Qt 6 / QML): two panels, menus and hotkeys, F1 for the main shortcuts."
+name = "pnxr-gui"
+description = "Pairnox's desktop interface (Qt 6 / QML): two panels, menus and hotkeys, F1 for the main shortcuts."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,17 +9,17 @@ license.workspace = true
 authors.workspace = true
 
 # Needs Qt 6 (qmake6 on the PATH, or QMAKE pointing at it) to build, which
-# is why the workspace builds it only when asked: `cargo build -p nmc-gui`.
+# is why the workspace builds it only when asked: `cargo build -p pnxr-gui`.
 
 [[bin]]
-name = "nmc-gui"
+name = "pnxr-gui"
 path = "src/main.rs"
 
 [dependencies]
-nmc-frontend = { workspace = true, features = ["scripting"] }
-nmc-app = { workspace = true, features = ["desktop", "remote"] }
-nmc-config.workspace = true
-nmc-vfs.workspace = true
+pnxr-frontend = { workspace = true, features = ["scripting"] }
+pnxr-app = { workspace = true, features = ["desktop", "remote"] }
+pnxr-config.workspace = true
+pnxr-vfs.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
 cxx = "1"
@@ -28,14 +28,14 @@ cxx-qt-lib = { version = "0.10.0", features = ["qt_full"] }
 
 [features]
 # Read RAR archives with the bundled libarchive (ADR 0050).
-rar = ["nmc-app/rar"]
+rar = ["pnxr-app/rar"]
 
 [build-dependencies]
 cxx-qt-build = { version = "0.10.0", features = ["link_qt_object_files"] }
 
 [dev-dependencies]
 tempfile.workspace = true
-nmc-preview.workspace = true
+pnxr-preview.workspace = true
 
 [lints]
 workspace = true

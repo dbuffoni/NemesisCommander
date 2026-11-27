@@ -114,18 +114,18 @@ QT = """\
 The desktop window uses Qt 6 under the GNU Lesser General Public License,
 version 3 (https://www.gnu.org/licenses/lgpl-3.0.html). Qt is linked
 dynamically: the Qt libraries are separate files in the package (in the
-AppImage, inside it), not part of the `nmc-gui` program. You may replace them
+AppImage, inside it), not part of the `pnxr-gui` program. You may replace them
 with your own build of Qt that is binary compatible, and relink or run the
 program against it. The corresponding Qt source code is available from
 https://download.qt.io/official_releases/qt/ (the version is in the package's
-file names and in Help > About Qt). The terminal program `nmc` does not use Qt.
+file names and in Help > About Qt). The terminal program `pnxr` does not use Qt.
 """
 
 LIBARCHIVE = """\
 ## libarchive (reading RAR archives)
 
 Release builds read RAR archives with libarchive, built into the program from
-the source in `crates/nmc-libarchive/vendor` with every optional library
+the source in `crates/pnxr-libarchive/vendor` with every optional library
 switched off. libarchive is under the BSD-2-Clause licence (some files under
 other BSD-style licences, see its COPYING):
 
@@ -141,10 +141,10 @@ licence of the project, like the code.
 
 def notices(packages):
     out = ["# Third-party notices", "",
-           "NemesisCommander is released under the MIT licence, Copyright (c) 2026 Daniele Buffoni. "
+           "Pairnox is released under the MIT licence, Copyright (c) 2026 Daniele Buffoni. "
            "It includes or links the software below. Each is under its own licence.", "",
            QT, LIBARCHIVE]
-    with open(os.path.join(ROOT, "crates/nmc-libarchive/vendor/COPYING"), encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "crates/pnxr-libarchive/vendor/COPYING"), encoding="utf-8") as f:
         out += ["```", f.read().strip(), "```", "", ASSETS]
     out += ["## Rust libraries", "",
             f"{len(packages)} crates from crates.io, built into the programs. "

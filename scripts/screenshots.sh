@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 # Takes pictures of the window for the manual and for checking the layout
-# at several sizes. Needs a built nmc-gui (cargo build -p nmc-gui) and Qt.
+# at several sizes. Needs a built pnxr-gui (cargo build -p pnxr-gui) and Qt.
 #
 #   scripts/screenshots.sh [OUT_DIR]    (default: docs/manual/images)
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-$root/docs/manual/images}"
-gui="${NMC_GUI:-$root/target/debug/nmc-gui}"
+gui="${PNXR_GUI:-$root/target/debug/pnxr-gui}"
 mkdir -p "$out"
 
 # A demo home with realistic content, the same every time.
 demo="$(mktemp -d)"
 trap 'rm -rf "$demo"' EXIT
 "$root/scripts/demo-tree.sh" "$demo"
-export NMC_CONFIG_DIR="$demo/.config" NMC_DATA_DIR="$demo/.data" QT_QPA_PLATFORM=offscreen
+export PNXR_CONFIG_DIR="$demo/.config" PNXR_DATA_DIR="$demo/.data" QT_QPA_PLATFORM=offscreen
 export HOME="$demo/home"
 # Saved connections, so the drive list shows every category.
-mkdir -p "$NMC_CONFIG_DIR"
-cat > "$NMC_CONFIG_DIR/config.toml" <<TOML
+mkdir -p "$PNXR_CONFIG_DIR"
+cat > "$PNXR_CONFIG_DIR/config.toml" <<TOML
 [[connections]]
 name = "nas"
 uri = "sftp://me@nas.lan/srv/media"

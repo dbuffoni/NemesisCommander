@@ -43,7 +43,7 @@ MD
 printf 'Groceries: milk, eggs, coffee\nGarden: prune the roses in March\n' > "$h/Projects/notes/todo.txt"
 printf '#!/bin/sh\n# Back up the photos\nrsync -a "$HOME/Pictures/" /mnt/backup/pictures/\n' > "$h/Projects/scripts/backup.sh"
 chmod +x "$h/Projects/scripts/backup.sh"
-printf 'const names = (await nmc.list(nmc.context!.panel!)).map((e) => e.name);\nsc.print(names.join("\\n"));\n' > "$h/Projects/scripts/list.ts"
+printf 'const names = (await pnxr.list(pnxr.context!.panel!)).map((e) => e.name);\nsc.print(names.join("\\n"));\n' > "$h/Projects/scripts/list.ts"
 head -c 2400000 /dev/urandom > "$h/Downloads/installer.bin"
 head -c 180000 /dev/urandom > "$h/Music/morning.flac"
 head -c 95000 /dev/urandom > "$h/Music/evening.flac"
@@ -73,10 +73,10 @@ with zipfile.ZipFile('$h/Downloads/site-backup.zip', 'w', zipfile.ZIP_DEFLATED) 
     for root, _, files in os.walk('website'):
         for f in files: z.write(os.path.join(root, f))
 ")
-# Documents, a PDF and a 3D model from nmc-preview's samples.
+# Documents, a PDF and a 3D model from pnxr-preview's samples.
 if command -v cargo >/dev/null; then
   root="$(cd "$(dirname "$0")/.." && pwd)"
-  (cd "$root" && cargo run -q -p nmc-preview --example samples -- "$h/Documents" >/dev/null)
+  (cd "$root" && cargo run -q -p pnxr-preview --example samples -- "$h/Documents" >/dev/null)
   mkdir -p "$h/Projects/models"
   mv "$h/Documents/torus.stl" "$h/Projects/models/"
   rm "$h/Documents/guide.md"

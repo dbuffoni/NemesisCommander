@@ -1,0 +1,69 @@
+[package]
+name = "pnxr-cli"
+description = "The `pnxr` binary: Pairnox's command line, terminal UI and remote agent."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+default-run = "pnxr"
+
+[[bin]]
+name = "pnxr"
+path = "src/main.rs"
+
+[dependencies]
+pnxr-vfs.workspace = true
+pnxr-hash.workspace = true
+pnxr-ops.workspace = true
+pnxr-transfer.workspace = true
+pnxr-index.workspace = true
+pnxr-archive.workspace = true
+pnxr-config.workspace = true
+pnxr-panel.workspace = true
+pnxr-app = { workspace = true, default-features = false }
+pnxr-tui = { workspace = true, optional = true }
+pnxr-agent.workspace = true
+pnxr-tls.workspace = true
+pnxr-script = { workspace = true, optional = true, features = ["engine"] }
+pnxr-mcp = { workspace = true, optional = true }
+async-trait.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tokio-util.workspace = true
+tempfile = { workspace = true, optional = true }
+# `pnxr ai`: the same HTTP client and TLS as WebDAV and S3 (already in `pnxr`).
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "http2"], optional = true }
+rustls = { version = "0.23.4", default-features = false, features = ["ring", "std", "tls12", "logging"], optional = true }
+
+[features]
+default = ["desktop", "remote", "tui", "scripting", "ai", "mcp"]
+# Desktop build: recycle bin support.
+desktop = ["pnxr-app/desktop"]
+# SFTP, WebDAV, S3 and SMB locations. Agent-only server builds leave
+# them out (agent:// and scs:// stay).
+remote = ["pnxr-app/remote"]
+# The terminal UI started by `pnxr` without a command. Agent-only server
+# builds leave it out.
+tui = ["dep:pnxr-tui"]
+# `pnxr run`: TypeScript scripts on V8 (adds 30-40 MB). Agent-only server
+# builds leave it out.
+scripting = ["dep:pnxr-script", "dep:tempfile", "pnxr-tui?/scripting"]
+# `pnxr ai`: scripts written by Claude with the user's API key, tested with
+# `pnxr test`. Agent-only server builds leave it out.
+ai = ["scripting", "dep:reqwest", "dep:rustls"]
+# `pnxr mcp`: file tools for AI assistants over the MCP protocol. Agent-only
+# server builds leave it out.
+mcp = ["dep:pnxr-mcp", "dep:pnxr-script"]
+rar = ["pnxr-app/rar"]
+
+[dev-dependencies]
+tempfile.workspace = true
+assert_cmd = "2"
+predicates = "3"
+
+[lints]
+workspace = true

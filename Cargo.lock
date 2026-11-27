@@ -3725,495 +3725,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nmc-agent"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "blake3",
- "bytes",
- "futures",
- "nmc-hash",
- "nmc-ops",
- "nmc-proto",
- "nmc-providers",
- "nmc-ssh",
- "nmc-tls",
- "nmc-vfs",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "tonic",
-]
-
-[[package]]
-name = "nmc-app"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "futures",
- "nmc-agent",
- "nmc-archive",
- "nmc-config",
- "nmc-index",
- "nmc-ops",
- "nmc-providers",
- "nmc-s3",
- "nmc-sftp",
- "nmc-smb",
- "nmc-ssh",
- "nmc-transfer",
- "nmc-vfs",
- "nmc-webdav",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-archive"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "bzip2",
- "flate2",
- "futures",
- "liblzma",
- "nmc-libarchive",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "proptest",
- "serde",
- "sevenz-rust2",
- "tar",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "zip",
- "zstd",
-]
-
-[[package]]
-name = "nmc-cli"
-version = "0.4.1"
-dependencies = [
- "assert_cmd",
- "async-trait",
- "clap",
- "nmc-agent",
- "nmc-app",
- "nmc-archive",
- "nmc-config",
- "nmc-hash",
- "nmc-index",
- "nmc-mcp",
- "nmc-ops",
- "nmc-panel",
- "nmc-script",
- "nmc-tls",
- "nmc-transfer",
- "nmc-tui",
- "nmc-vfs",
- "predicates",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-config"
-version = "0.4.1"
-dependencies = [
- "directories",
- "nmc-index",
- "nmc-ops",
- "nmc-vfs",
- "serde",
- "tempfile",
- "thiserror 2.0.21",
- "toml",
-]
-
-[[package]]
-name = "nmc-frontend"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "directories",
- "futures",
- "image",
- "nmc-agent",
- "nmc-app",
- "nmc-archive",
- "nmc-config",
- "nmc-hash",
- "nmc-index",
- "nmc-ops",
- "nmc-panel",
- "nmc-preview",
- "nmc-providers",
- "nmc-s3",
- "nmc-script",
- "nmc-ssh",
- "nmc-transfer",
- "nmc-vfs",
- "regex",
- "serde",
- "serde_json",
- "similar",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-gui"
-version = "0.4.1"
-dependencies = [
- "cxx",
- "cxx-qt",
- "cxx-qt-build",
- "cxx-qt-lib",
- "nmc-app",
- "nmc-config",
- "nmc-frontend",
- "nmc-preview",
- "nmc-vfs",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-hash"
-version = "0.4.1"
-dependencies = [
- "blake3",
- "hex",
- "nmc-vfs",
- "sha2 0.11.1",
- "tempfile",
- "tokio",
- "xxhash-rust",
-]
-
-[[package]]
-name = "nmc-index"
-version = "0.4.1"
-dependencies = [
- "futures",
- "globset",
- "memchr",
- "nmc-providers",
- "nmc-vfs",
- "proptest",
- "regex",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-libarchive"
-version = "0.4.1"
-dependencies = [
- "cmake",
-]
-
-[[package]]
-name = "nmc-mcp"
-version = "0.4.1"
-dependencies = [
- "futures",
- "nmc-hash",
- "nmc-index",
- "nmc-ops",
- "nmc-providers",
- "nmc-script",
- "nmc-vfs",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-ops"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "futures",
- "jiff",
- "nmc-hash",
- "nmc-providers",
- "nmc-vfs",
- "proptest",
- "regex",
- "serde",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-panel"
-version = "0.4.1"
-dependencies = [
- "jiff",
- "nmc-archive",
- "nmc-index",
- "nmc-providers",
- "nmc-vfs",
- "tokio",
-]
-
-[[package]]
-name = "nmc-preview"
-version = "0.4.1"
-dependencies = [
- "calamine",
- "gltf",
- "hayro",
- "image",
- "lofty",
- "pulldown-cmark",
- "quick-xml",
- "stl_io",
- "tobj",
- "zip",
-]
-
-[[package]]
-name = "nmc-proto"
-version = "0.4.1"
-dependencies = [
- "bytes",
- "hyper-util",
- "nmc-vfs",
- "prost",
- "protox",
- "tokio",
- "tonic",
- "tonic-prost",
- "tonic-prost-build",
- "tower",
-]
-
-[[package]]
-name = "nmc-providers"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "filetime",
- "futures",
- "nmc-hash",
- "nmc-vfs",
- "reflink-copy",
- "tempfile",
- "tokio",
- "trash",
- "windows-sys 0.61.2",
- "xattr",
-]
-
-[[package]]
-name = "nmc-s3"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "directories",
- "futures",
- "hex",
- "hmac",
- "httpdate",
- "hyper-util",
- "jiff",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "percent-encoding",
- "quick-xml",
- "reqwest",
- "rustls",
- "s3s",
- "s3s-fs",
- "sha2 0.11.1",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-script"
-version = "0.4.1"
-dependencies = [
- "deno_ast",
- "deno_core",
- "deno_error",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
-]
-
-[[package]]
-name = "nmc-sftp"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "futures",
- "nmc-ops",
- "nmc-providers",
- "nmc-ssh",
- "nmc-vfs",
- "russh-sftp",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-smb"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "futures",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "smb2",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-ssh"
-version = "0.4.1"
-dependencies = [
- "nmc-vfs",
- "tokio",
-]
-
-[[package]]
-name = "nmc-tls"
-version = "0.4.1"
-dependencies = [
- "base64 0.22.1",
- "rcgen",
- "ring",
- "rustls",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-rustls",
-]
-
-[[package]]
-name = "nmc-transfer"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "nmc-tui"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "crossterm",
- "futures",
- "image",
- "nmc-agent",
- "nmc-app",
- "nmc-config",
- "nmc-frontend",
- "nmc-ops",
- "nmc-panel",
- "nmc-preview",
- "nmc-proto",
- "nmc-providers",
- "nmc-s3",
- "nmc-transfer",
- "nmc-vfs",
- "ratatui",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "nmc-vfs"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bitflags 2.13.2",
- "bytes",
- "directories",
- "futures",
- "proptest",
- "serde",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "unicode-normalization",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "nmc-webdav"
-version = "0.4.1"
-dependencies = [
- "async-trait",
- "bytes",
- "dav-server",
- "futures",
- "httpdate",
- "hyper",
- "hyper-util",
- "nmc-ops",
- "nmc-providers",
- "nmc-vfs",
- "percent-encoding",
- "quick-xml",
- "reqwest",
- "rustls",
- "tempfile",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4792,6 +4303,495 @@ dependencies = [
  "fdeflate",
  "flate2",
  "miniz_oxide 0.8.9",
+]
+
+[[package]]
+name = "pnxr-agent"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "bytes",
+ "futures",
+ "pnxr-hash",
+ "pnxr-ops",
+ "pnxr-proto",
+ "pnxr-providers",
+ "pnxr-ssh",
+ "pnxr-tls",
+ "pnxr-vfs",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "tonic",
+]
+
+[[package]]
+name = "pnxr-app"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "futures",
+ "pnxr-agent",
+ "pnxr-archive",
+ "pnxr-config",
+ "pnxr-index",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-s3",
+ "pnxr-sftp",
+ "pnxr-smb",
+ "pnxr-ssh",
+ "pnxr-transfer",
+ "pnxr-vfs",
+ "pnxr-webdav",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-archive"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "bzip2",
+ "flate2",
+ "futures",
+ "liblzma",
+ "pnxr-libarchive",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "proptest",
+ "serde",
+ "sevenz-rust2",
+ "tar",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "zip",
+ "zstd",
+]
+
+[[package]]
+name = "pnxr-cli"
+version = "0.4.1"
+dependencies = [
+ "assert_cmd",
+ "async-trait",
+ "clap",
+ "pnxr-agent",
+ "pnxr-app",
+ "pnxr-archive",
+ "pnxr-config",
+ "pnxr-hash",
+ "pnxr-index",
+ "pnxr-mcp",
+ "pnxr-ops",
+ "pnxr-panel",
+ "pnxr-script",
+ "pnxr-tls",
+ "pnxr-transfer",
+ "pnxr-tui",
+ "pnxr-vfs",
+ "predicates",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-config"
+version = "0.4.1"
+dependencies = [
+ "directories",
+ "pnxr-index",
+ "pnxr-ops",
+ "pnxr-vfs",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+]
+
+[[package]]
+name = "pnxr-frontend"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "directories",
+ "futures",
+ "image",
+ "pnxr-agent",
+ "pnxr-app",
+ "pnxr-archive",
+ "pnxr-config",
+ "pnxr-hash",
+ "pnxr-index",
+ "pnxr-ops",
+ "pnxr-panel",
+ "pnxr-preview",
+ "pnxr-providers",
+ "pnxr-s3",
+ "pnxr-script",
+ "pnxr-ssh",
+ "pnxr-transfer",
+ "pnxr-vfs",
+ "regex",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-gui"
+version = "0.4.1"
+dependencies = [
+ "cxx",
+ "cxx-qt",
+ "cxx-qt-build",
+ "cxx-qt-lib",
+ "pnxr-app",
+ "pnxr-config",
+ "pnxr-frontend",
+ "pnxr-preview",
+ "pnxr-vfs",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-hash"
+version = "0.4.1"
+dependencies = [
+ "blake3",
+ "hex",
+ "pnxr-vfs",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "pnxr-index"
+version = "0.4.1"
+dependencies = [
+ "futures",
+ "globset",
+ "memchr",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "proptest",
+ "regex",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-libarchive"
+version = "0.4.1"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
+name = "pnxr-mcp"
+version = "0.4.1"
+dependencies = [
+ "futures",
+ "pnxr-hash",
+ "pnxr-index",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-script",
+ "pnxr-vfs",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-ops"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "jiff",
+ "pnxr-hash",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "proptest",
+ "regex",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-panel"
+version = "0.4.1"
+dependencies = [
+ "jiff",
+ "pnxr-archive",
+ "pnxr-index",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-preview"
+version = "0.4.1"
+dependencies = [
+ "calamine",
+ "gltf",
+ "hayro",
+ "image",
+ "lofty",
+ "pulldown-cmark",
+ "quick-xml",
+ "stl_io",
+ "tobj",
+ "zip",
+]
+
+[[package]]
+name = "pnxr-proto"
+version = "0.4.1"
+dependencies = [
+ "bytes",
+ "hyper-util",
+ "pnxr-vfs",
+ "prost",
+ "protox",
+ "tokio",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
+ "tower",
+]
+
+[[package]]
+name = "pnxr-providers"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "filetime",
+ "futures",
+ "pnxr-hash",
+ "pnxr-vfs",
+ "reflink-copy",
+ "tempfile",
+ "tokio",
+ "trash",
+ "windows-sys 0.61.2",
+ "xattr",
+]
+
+[[package]]
+name = "pnxr-s3"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "directories",
+ "futures",
+ "hex",
+ "hmac",
+ "httpdate",
+ "hyper-util",
+ "jiff",
+ "percent-encoding",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "quick-xml",
+ "reqwest",
+ "rustls",
+ "s3s",
+ "s3s-fs",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-script"
+version = "0.4.1"
+dependencies = [
+ "deno_ast",
+ "deno_core",
+ "deno_error",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-sftp"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "futures",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-ssh",
+ "pnxr-vfs",
+ "russh-sftp",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-smb"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "smb2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-ssh"
+version = "0.4.1"
+dependencies = [
+ "pnxr-vfs",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-tls"
+version = "0.4.1"
+dependencies = [
+ "base64 0.22.1",
+ "rcgen",
+ "ring",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
+name = "pnxr-transfer"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "pnxr-tui"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "crossterm",
+ "futures",
+ "image",
+ "pnxr-agent",
+ "pnxr-app",
+ "pnxr-config",
+ "pnxr-frontend",
+ "pnxr-ops",
+ "pnxr-panel",
+ "pnxr-preview",
+ "pnxr-proto",
+ "pnxr-providers",
+ "pnxr-s3",
+ "pnxr-transfer",
+ "pnxr-vfs",
+ "ratatui",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "pnxr-vfs"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bitflags 2.13.2",
+ "bytes",
+ "directories",
+ "futures",
+ "proptest",
+ "serde",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "unicode-normalization",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "pnxr-webdav"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "dav-server",
+ "futures",
+ "httpdate",
+ "hyper",
+ "hyper-util",
+ "percent-encoding",
+ "pnxr-ops",
+ "pnxr-providers",
+ "pnxr-vfs",
+ "quick-xml",
+ "reqwest",
+ "rustls",
+ "tempfile",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: An idea for NemesisCommander
+about: An idea for Pairnox
 labels: enhancement
 ---
 

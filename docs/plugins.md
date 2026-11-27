@@ -1,23 +1,23 @@
 # Plugins
 
-A plugin adds commands, panel columns or viewers to NemesisCommander. It is a
+A plugin adds commands, panel columns or viewers to Pairnox. It is a
 folder with a `plugin.json` and a TypeScript script. This page explains how to
 install plugins, how to write one, and how to publish your own repository of
 plugins. The scripting API itself is in [scripting.md](scripting.md)
-(`nmc run --types` prints it, `nmc run --guide` prints a guide for AI
+(`pnxr run --types` prints it, `pnxr run --guide` prints a guide for AI
 assistants).
 
 ## Installing plugins
 
 ```sh
-nmc plugin available                    # what the repositories offer
-nmc plugin available --search rename    # filter by name or description
-nmc plugin install random-file          # by name
-nmc plugin install NAME@REPOSITORY      # when two repositories have NAME
-nmc plugin install ./my-plugin          # from a folder
-nmc plugin install github:me/tools --subdir plugins/tidy   # from Git
-nmc plugin update                       # newer versions of what came from Git
-nmc plugin remove NAME
+pnxr plugin available                    # what the repositories offer
+pnxr plugin available --search rename    # filter by name or description
+pnxr plugin install random-file          # by name
+pnxr plugin install NAME@REPOSITORY      # when two repositories have NAME
+pnxr plugin install ./my-plugin          # from a folder
+pnxr plugin install github:me/tools --subdir plugins/tidy   # from Git
+pnxr plugin update                       # newer versions of what came from Git
+pnxr plugin remove NAME
 ```
 
 `available` marks each plugin **Official** (from the official repository) or
@@ -28,15 +28,15 @@ for more asks again.
 
 ### Repositories
 
-The official repository (the `plugins/` folder of the NemesisCommander
+The official repository (the `plugins/` folder of the Pairnox
 repository) is built in. Your own are added from the command line:
 
 ```sh
-nmc plugin repo add github:me/my-plugins          # asks to confirm
-nmc plugin repo add https://example.com/x.git#v2  # a branch or tag
-nmc plugin repo list
-nmc plugin repo remove https://example.com/x.git#v2
-nmc plugin repo official off                      # hide the official one
+pnxr plugin repo add github:me/my-plugins          # asks to confirm
+pnxr plugin repo add https://example.com/x.git#v2  # a branch or tag
+pnxr plugin repo list
+pnxr plugin repo remove https://example.com/x.git#v2
+pnxr plugin repo official off                      # hide the official one
 ```
 
 Adding a repository asks for a confirmation that names it, because its
@@ -60,10 +60,10 @@ system's `git` does the fetching.
 ## Writing a plugin
 
 Copy [`plugins/random-file`](../plugins/random-file), a template that explains
-every part in comments, and try it with `nmc test`:
+every part in comments, and try it with `pnxr test`:
 
 ```sh
-nmc test ./my-plugin --select photo.JPG --json
+pnxr test ./my-plugin --select photo.JPG --json
 ```
 
 ### plugin.json
@@ -76,7 +76,7 @@ nmc test ./my-plugin --select photo.JPG --json
   "author": "Your Name",
   "license": "MIT",
   "homepage": "https://example.com/sort-by-type",
-  "min_nmc": "0.4.0",
+  "min_pnxr": "0.4.0",
   "main": "main.ts",
   "commands": [
     { "id": "sort", "title": "Sort selected files by type", "short": "SortType", "category": "Files" }
@@ -88,14 +88,14 @@ nmc test ./my-plugin --select photo.JPG --json
 
 - `name`: lowercase letters, digits and dashes; unique among installed plugins.
 - `version`, `description`: shown in the catalogue. `author`, `license`
-  (an SPDX name), `homepage`, `min_nmc` are optional.
+  (an SPDX name), `homepage`, `min_pnxr` are optional.
 - `main`: the script, inside the plugin folder (default `main.ts`).
-- `commands`: each has an `id` (given to the script as `nmc.context.command`),
+- `commands`: each has an `id` (given to the script as `pnxr.context.command`),
   a `title`, a `short` name and an optional `category` (`Files`, `Select`, `Navigate`, `View`,
-  `Tools`, `NemesisCommander`; anything else goes under `Plugins`).
+  `Tools`, `Pairnox`; anything else goes under `Plugins`).
 - `short`: 1 to 8 characters, no control characters: what the command's
   button says on the bottom bar and in the command list. Without it the first
-  word of the title is used, and `nmc plugin install` and `nmc test` warn.
+  word of the title is used, and `pnxr plugin install` and `pnxr test` warn.
 - `columns` and `previewers`: panel columns and viewers for kinds of files
   (see the manual, "Panel columns and viewers from plugins").
 - `limits`: memory in MiB and time in seconds.
@@ -110,7 +110,7 @@ allow it once:
 | `read` | locations the plugin may read |
 | `write` | locations it may read and change |
 | `all` | every file you can reach |
-| `run` | programs it may start (`nmc.run`) |
+| `run` | programs it may start (`pnxr.run`) |
 
 Locations are absolute paths or URIs, or placeholders filled in at each run:
 `$PANEL` (the active panel's folder), `$OTHER` (the other panel's), `$SELECTION`
@@ -122,8 +122,8 @@ words (“may run: bsdtar, 7z”) and a change of the list asks again. In the
 script:
 
 ```ts
-const result = await nmc.run("bsdtar", ["-tf", archive]);
-if (result.code !== 0) nmc.print(result.stderr);
+const result = await pnxr.run("bsdtar", ["-tf", archive]);
+if (result.code !== 0) pnxr.print(result.stderr);
 ```
 
 The arguments are a list and reach the program unchanged (spaces and quotes
@@ -151,8 +151,8 @@ There is no index to maintain: the list is built from the `plugin.json` files.
 Push it to GitHub and tell people to run:
 
 ```sh
-nmc plugin repo add github:you/your-plugins
-nmc plugin install tidy
+pnxr plugin repo add github:you/your-plugins
+pnxr plugin install tidy
 ```
 
 A repository can also list plugins that live in other repositories, with an
@@ -174,4 +174,4 @@ optional `plugins/index.json`:
 ```
 
 To change a plugin, raise its `version` in `plugin.json` and push: users get it
-with `nmc plugin update`, and the catalogue shows “update available”.
+with `pnxr plugin update`, and the catalogue shows “update available”.

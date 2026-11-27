@@ -4,15 +4,15 @@
 # with ONLY_DAV=1), and prints the variables the tests read:
 #
 #   set -a; eval "$(scripts/heavy/up.sh)"; set +a
-#   NMC_REQUIRE_SERVERS=1 cargo test -p nmc-s3 -p nmc-webdav --test real_server
+#   PNXR_REQUIRE_SERVERS=1 cargo test -p pnxr-s3 -p pnxr-webdav --test real_server
 #
 # Stop them with `docker compose -f scripts/heavy/compose.yml down -v` and
 # `pkill -f 'bin/minio|toxiproxy-server'`.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-dav_password=nmc-dav-pass
-printf 'nmc:%s\n' "$(openssl passwd -apr1 "$dav_password")" > apache/htpasswd
+dav_password=pnxr-dav-pass
+printf 'pnxr:%s\n' "$(openssl passwd -apr1 "$dav_password")" > apache/htpasswd
 
 profiles=()
 [ "${NEXTCLOUD:-0}" = 1 ] && profiles=(--profile nextcloud)
@@ -33,8 +33,8 @@ if [ "${ONLY_DAV:-0}" != 1 ]; then
     ./install-binaries.sh >&2
     data=$(mktemp -d)
     # A bucket is a folder in MinIO's data folder.
-    mkdir -p "$data/nmc-test"
-    MINIO_ROOT_USER=nmc-access MINIO_ROOT_PASSWORD=nmc-secret-key \
+    mkdir -p "$data/pnxr-test"
+    MINIO_ROOT_USER=pnxr-access MINIO_ROOT_PASSWORD=pnxr-secret-key \
         setsid nohup bin/minio server "$data" --address 127.0.0.1:9000 >"$data.log" 2>&1 &
     wait_for http://127.0.0.1:9000/minio/health/live MinIO
     # toxiproxy: 127.0.0.1:9001 forwards to MinIO.
@@ -43,7 +43,7 @@ if [ "${ONLY_DAV:-0}" != 1 ]; then
     curl -fs -X POST http://127.0.0.1:8474/proxies \
         -d '{"name":"minio","listen":"127.0.0.1:9001","upstream":"127.0.0.1:9000"}' >/dev/null
 fi
-curl -s -o /dev/null -u "nmc:$dav_password" http://127.0.0.1:8081/dav/ -w '%{http_code}' | grep -q 200 || {
+curl -s -o /dev/null -u "pnxr:$dav_password" http://127.0.0.1:8081/dav/ -w '%{http_code}' | grep -q 200 || {
     sleep 3
 }
 
@@ -55,22 +55,22 @@ if [ "${NEXTCLOUD:-0}" = 1 ]; then
 fi
 
 cat <<VARS
-NMC_TEST_S3_ENDPOINT=http://127.0.0.1:9000
-NMC_TEST_S3_BUCKET=nmc-test
-NMC_TEST_S3_ACCESS_KEY=nmc-access
-NMC_TEST_S3_SECRET_KEY=nmc-secret-key
-NMC_TEST_DAV_ORIGIN=http://127.0.0.1:8081
-NMC_TEST_DAV_BASE=dav
-NMC_TEST_DAV_USER=nmc
-NMC_TEST_DAV_PASSWORD=$dav_password
-NMC_TEST_TOXIPROXY=http://127.0.0.1:8474
-NMC_TEST_S3_PROXY_ENDPOINT=http://127.0.0.1:9001
+PNXR_TEST_S3_ENDPOINT=http://127.0.0.1:9000
+PNXR_TEST_S3_BUCKET=pnxr-test
+PNXR_TEST_S3_ACCESS_KEY=pnxr-access
+PNXR_TEST_S3_SECRET_KEY=pnxr-secret-key
+PNXR_TEST_DAV_ORIGIN=http://127.0.0.1:8081
+PNXR_TEST_DAV_BASE=dav
+PNXR_TEST_DAV_USER=pnxr
+PNXR_TEST_DAV_PASSWORD=$dav_password
+PNXR_TEST_TOXIPROXY=http://127.0.0.1:8474
+PNXR_TEST_S3_PROXY_ENDPOINT=http://127.0.0.1:9001
 VARS
 if [ "${NEXTCLOUD:-0}" = 1 ]; then
     cat <<VARS
-NMC_TEST_NEXTCLOUD_ORIGIN=http://127.0.0.1:8082
-NMC_TEST_NEXTCLOUD_BASE=remote.php/dav/files/admin
-NMC_TEST_NEXTCLOUD_USER=admin
-NMC_TEST_NEXTCLOUD_PASSWORD=nmc-test-pass-2026
+PNXR_TEST_NEXTCLOUD_ORIGIN=http://127.0.0.1:8082
+PNXR_TEST_NEXTCLOUD_BASE=remote.php/dav/files/admin
+PNXR_TEST_NEXTCLOUD_USER=admin
+PNXR_TEST_NEXTCLOUD_PASSWORD=pnxr-test-pass-2026
 VARS
 fi

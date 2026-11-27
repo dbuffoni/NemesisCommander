@@ -16,20 +16,20 @@ A failed nightly opens (or comments on) the issue "Nightly CI failed".
 
 ## Heavy checks in the full tier
 
-- **S3** against MinIO (`crates/nmc-s3/tests/real_server.rs`): signing, folders,
+- **S3** against MinIO (`crates/pnxr-s3/tests/real_server.rs`): signing, folders,
   ranges, multipart upload, wrong key.
 - **WebDAV** against Apache `mod_dav` and Nextcloud
-  (`crates/nmc-webdav/tests/real_server.rs`).
+  (`crates/pnxr-webdav/tests/real_server.rs`).
 - **SMB** against Samba in three variants: SMB 2.1, SMB 3, SMB 3 with signing
   required; a file over 2 GiB; a wrong password.
 - **SSH**: key with a passphrase from an agent; a changed host key is refused.
-- **Network faults**: toxiproxy in front of MinIO (`crates/nmc-s3/tests/faults.rs`):
+- **Network faults**: toxiproxy in front of MinIO (`crates/pnxr-s3/tests/faults.rs`):
   latency, a reset in the middle of an upload, a dead link.
 - **All systems**: the whole test suite and the Qt window tests on macOS and
   Windows, and the tests that need the real system (see below).
 
 A missing server fails the test instead of skipping it when
-`NMC_REQUIRE_SERVERS` asks for it: `1` for all servers, or a list such as
+`PNXR_REQUIRE_SERVERS` asks for it: `1` for all servers, or a list such as
 `sftp,smb,ssh` (the simple tier asks for the servers it installs itself).
 
 ## Run the heavy tests on your machine
@@ -38,8 +38,8 @@ Needs Docker (Compose), `openssl` and `curl`.
 
 ```sh
 set -a; eval "$(scripts/heavy/up.sh)"; set +a      # NEXTCLOUD=1 adds Nextcloud
-NMC_REQUIRE_SERVERS=1 cargo test -p nmc-s3 -p nmc-webdav --test real_server
-NMC_REQUIRE_SERVERS=1 cargo test -p nmc-s3 --test faults
+PNXR_REQUIRE_SERVERS=1 cargo test -p pnxr-s3 -p pnxr-webdav --test real_server
+PNXR_REQUIRE_SERVERS=1 cargo test -p pnxr-s3 --test faults
 docker compose -f scripts/heavy/compose.yml down -v
 ```
 
@@ -50,7 +50,7 @@ Samba and OpenSSH variants: `scripts/smb-test-server.sh` and
 ## Add a new heavy check
 
 1. Write the test so it reads its server from environment variables and skips
-   (or fails when `NMC_REQUIRE_SERVERS` asks for it) without them.
+   (or fails when `PNXR_REQUIRE_SERVERS` asks for it) without them.
 2. Add a job to `ci.yml` with `needs: plan` and
    `if: needs.plan.outputs.full == 'true'`, and add it to `nightly-alert`'s
    `needs`.
@@ -69,11 +69,11 @@ real credential store or a real volume must use a throwaway name and clean up.
 ## OS-specific tests (SC-164)
 
 The nightly tier runs the whole workspace on macOS and Windows. Tests that
-need the real system sit in `crates/nmc-frontend/tests/os_native.rs` (drive
+need the real system sit in `crates/pnxr-frontend/tests/os_native.rs` (drive
 letters, drive and disk lists, the path model, symlinks) and in the `cfg`-gated
-modules of `nmc-providers` (Windows attributes, long and UNC paths, xattr),
-`nmc-vfs` (Credential Manager, Keychain) and `nmc-libarchive`. The agent and
-CLI integration tests (`nmc-agent`, `nmc-cli`) run there too and act as the
+modules of `pnxr-providers` (Windows attributes, long and UNC paths, xattr),
+`pnxr-vfs` (Credential Manager, Keychain) and `pnxr-libarchive`. The agent and
+CLI integration tests (`pnxr-agent`, `pnxr-cli`) run there too and act as the
 smoke test of the binaries. Missing features are not tested; installers have
 their own job (SC-168).
 
@@ -83,8 +83,8 @@ their own job (SC-168).
 (`packaging/windows/build-zip.ps1`, Qt bundled by `windeployqt`) and the macOS
 disk image (`packaging/macos/build-dmg.sh`, an app bundle with Qt bundled by
 `macdeployqt`), each with `LICENSE` and `THIRD-PARTY-NOTICES.md`, and tests
-them: unpack or mount into a temporary place and run `nmc --version` and
-`nmc-gui --version`. On macOS the copy of the app runs with the runner's Qt
+them: unpack or mount into a temporary place and run `pnxr --version` and
+`pnxr-gui --version`. On macOS the copy of the app runs with the runner's Qt
 hidden and, unsigned, opens its window off screen; any error of
 `macdeployqt` fails the build. The Windows test still runs with Qt installed.
 The full CI tier (nightly) runs it; the release workflow runs it too and

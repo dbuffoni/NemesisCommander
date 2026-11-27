@@ -1,4 +1,4 @@
-// NemesisCommander's window. It only draws: the state lives in the Rust
+// Pairnox's window. It only draws: the state lives in the Rust
 // `Commander` object, which publishes the whole screen as JSON (`screen`)
 // and receives every key press. There are no toolbars or icons; commands
 // are in the Commands list (F9) and on the keyboard (F1 lists the main
@@ -7,7 +7,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import NemesisCommander
+import Pairnox
 
 ApplicationWindow {
     // Losing the focus loses the releases: forget the held modifiers.
@@ -16,9 +16,9 @@ ApplicationWindow {
     width: commander.window_width
     height: commander.window_height
     visible: true
-    title: screen ? "NemesisCommander — " + screen.panels[activeSide].title : "NemesisCommander"
+    title: screen ? "Pairnox — " + screen.panels[activeSide].title : "Pairnox"
 
-    // The screen description (see nmc_frontend::view::Screen).
+    // The screen description (see pnxr_frontend::view::Screen).
     readonly property var screen: commander.screen ? JSON.parse(commander.screen) : null
     // The application, for windows drawn in other files (clicks).
     readonly property var app: commander

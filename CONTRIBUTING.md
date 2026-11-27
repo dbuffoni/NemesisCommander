@@ -1,4 +1,4 @@
-# Contributing to NemesisCommander
+# Contributing to Pairnox
 
 Thanks for helping. This is a small project; keeping changes small and
 tested makes them easy to merge.
@@ -6,15 +6,15 @@ tested makes them easy to merge.
 ## Getting started
 
 ```sh
-cargo build                 # nmc: terminal interface, CLI, agent
+cargo build                 # pnxr: terminal interface, CLI, agent
 cargo test --workspace      # unit and integration tests
 cargo fmt --all && cargo clippy --workspace --all-targets
 ```
 
-The Qt window (`gui/`, crate `nmc-gui`) needs Qt 6.4 or later (CI builds it with 6.4, the version in Ubuntu 24.04) and `lld`;
-build it with its own command, `cargo build -p nmc-gui` (ADR 0020 says why).
+The Qt window (`gui/`, crate `pnxr-gui`) needs Qt 6.4 or later (CI builds it with 6.4, the version in Ubuntu 24.04) and `lld`;
+build it with its own command, `cargo build -p pnxr-gui` (ADR 0020 says why).
 The terminal interface is the quickest way to try a change: most behaviour
-lives in `nmc-frontend` and is shared by both interfaces.
+lives in `pnxr-frontend` and is shared by both interfaces.
 
 ## Pull requests
 

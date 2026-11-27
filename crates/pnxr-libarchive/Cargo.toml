@@ -1,0 +1,20 @@
+[package]
+name = "pnxr-libarchive"
+description = "libarchive (BSD-2-Clause), built from the bundled source with no other libraries, to read RAR archives."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+build = "build.rs"
+# The bundled libarchive is much bigger than this crate's own code.
+exclude = []
+
+[dependencies]
+
+[build-dependencies]
+cmake = "0.1"
+
+[lints]
+workspace = true

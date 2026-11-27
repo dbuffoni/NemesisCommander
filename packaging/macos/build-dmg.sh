@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Packages NemesisCommander for macOS as an app bundle in a disk image:
+# Packages Pairnox for macOS as an app bundle in a disk image:
 #
-#   packaging/macos/build-dmg.sh <directory with nmc and nmc-gui> <version>
+#   packaging/macos/build-dmg.sh <directory with pnxr and pnxr-gui> <version>
 #
-# Produces NemesisCommander-<version>-macos-<arch>[-unsigned].dmg in the
+# Produces Pairnox-<version>-macos-<arch>[-unsigned].dmg in the
 # current directory. Qt is bundled by macdeployqt (qmake on the PATH is the
 # Qt the window was built with). The bundle is signed with $MACOS_SIGN_IDENTITY
 # (a "Developer ID Application" certificate in the keychain); without it, it
@@ -20,30 +20,30 @@ arch=$(uname -m)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-app="$work/dmg/NemesisCommander.app"
+app="$work/dmg/Pairnox.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-install -m755 "$bin_dir/nmc-gui" "$app/Contents/MacOS/nmc-gui"
-install -m755 "$bin_dir/nmc" "$app/Contents/MacOS/nmc"
+install -m755 "$bin_dir/pnxr-gui" "$app/Contents/MacOS/pnxr-gui"
+install -m755 "$bin_dir/pnxr" "$app/Contents/MacOS/pnxr"
 sed "s/@VERSION@/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
 
 # The icon, from assets/branding.
 if command -v iconutil >/dev/null; then
-    icons="$work/NemesisCommander.iconset"
+    icons="$work/Pairnox.iconset"
     mkdir -p "$icons"
     brand="$root/assets/branding"
     for size in 16 32 128 256 512; do
-        cp "$brand/nemesiscommander-$size.png" "$icons/icon_${size}x${size}.png"
+        cp "$brand/pairnox-$size.png" "$icons/icon_${size}x${size}.png"
     done
-    cp "$brand/nemesiscommander-32.png" "$icons/icon_16x16@2x.png"
-    cp "$brand/nemesiscommander-64.png" "$icons/icon_32x32@2x.png"
-    cp "$brand/nemesiscommander-256.png" "$icons/icon_128x128@2x.png"
-    cp "$brand/nemesiscommander-512.png" "$icons/icon_256x256@2x.png"
-    iconutil -c icns "$icons" -o "$app/Contents/Resources/NemesisCommander.icns"
+    cp "$brand/pairnox-32.png" "$icons/icon_16x16@2x.png"
+    cp "$brand/pairnox-64.png" "$icons/icon_32x32@2x.png"
+    cp "$brand/pairnox-256.png" "$icons/icon_128x128@2x.png"
+    cp "$brand/pairnox-512.png" "$icons/icon_256x256@2x.png"
+    iconutil -c icns "$icons" -o "$app/Contents/Resources/Pairnox.icns"
 fi
 
 # macdeployqt reports what it could not do and still succeeds: its errors
 # stop the build here.
-macdeployqt "$app" -qmldir="$root/gui/qml" -executable="$app/Contents/MacOS/nmc-gui" 2>&1 |
+macdeployqt "$app" -qmldir="$root/gui/qml" -executable="$app/Contents/MacOS/pnxr-gui" 2>&1 |
     tee "$work/macdeployqt.log"
 # The database drivers of Qt are not used, and want libraries that are not
 # there: they are left out, and so are the errors about those libraries.
@@ -69,9 +69,9 @@ fi
 codesign --verify --deep --strict "$app"
 
 ln -s /Applications "$work/dmg/Applications"
-dmg="NemesisCommander-$version-macos-$arch$suffix.dmg"
+dmg="Pairnox-$version-macos-$arch$suffix.dmg"
 rm -f "$dmg"
-hdiutil create -volname "NemesisCommander" -srcfolder "$work/dmg" -ov -format UDZO "$dmg"
+hdiutil create -volname "Pairnox" -srcfolder "$work/dmg" -ov -format UDZO "$dmg"
 
 if [ "$identity" != "-" ] && [ -n "${APPLE_ID:-}" ]; then
     xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \

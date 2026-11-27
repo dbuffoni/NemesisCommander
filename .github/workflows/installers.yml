@@ -59,12 +59,12 @@ jobs:
         shell: bash
         run: echo "VERSION=${GITHUB_REF_NAME//[^A-Za-z0-9._-]/-}" >> "$GITHUB_ENV"
       # Two builds: built together, Cargo would unify features and give
-      # nmc-gui nmc's script engine (V8) as well.
-      - name: Build nmc and nmc-gui
+      # pnxr-gui pnxr's script engine (V8) as well.
+      - name: Build pnxr and pnxr-gui
         shell: bash
         run: |
-          cargo build --release --locked -p nmc-cli --features rar
-          cargo build --release --locked -p nmc-gui --features rar
+          cargo build --release --locked -p pnxr-cli --features rar
+          cargo build --release --locked -p pnxr-gui --features rar
 
       # ---- Windows ----
       - name: Package (Windows)
@@ -75,15 +75,15 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $zip = Get-ChildItem NemesisCommander-*-windows-*.zip | Select-Object -First 1
-          $dir = Join-Path $env:RUNNER_TEMP "nmc-install"
+          $zip = Get-ChildItem Pairnox-*-windows-*.zip | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP "pnxr-install"
           Expand-Archive $zip.FullName $dir
-          $app = Join-Path $dir "NemesisCommander"
-          & (Join-Path $app "nmc.exe") --version
-          if ($LASTEXITCODE -ne 0) { throw "nmc.exe --version failed" }
+          $app = Join-Path $dir "Pairnox"
+          & (Join-Path $app "pnxr.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "pnxr.exe --version failed" }
           $env:QT_QPA_PLATFORM = "offscreen"
-          & (Join-Path $app "nmc-gui.exe") --version
-          if ($LASTEXITCODE -ne 0) { throw "nmc-gui.exe --version failed" }
+          & (Join-Path $app "pnxr-gui.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "pnxr-gui.exe --version failed" }
           if (-not (Test-Path (Join-Path $app "THIRD-PARTY-NOTICES.md"))) { throw "no notices" }
           Remove-Item -Recurse -Force $dir
       - name: Upload (Windows)
@@ -91,7 +91,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: installer-windows
-          path: NemesisCommander-*-windows-*.zip
+          path: Pairnox-*-windows-*.zip
           if-no-files-found: error
 
       # ---- macOS ----
@@ -115,16 +115,16 @@ jobs:
       - name: Smoke test (macOS)
         if: runner.os == 'macOS'
         run: |
-          dmg=$(ls NemesisCommander-*-macos-*.dmg | head -1)
-          mount="$RUNNER_TEMP/nmc-mount"
+          dmg=$(ls Pairnox-*-macos-*.dmg | head -1)
+          mount="$RUNNER_TEMP/pnxr-mount"
           mkdir -p "$mount"
           hdiutil attach "$dmg" -mountpoint "$mount" -nobrowse -readonly
-          app="$mount/NemesisCommander.app/Contents"
+          app="$mount/Pairnox.app/Contents"
           test -f "$app/Resources/THIRD-PARTY-NOTICES.md"
           # A copy of the app, as a user installs it.
-          cp -R "$mount/NemesisCommander.app" "$RUNNER_TEMP/"
+          cp -R "$mount/Pairnox.app" "$RUNNER_TEMP/"
           hdiutil detach "$mount"
-          app="$RUNNER_TEMP/NemesisCommander.app/Contents"
+          app="$RUNNER_TEMP/Pairnox.app/Contents"
           # The window needs a platform without a screen, which the bundle
           # does not carry; it is borrowed for the test. A build signed with
           # an identity refuses plugins signed by others, so it only starts.
@@ -135,15 +135,15 @@ jobs:
           # machine, as it would not be on a user's.
           mv "$QT_ROOT_DIR" "$QT_ROOT_DIR.hidden"
           trap 'mv "$QT_ROOT_DIR.hidden" "$QT_ROOT_DIR"' EXIT
-          "$app/MacOS/nmc" --version
-          "$app/MacOS/nmc-gui" --version
+          "$app/MacOS/pnxr" --version
+          "$app/MacOS/pnxr-gui" --version
           if [ -z "$MACOS_SIGN_IDENTITY" ]; then
-            QT_QPA_PLATFORM=offscreen "$app/MacOS/nmc-gui" --self-test --keys=F1 | grep -q '"help"'
+            QT_QPA_PLATFORM=offscreen "$app/MacOS/pnxr-gui" --self-test --keys=F1 | grep -q '"help"'
           fi
       - name: Upload (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: installer-macos
-          path: NemesisCommander-*-macos-*.dmg
+          path: Pairnox-*-macos-*.dmg
           if-no-files-found: error

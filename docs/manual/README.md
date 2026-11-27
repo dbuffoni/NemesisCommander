@@ -1,10 +1,10 @@
-# NemesisCommander manual
+# Pairnox manual
 
-NemesisCommander is a dual-pane file manager for local and remote files. It
+Pairnox is a dual-pane file manager for local and remote files. It
 comes as:
 
-- **`nmc-gui`**, a desktop window (Qt 6), shipped as an AppImage on Linux;
-- **`nmc`**, one program that is the terminal interface, a command line for
+- **`pnxr-gui`**, a desktop window (Qt 6), shipped as an AppImage on Linux;
+- **`pnxr`**, one program that is the terminal interface, a command line for
   scripts, and the agent that runs on servers.
 
 Both interfaces work the same way and share every shortcut, so what you learn
@@ -28,23 +28,23 @@ the real window on a demo folder.
 9. [Synchronizing folders](#synchronizing-folders)
 10. [Archives](#archives)
 11. [Remote locations](#remote-locations)
-12. [Servers: the agent and `nmc serve`](#servers-the-agent-and-nmc-serve)
+12. [Servers: the agent and `pnxr serve`](#servers-the-agent-and-pnxr-serve)
 13. [The transfer queue](#the-transfer-queue)
 14. [Bookmarks, tabs and history](#bookmarks-tabs-and-history)
 15. [Plugins and scripts](#plugins-and-scripts)
-16. [Assistants: `nmc mcp`](#assistants-nmc-mcp)
+16. [Assistants: `pnxr mcp`](#assistants-pnxr-mcp)
 17. [The command line](#the-command-line)
 18. [Settings](#settings)
 19. [All shortcuts](#all-shortcuts)
 
 ## Getting started
 
-Start the window with `nmc-gui` (or the AppImage), or the terminal interface
-with `nmc`. Both take up to two locations, one for each panel:
+Start the window with `pnxr-gui` (or the AppImage), or the terminal interface
+with `pnxr`. Both take up to two locations, one for each panel:
 
 ```sh
-nmc-gui ~/Projects sftp://nas/backup
-nmc ~/Downloads s3://photos/2026
+pnxr-gui ~/Projects sftp://nas/backup
+pnxr ~/Downloads s3://photos/2026
 ```
 
 Without locations both panels open the current folder. The window also
@@ -60,7 +60,7 @@ The window adapts to its size; here it is at 800 × 500 and at 1920 × 1080:
 
 ## Commands (F9)
 
-**F9** opens the command list: every command of NemesisCommander, of your
+**F9** opens the command list: every command of Pairnox, of your
 plugins and of your scripts, one per row as `Category/Command`, with its
 shortcuts on the right.
 
@@ -71,7 +71,7 @@ shortcuts on the right.
   Files/Checksum), the names starting with what you typed first.
   Backspace erases a letter, Ctrl+U or Esc empties the filter.
 - **Categories**: the buttons on top (All, Files, Select, Navigate, View,
-  Tools, NemesisCommander, and Plugins and Scripts when you have some) show
+  Tools, Pairnox, and Plugins and Scripts when you have some) show
   one category only. Left and Right (or Tab) move between them; in the
   window you can also click them.
 - **Up/Down**, Page Up/Down, Home/End move; **Enter** (or a click in the
@@ -93,7 +93,7 @@ shortcuts on the right.
 In the window there is no menu bar: this list is the menu. Clicking **F9
 Commands** in the bar at the bottom opens it too.
 
-The command **App/About NemesisCommander** (no shortcut; give it one in the
+The command **App/About Pairnox** (no shortcut; give it one in the
 settings if you like) shows the logo, the version and the commit this build
 was made from, the license and where the source is.
 
@@ -169,7 +169,7 @@ with **Ctrl** or a combination with Shift likewise (Alt does not change the bar)
 window this follows the keyboard live (clicking a label with a modifier held
 runs that combination). In the terminal it works only where the terminal
 reports Ctrl, Alt and Shift on their own (terminals with the "kitty keyboard
-protocol" turned on by the program; NemesisCommander does not turn it on).
+protocol" turned on by the program; Pairnox does not turn it on).
 
 No built-in command uses Alt: desktops (GNOME keeps Alt+F1, Alt+F5, Alt+F7 and
 Alt+F8) and macOS terminals (Option types characters) take those keys for
@@ -241,13 +241,13 @@ default; the destination can be edited before you confirm.
 | Shift+F5 / Shift+F6 | Pack into an archive / unpack one |
 | Shift+F4 or Ctrl+E | Properties: opens read-only; `e` or F2 turns on editing of the date (`now`, `2026-11-17`, `10:30`) and permissions (a check box for each, with the octal number), Ctrl+S applies |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
-| Ctrl+F6 or Ctrl+K | Checksum: the digests of one file; Enter writes checksum files (`SHA256SUMS`, `B3SUMS`, `name.sha256`, `name.b3`, in the format of `sha256sum -c` and `b3sum --check`) for the file, the selection or folders; on a checksum file the first row checks the files it lists. In the command line: `nmc hash --write FILE paths`, `--per-file`, `--check FILE` |
+| Ctrl+F6 or Ctrl+K | Checksum: the digests of one file; Enter writes checksum files (`SHA256SUMS`, `B3SUMS`, `name.sha256`, `name.b3`, in the format of `sha256sum -c` and `b3sum --check`) for the file, the selection or folders; on a checksum file the first row checks the files it lists. In the command line: `pnxr hash --write FILE paths`, `--per-file`, `--check FILE` |
 
 | Copy | New folder | Delete |
 |---|---|---|
 | ![Copy](images/copy.png) | ![New folder](images/mkdir.png) | ![Delete](images/delete.png) |
 
-When a file already exists at the destination, NemesisCommander asks whether
+When a file already exists at the destination, Pairnox asks whether
 to overwrite, skip, keep both (renaming the new one) or overwrite only if
 newer, for this file or for all of them. Every copy and move becomes a job
 in the [transfer queue](#the-transfer-queue), so you can keep working while
@@ -326,10 +326,10 @@ find and replace or regular expression, letter case, counter) from the file
 names only, using your Anthropic API key; the same preview then shows the
 rule and the new names before anything is renamed.
 
-On the command line, `nmc rename` has every option of the rule (`--find`,
+On the command line, `pnxr rename` has every option of the rule (`--find`,
 `--replace`, `--regex`, `--case`, `--start`, `--step`, `--digits`);
-`--preview` (or `-n`) prints the new names without renaming. `nmc ai rename
-"description" FILES...` prints the rule Claude wrote as an `nmc rename`
+`--preview` (or `-n`) prints the new names without renaming. `pnxr ai rename
+"description" FILES...` prints the rule Claude wrote as an `pnxr rename`
 command, with the new names.
 
 ### Renaming in your editor
@@ -376,7 +376,7 @@ until you quit.
 
 ### A text for the folder
 
-A file called `nmc_folder.md` in a folder is shown at the top of its panel,
+A file called `pnxr_folder.md` in a folder is shown at the top of its panel,
 in the terminal interface as Markdown and in the window as plain wrapped
 text (up to a third of the panel; files over 64 KiB are ignored): notes on
 what the folder is for.
@@ -391,7 +391,7 @@ what the folder is for.
 - **+** selects by mask (`*.jpg;*.png`), **-** unselects by mask,
   **\*** inverts the selection, **Ctrl+A** selects everything. A mask that
   starts with `re:` is a regular expression (`re:^img-\d+\.jpe?g$`); the
-  same works in the search, the quick filter and `nmc find --name`.
+  same works in the search, the quick filter and `pnxr find --name`.
   `has:text` matches names that contain the text. The question shows how
   many files match while you type; **F2** switches between select, unselect
   and keep only; **Ctrl+O** lists ready-made masks; **F1** explains the
@@ -505,7 +505,7 @@ gives the hex dump.
 with `!` to exclude) and, optionally, by text the files contain (start either with `re:` for a regular
 expression, e.g. `re:^report-\d{2}`). Results
 appear in a list as they are found; Enter jumps to the chosen file in the
-panel. On the command line, `nmc find` also searches by regular expression,
+panel. On the command line, `pnxr find` also searches by regular expression,
 size and age.
 
 ![Search](images/search.png)
@@ -514,7 +514,7 @@ The search asks one more thing in its conditions: the word `archives` makes
 it look inside ZIP, 7-Zip, tar and RAR archives it meets (and in archives
 inside archives, up to three levels). Found files are listed with the archive
 in their path. On the command line it is
-`nmc find --archives`.
+`pnxr find --archives`.
 
 **Ctrl+F3** compares: two files (one under the cursor in each panel) by
 content, or two folders, selecting the entries that differ. Two different
@@ -610,8 +610,8 @@ Opening an **encrypted** archive asks for its password: for a 7z with hidden
 names as you enter it, for a ZIP as soon as it is opened (the names show, the
 contents need the password). A wrong password asks again; Esc leaves it
 locked until you leave the archive and enter it again. The password stays in
-memory only, for as long as the program runs. `nmc pack` and `nmc unpack` read
-it from the environment variable `NMC_ARCHIVE_PASSWORD` (never from the command
+memory only, for as long as the program runs. `pnxr pack` and `pnxr unpack` read
+it from the environment variable `PNXR_ARCHIVE_PASSWORD` (never from the command
 line, where `ps` would show it).
 
 ![Inside an archive](images/archive.png)
@@ -626,8 +626,8 @@ Every command works the same on remote locations, written as URIs:
 | SMB / Windows shares | `smb://host/share/dir` |
 | WebDAV (`dav` or `davs` for HTTPS) | `davs://cloud.example.org/remote.php/dav/files/me` |
 | Amazon S3 and compatible services | `s3://bucket/dir` |
-| A server running the NemesisCommander agent over SSH | `agent://host/dir` |
-| A server running `nmc serve` | `scs://host:7443/dir` |
+| A server running the Pairnox agent over SSH | `agent://host/dir` |
+| A server running `pnxr serve` | `scs://host:7443/dir` |
 | Inside an archive | `zip:///home/me/site.zip!/css` |
 
 ### One list for drives and connections
@@ -640,7 +640,7 @@ and rows are grouped as disks, servers and archives:
 
 - **Disk**: your home folder, the root and the disks and network shares
   mounted on this computer (drive letters on Windows, `/Volumes` on macOS).
-- **SFTP**, **Agent**, **Serve** (`nmc serve`), **SMB**, **WebDAV**, **S3**:
+- **SFTP**, **Agent**, **Serve** (`pnxr serve`), **SMB**, **WebDAV**, **S3**:
   saved connections, one type each.
 - **Archive**: a saved location inside an archive file.
 
@@ -658,7 +658,7 @@ connection; the drives of this computer stay.
 
 The location question starts empty and shows one example per line (every kind,
 with user and port). As you type, the examples that fit the first characters
-stay: `s` keeps SFTP, SMB, S3 and `nmc serve`, `sm` only SMB. Nothing is called
+stay: `s` keeps SFTP, SMB, S3 and `pnxr serve`, `sm` only SMB. Nothing is called
 wrong at the start: only three characters that fit no protocol (and are not a
 path such as `/srv` or `~/docs`) show `✗ Invalid address`. Then the line under
 the field says what it understood (`✓ SFTP over SSH · host nas · port 22 ·
@@ -682,7 +682,7 @@ file, so they travel with exported and shared settings.
 ### The login of a connection
 
 After the name, a list asks where the login is kept. It appears for WebDAV,
-SMB, SFTP, agent and S3 (not for `nmc serve`, which uses a certificate):
+SMB, SFTP, agent and S3 (not for `pnxr serve`, which uses a certificate):
 
 - **Ask every time**: the connection is saved with the user only (S3: no keys);
   the password (S3: access key ID and secret access key, both asked) is asked,
@@ -698,7 +698,7 @@ SMB, SFTP, agent and S3 (not for `nmc serve`, which uses a certificate):
   ssh-agent and `~/.ssh/config`; S3 uses `~/.aws` and the environment; WebDAV
   and SMB use the login in the keyring or `~/.netrc`, if either has it.
 
-If the address has no user, it is asked. NemesisCommander never writes a
+If the address has no user, it is asked. Pairnox never writes a
 password in its own settings.
 
 SFTP and agent with a password run `ssh` with `SSH_ASKPASS`, which hands the
@@ -725,37 +725,37 @@ default key files, the SSH agent). For a `.pem` file, add it to
 `ssh-add`. A connection no longer asks for a key file (older versions did);
 an `identity_file` left in an old settings file is read and ignored.
 
-## Servers: the agent and `nmc serve`
+## Servers: the agent and `pnxr serve`
 
-On a Linux server, the `nmc` agent (a single static program, no
+On a Linux server, the `pnxr` agent (a single static program, no
 dependencies) makes remote work much faster than SFTP: listings, searches,
 checksums and copies between folders of that server run on the server.
 
-- **Over SSH**, with nothing to set up: copy `nmc` to the server and use
-  `agent://host/path`. NemesisCommander starts `nmc agent --stdio` through SSH.
-- **Permanently**, with `nmc serve`, for long jobs and for copies directly
-  between two servers. On your machine, `nmc tls init` creates a private
-  certificate authority once; `nmc tls server NAME --out DIR` issues a bundle
-  for each server, which runs `nmc serve --tls DIR`. Connections use mutual
+- **Over SSH**, with nothing to set up: copy `pnxr` to the server and use
+  `agent://host/path`. Pairnox starts `pnxr agent --stdio` through SSH.
+- **Permanently**, with `pnxr serve`, for long jobs and for copies directly
+  between two servers. On your machine, `pnxr tls init` creates a private
+  certificate authority once; `pnxr tls server NAME --out DIR` issues a bundle
+  for each server, which runs `pnxr serve --tls DIR`. Connections use mutual
   TLS; `--root` limits what is served and `--read-only` refuses changes.
-- **Installed for you**: `nmc serve install me@host` does all of that over
-  SSH: it creates the authority if needed, copies `nmc` to `~/.local/bin`,
+- **Installed for you**: `pnxr serve install me@host` does all of that over
+  SSH: it creates the authority if needed, copies `pnxr` to `~/.local/bin`,
   issues and copies the server certificate, starts a systemd user service
   (it keeps running after you log out) and checks the connection. Options:
   `--name`, `--port`, `--root DIR`, `--read-only`, `--renew`. Run it again to
-  update; `nmc serve uninstall me@host` removes it. In the window or the
-  terminal use **Install nmc serve on a server…** in the commands list (F9):
+  update; `pnxr serve uninstall me@host` removes it. In the window or the
+  terminal use **Install pnxr serve on a server…** in the commands list (F9):
   the dialog checks what you type, shows examples and completes the options;
   **F1** explains what will be done, **Ctrl+T** tests the server without
   installing anything (it only reads), and the install ends with its log;
   you can give it a key with Ctrl+K.
 
 The drive list (Shift+F1) shows how each remote place is reached, for example
-`[agent over SSH]` or `[nmc serve, TLS]`.
+`[agent over SSH]` or `[pnxr serve, TLS]`.
 
-Copies between two `scs://` servers (from the queue as well as `nmc cp`) go
+Copies between two `scs://` servers (from the queue as well as `pnxr cp`) go
 directly from one to the other when they can reach each other (each authorised by a one-time token that expires
-after five minutes), otherwise through your machine. `nmc cp` prints the
+after five minutes), otherwise through your machine. `pnxr cp` prints the
 route taken; `--route` chooses one.
 
 ## The transfer queue
@@ -821,7 +821,7 @@ up to the number of retries in the settings; the part of the file already
 copied is kept. S3 requests are retried the same way, and a large S3 upload that was
 interrupted continues with the parts already stored when the same file is
 copied again in the same session. When a check "by size" is chosen and the
-destination is an agent or `nmc serve` server, the content is checked
+destination is an agent or `pnxr serve` server, the content is checked
 instead (hashed on the server, no extra traffic); a setting turns that off.
 
 A panel on a remote place shows how it is reached above the list. When a
@@ -838,11 +838,11 @@ something fits exactly as typed, only that is listed.
 
 ## The launcher and its icon (Linux)
 
-`nmc desktop install` writes the launcher (applications menu, dock) for this
+`pnxr desktop install` writes the launcher (applications menu, dock) for this
 user, with an icon named by its content, so GNOME cannot keep showing an old
 one after an update; the window brings that launcher up to date when it
-starts. `nmc desktop remove` takes it away. From the AppImage:
-`NemesisCommander.AppImage nmc desktop install`.
+starts. `pnxr desktop remove` takes it away. From the AppImage:
+`Pairnox.AppImage pnxr desktop install`.
 
 ## Bookmarks, tabs and history
 
@@ -883,27 +883,27 @@ folder you use often is a few keys away without bookmarking it.
 
 ## Plugins and scripts
 
-NemesisCommander runs extensions written in TypeScript (or JavaScript) with a
-small `nmc` API to list, read, write, copy and search files on any location.
+Pairnox runs extensions written in TypeScript (or JavaScript) with a
+small `pnxr` API to list, read, write, copy and search files on any location.
 Scripts run in a sandbox: they can only touch the paths they were allowed.
 
-- `nmc run script.ts` runs a script from the command line, with
+- `pnxr run script.ts` runs a script from the command line, with
   `--allow-read` and `--allow-write` for the paths it may use.
 - Installing, writing and publishing plugins, repositories included, is in
-  [plugins.md](../plugins.md). In short: `nmc plugin available`, `nmc plugin
-  install NAME`, `nmc plugin repo add URL`.
+  [plugins.md](../plugins.md). In short: `pnxr plugin available`, `pnxr plugin
+  install NAME`, `pnxr plugin repo add URL`.
 - Plugins are folders with a `plugin.json` that names their commands and the
   permissions they need (for example `$SELECTION` or `$OTHER`). Install one
-  with `nmc plugin install DIR`; the first run asks you to allow its
+  with `pnxr plugin install DIR`; the first run asks you to allow its
   permissions.
-- A plugin can also come from **Git**: `nmc plugin install
+- A plugin can also come from **Git**: `pnxr plugin install
   https://github.com/owner/repo` (or `github:owner/repo`, or
   `git@host:owner/repo`) clones it with the system's `git` and installs the
   plugin at the top of the repository (`--subdir FOLDER` when it is in a
   folder of it; `#branch-or-tag` at the end of the address picks a
   version). Where it came from and the commit installed are kept in
-  `plugin-lock.json` in the data folder, and `nmc plugin list` shows them.
-  `nmc plugin update` fetches the latest version of every plugin installed
+  `plugin-lock.json` in the data folder, and `pnxr plugin list` shows them.
+  `pnxr plugin update` fetches the latest version of every plugin installed
   from Git (or of the ones you name) and replaces those that changed; a
   plugin that now asks for more permissions asks again before it runs.
   Installing from a folder, or removing the plugin, drops its entry.
@@ -911,25 +911,25 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   the category their manifest names (`"category": "Files"`), or in
   **Plugins**. Each can have a shortcut (Ctrl+K in the list).
 - Your own scripts go in the `scripts` folder of the data folder
-  (`~/.local/share/nemesiscommander/scripts` on Linux). Each `.ts` or `.js`
+  (`~/.local/share/pairnox/scripts` on Linux). Each `.ts` or `.js`
   file there is a command in the **Scripts** category, which can have a
   shortcut too. It runs on the active panel like a script from a panel, with
   no question, since you put it there.
 - **Ctrl+X** in either interface lists the plugin commands, and offers to run
   the script under the cursor, after a confirmation.
 - The window has no script engine of its own: it runs scripts and plugins
-  with the `nmc` program installed next to it (the AppImage has both), so
+  with the `pnxr` program installed next to it (the AppImage has both), so
   they behave exactly as from the command line.
 
-- `nmc test SCRIPT_OR_PLUGIN` tries it on sample files in a throwaway
+- `pnxr test SCRIPT_OR_PLUGIN` tries it on sample files in a throwaway
   folder and lists what it printed and which files it created, removed and
   changed, so you (or an AI assistant writing it for you) can check it
-  before running it on real files. `nmc run --guide` prints a guide for
+  before running it on real files. `pnxr run --guide` prints a guide for
   AI assistants.
 - **Tools/Write a script with AI…** (F9) asks what the script should do;
-  Claude writes it with your Anthropic API key, `nmc test` checks it, and
+  Claude writes it with your Anthropic API key, `pnxr test` checks it, and
   Claude fixes it until it passes. It then appears under **Scripts**. From
-  the command line: `nmc ai new "description"` (key: `nmc ai key` or
+  the command line: `pnxr ai new "description"` (key: `pnxr ai key` or
   `ANTHROPIC_API_KEY`).
 
 - **Panel columns and viewers from plugins.** A manifest can declare
@@ -937,12 +937,12 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
   "width": 6}]` and `"previewers": [{"id": "csv", "title": "CSV table",
   "match": ["*.csv"]}]`. A column runs the script as the command
   `column:pages` with the matching files of the folder in
-  `nmc.context.selection` (at most 300 at a time) and prints one line per
+  `pnxr.context.selection` (at most 300 at a time) and prints one line per
   file, in that order: the text of the column. A previewer runs as
-  `preview:csv` with the file in `nmc.context.selection` and prints Markdown,
+  `preview:csv` with the file in `pnxr.context.selection` and prints Markdown,
   which F3 and the quick view show. Both run only for plugins you have
   already allowed (run one of their commands, or answer the question of
-  `nmc plugin list`); a plugin may have only columns and previewers. Both
+  `pnxr plugin list`); a plugin may have only columns and previewers. Both
   interfaces show the columns before the size (the window leaves out the ones
   that do not fit when a panel is narrow or the font is large) and the
   viewers.
@@ -950,14 +950,14 @@ Scripts run in a sandbox: they can only touch the paths they were allowed.
 See [docs/scripting.md](../scripting.md) for the API and the examples in
 `examples/`.
 
-## Assistants: `nmc mcp`
+## Assistants: `pnxr mcp`
 
-`nmc mcp` makes NemesisCommander a Model Context Protocol server, so an AI
+`pnxr mcp` makes Pairnox a Model Context Protocol server, so an AI
 assistant can look at and organise your files. It talks over standard input
 and output; the assistant starts it. For Claude Code:
 
 ```
-claude mcp add nmc -- nmc mcp --read ~/Documents --write ~/Documents/sorted
+claude mcp add pnxr -- pnxr mcp --read ~/Documents --write ~/Documents/sorted
 ```
 
 and the same command line in the configuration of Claude Desktop. Nothing is
@@ -974,34 +974,34 @@ the tools say so.
 
 ## The command line
 
-`nmc` with a command works without the interface, for scripts and quick
+`pnxr` with a command works without the interface, for scripts and quick
 jobs. Every command accepts the same locations as the panels.
 
 | Command | What it does |
 |---|---|
-| `nmc ls LOCATION` | List a folder (`--json` for scripts) |
-| `nmc cp SRC... DEST` | Copy, with `--conflict`, `--verify`, `--parallel`, `--limit`, `--queue`, `--route` |
-| `nmc mv SRC... DEST` | Move or rename |
-| `nmc rm PATH...` | Delete |
-| `nmc mkdir PATH...` | Create folders |
-| `nmc cat FILE` | Print a file |
-| `nmc hash FILE...` | Checksums (`--algorithm blake3`, `xxh3` or `sha256`) |
-| `nmc find DIR` | Search by `--name`, `--content` (`--regex`), size and age; `--archives` looks inside archives |
-| `nmc pick [LOCATION]` | Use the terminal interface as a file chooser: the choice is printed on standard output (`--dir`, `--multiple`, `-0`) |
-| `nmc pack` / `nmc unpack` | Create and extract archives |
-| `nmc rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace); `--preview` shows the new names only |
-| `nmc jobs` | Show and control the transfer queue |
-| `nmc config path / show / export / import` | Locate, print, back up and restore the settings |
-| `nmc config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
-| `nmc keys` | Print the main shortcuts |
-| `nmc shell-init bash\|zsh\|fish\|pwsh` | Print the shell function that leaves the shell in the folder of the active panel when the terminal interface ends |
-| `nmc mcp` | Serve file tools to an AI assistant over MCP (see Assistants) |
-| `nmc run` / `nmc plugin` | Scripts and plugins (`nmc run --guide`: the guide for AI assistants) |
-| `nmc test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
-| `nmc ai new` / `nmc ai rename` / `nmc ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
-| `nmc agent --stdio`, `nmc serve`, `nmc tls` | The server side (Linux) |
+| `pnxr ls LOCATION` | List a folder (`--json` for scripts) |
+| `pnxr cp SRC... DEST` | Copy, with `--conflict`, `--verify`, `--parallel`, `--limit`, `--queue`, `--route` |
+| `pnxr mv SRC... DEST` | Move or rename |
+| `pnxr rm PATH...` | Delete |
+| `pnxr mkdir PATH...` | Create folders |
+| `pnxr cat FILE` | Print a file |
+| `pnxr hash FILE...` | Checksums (`--algorithm blake3`, `xxh3` or `sha256`) |
+| `pnxr find DIR` | Search by `--name`, `--content` (`--regex`), size and age; `--archives` looks inside archives |
+| `pnxr pick [LOCATION]` | Use the terminal interface as a file chooser: the choice is printed on standard output (`--dir`, `--multiple`, `-0`) |
+| `pnxr pack` / `pnxr unpack` | Create and extract archives |
+| `pnxr rename FILE...` | Rename many files with a template (`[N]`, `[E]`, `[C]` counter, find and replace); `--preview` shows the new names only |
+| `pnxr jobs` | Show and control the transfer queue |
+| `pnxr config path / show / export / import` | Locate, print, back up and restore the settings |
+| `pnxr config push LOCATION...` / `pull LOCATION` | Send settings to other machines, or fetch theirs |
+| `pnxr keys` | Print the main shortcuts |
+| `pnxr shell-init bash\|zsh\|fish\|pwsh` | Print the shell function that leaves the shell in the folder of the active panel when the terminal interface ends |
+| `pnxr mcp` | Serve file tools to an AI assistant over MCP (see Assistants) |
+| `pnxr run` / `pnxr plugin` | Scripts and plugins (`pnxr run --guide`: the guide for AI assistants) |
+| `pnxr test SCRIPT_OR_PLUGIN` | Try a script or plugin on sample files and report what it changed (`--json`) |
+| `pnxr ai new` / `pnxr ai rename` / `pnxr ai key` | Scripts, plugins and multi-rename rules written by Claude; save the API key |
+| `pnxr agent --stdio`, `pnxr serve`, `pnxr tls` | The server side (Linux) |
 
-**`nmc pick`** turns the terminal interface into a file chooser for scripts:
+**`pnxr pick`** turns the terminal interface into a file chooser for scripts:
 the interface is drawn on the terminal (standard error) and what you choose
 is printed on standard output, one path per line (`-0` ends each with a NUL
 byte for names with newlines). Enter chooses the file under the cursor, **Ctrl+F10**
@@ -1010,16 +1010,16 @@ with exit code 1 and prints nothing. Every other command still works while
 choosing.
 
 ```sh
-file=$(nmc pick ~/Documents) && echo "chose $file"
-cd "$(nmc pick --dir ~/Projects)"
+file=$(pnxr pick ~/Documents) && echo "chose $file"
+cd "$(pnxr pick --dir ~/Projects)"
 ```
 
-**Leaving the shell in the folder.** Put `eval "$(nmc shell-init bash)"` in
-`~/.bashrc` (zsh: `~/.zshrc`; fish: `nmc shell-init fish | source` in
-`config.fish`; PowerShell: `nmc shell-init pwsh | Out-String |
-Invoke-Expression` in the profile). From then on `nmc` is a function: when the
+**Leaving the shell in the folder.** Put `eval "$(pnxr shell-init bash)"` in
+`~/.bashrc` (zsh: `~/.zshrc`; fish: `pnxr shell-init fish | source` in
+`config.fish`; PowerShell: `pnxr shell-init pwsh | Out-String |
+Invoke-Expression` in the profile). From then on `pnxr` is a function: when the
 terminal interface ends, the shell is in the folder of the active panel.
-Commands (`nmc ls`, `nmc cp`…) are not affected. **Open terminal here**
+Commands (`pnxr ls`, `pnxr cp`…) are not affected. **Open terminal here**
 (F9, Files) does the same from the interface: it ends and leaves you in the
 folder; in the window it opens a terminal window there (the command is set in
 Settings, `{dir}` is the folder), and on a server reached with SSH it opens an
@@ -1028,9 +1028,9 @@ SSH session in that folder.
 For example:
 
 ```sh
-nmc cp --verify full ~/Pictures/2026 sftp://nas/backup/pictures/
-nmc find ~/Projects --name "*.rs" --content "TODO" --json
-nmc rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
+pnxr cp --verify full ~/Pictures/2026 sftp://nas/backup/pictures/
+pnxr find ~/Projects --name "*.rs" --content "TODO" --json
+pnxr rename --template "holiday-[C].[E]" --digits 3 *.jpg --preview
 ```
 
 ## Settings
@@ -1069,24 +1069,24 @@ changed in one works in the other.
 
 ### Sharing settings with other machines
 
-The last rows of the screen, and `nmc config`, move settings between
+The last rows of the screen, and `pnxr config`, move settings between
 machines. Nothing is synchronized in the background: settings move only
 when you send or fetch them.
 
-- **Send these settings to another machine…** (`nmc config push LOCATION`)
+- **Send these settings to another machine…** (`pnxr config push LOCATION`)
   writes your settings there. For a server running the agent, the machine
   is enough (`agent://host`, `scs://host:7443`): the agent says where its
   settings live. Anywhere else, give the settings file or its folder, for
-  example `sftp://host/home/me/.config/nemesiscommander`. The previous file
+  example `sftp://host/home/me/.config/pairnox`. The previous file
   is kept as `config.toml.bak`; `--merge` keeps the other machine's
   bookmarks, connections and shortcuts.
-- **Get the settings of another machine…** (`nmc config pull LOCATION`)
+- **Get the settings of another machine…** (`pnxr config pull LOCATION`)
   reads them, then asks whether to replace yours or merge them.
 - **Export / Import** write and read a settings file anywhere, and **Edit
   the settings file** opens the TOML file in your editor; it is read again
   when you close the editor.
 
-`nmc config path` shows where the settings file is.
+`pnxr config path` shows where the settings file is.
 
 ## All shortcuts
 
@@ -1167,7 +1167,7 @@ on the settings screen (Ctrl+,).
 | Ctrl+F11, Ctrl+Shift+G | Git actions |
 | (F9 only) | Write a script with AI |
 
-| NemesisCommander | |
+| Pairnox | |
 |---|---|
 | F1 | Show main shortcuts |
 | F9 | Commands: find and run any command, give it a shortcut |

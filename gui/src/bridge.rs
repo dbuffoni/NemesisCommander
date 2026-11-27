@@ -1,7 +1,7 @@
 //! The `Commander` QML object: the shared [`App`] behind the window.
 //!
 //! QML forwards every key press and command choice here; after each change the
-//! object publishes the whole screen as JSON (see [`nmc_frontend::view`]) in
+//! object publishes the whole screen as JSON (see [`pnxr_frontend::view`]) in
 //! its `screen` property, which the QML files only draw. Background results
 //! (listings, transfer progress) arrive on a tokio runtime and are moved to
 //! the Qt thread in small batches.
@@ -14,10 +14,10 @@ use std::time::Duration;
 
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
-use nmc_app::AppContext;
-use nmc_frontend::view::Screen;
-use nmc_frontend::{App, AppEvent, External, KeyPress, SideId, resolve_location};
-use nmc_vfs::VfsPath;
+use pnxr_app::AppContext;
+use pnxr_frontend::view::Screen;
+use pnxr_frontend::{App, AppEvent, External, KeyPress, SideId, resolve_location};
+use pnxr_vfs::VfsPath;
 use tokio::runtime::Runtime;
 
 use crate::ffi::qobject;
@@ -91,7 +91,7 @@ fn initial_window_size() -> (i32, i32) {
     if let Some(size) = STARTUP.get().and_then(|s| s.size) {
         return size;
     }
-    nmc_config::AppPaths::detect().load_window_size().unwrap_or((1200, 760))
+    pnxr_config::AppPaths::detect().load_window_size().unwrap_or((1200, 760))
 }
 
 impl Default for CommanderRust {
@@ -178,7 +178,7 @@ impl qobject::Commander {
         if self.rust().test.is_some() || STARTUP.get().is_some_and(|s| s.size.is_some()) {
             return;
         }
-        let _ = nmc_config::AppPaths::detect().save_window_size(width, height);
+        let _ = pnxr_config::AppPaths::detect().save_window_size(width, height);
     }
 
     pub(crate) fn quit(mut self: Pin<&mut Self>) {
@@ -339,12 +339,12 @@ impl qobject::Commander {
                 self.as_mut().set_paste_seq(seq);
                 return self.refresh();
             }
-            match chord.parse::<nmc_config::KeyChord>() {
+            match chord.parse::<pnxr_config::KeyChord>() {
                 Ok(_) => {
                     let press = KeyPress::chord(&chord);
                     rust.with_app(|app| app.handle_key(press));
                 }
-                Err(e) => eprintln!("nmc-gui: self test: {e}"),
+                Err(e) => eprintln!("pnxr-gui: self test: {e}"),
             }
             return self.refresh();
         }
@@ -358,7 +358,7 @@ impl qobject::Commander {
     }
 
     fn fail(mut self: Pin<&mut Self>, message: &str) {
-        eprintln!("nmc-gui: {message}");
+        eprintln!("pnxr-gui: {message}");
         ENDED_EARLY.store(true, Ordering::SeqCst);
         self.as_mut().set_running(false);
     }
