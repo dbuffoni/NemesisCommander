@@ -460,6 +460,7 @@ impl App {
             then: Some(dialog),
             then_choose: None,
             back_to_settings: None,
+            back: false,
             logo: false,
             busy: false,
         }));

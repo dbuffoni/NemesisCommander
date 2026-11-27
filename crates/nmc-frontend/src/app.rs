@@ -1249,6 +1249,7 @@ impl App {
                             lines: text,
                             then: None,
                             then_choose: None,
+                            back: false,
                             back_to_settings: None,
                             logo: false,
                             busy: false,
@@ -1556,6 +1557,7 @@ impl App {
                         let mut help =
                             MessageDialog::new("Select by mask", crate::masks::help_lines());
                         help.then = Some(dialog);
+                        help.back = true;
                         return Some(Overlay::Message(help));
                     }
                 }
@@ -1575,6 +1577,7 @@ impl App {
                         let mut help =
                             MessageDialog::new("Multi-rename", crate::renames::help_lines());
                         help.then = Some(dialog);
+                        help.back = true;
                         return Some(Overlay::Message(help));
                     }
                 }
@@ -1583,6 +1586,7 @@ impl App {
                 {
                     let mut help = MessageDialog::new(&title, text);
                     help.then = Some(dialog);
+                    help.back = true;
                     return Some(Overlay::Message(help));
                 }
                 if dialog.purpose.testable()
@@ -1656,6 +1660,7 @@ impl App {
                 {
                     let mut help = MessageDialog::new(&title, text);
                     help.then_choose = Some(Box::new(dialog));
+                    help.back = true;
                     return Some(Overlay::Message(help));
                 }
                 match key {
@@ -1859,6 +1864,7 @@ impl App {
                 lines,
                 then: back,
                 then_choose: choose,
+                back: false,
                 back_to_settings: None,
                 logo: false,
                 busy: false,
@@ -2608,6 +2614,7 @@ impl App {
                     lines,
                     then: None,
                     then_choose: None,
+                    back: false,
                     back_to_settings: None,
                     logo: false,
                     busy: false,

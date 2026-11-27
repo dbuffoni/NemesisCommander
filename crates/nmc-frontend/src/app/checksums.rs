@@ -107,6 +107,7 @@ impl App {
                     then: None,
                     then_choose: Some(Box::new(list)),
                     back_to_settings: None,
+                    back: false,
                     logo: false,
                     busy: false,
                 }))),

@@ -672,6 +672,8 @@ pub struct MessageDialog {
     pub then: Option<InputDialog>,
     /// Or Enter goes back to this list.
     pub then_choose: Option<Box<ChooseDialog>>,
+    /// Enter goes back to the dialog it came from (a help window).
+    pub back: bool,
     /// Enter or Esc goes back to the settings screen.
     pub back_to_settings: Option<Box<crate::settings::SettingsScreen>>,
     /// The logo is shown above the text (About).
@@ -688,6 +690,7 @@ impl MessageDialog {
             lines,
             then: None,
             then_choose: None,
+            back: false,
             back_to_settings: None,
             logo: false,
             busy: false,
@@ -705,6 +708,9 @@ impl MessageDialog {
         let copy = if self.can_copy() { "c: copy the log    " } else { "" };
         if self.busy {
             return format!("Working…    {copy}Esc: close");
+        }
+        if self.back {
+            return format!("Enter: back    {copy}Esc: close");
         }
         match (&self.then, &self.then_choose) {
             (Some(next), _) => {
