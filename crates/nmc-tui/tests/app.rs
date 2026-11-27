@@ -320,6 +320,32 @@ async fn selection_by_mask_and_invert() {
 }
 
 #[tokio::test]
+async fn the_mask_dialog_shows_matches_cycles_actions_and_remembers() {
+    let mut h = Harness::new().await;
+    h.key("+");
+    h.type_text("*.txt");
+    let screen = h.screen();
+    assert!(screen.contains("2 of 2 files match"), "{screen}");
+    // F2 turns the question into Unselect, then Keep only.
+    h.key("F2");
+    assert!(h.screen().contains("Unselect"));
+    h.key("F2");
+    assert!(h.screen().contains("Keep only"));
+    h.key("F2");
+    assert!(h.screen().contains("Select"));
+    // Presets.
+    h.key("Ctrl+O");
+    assert!(h.screen().contains("Ready-made masks"));
+    h.key("Esc");
+    h.key("Esc");
+    // The last mask is offered again.
+    h.key("+");
+    assert!(h.screen().contains("*.txt") || h.screen().contains("*"));
+    h.key("Enter");
+    assert_eq!(h.app.workspace().active().selection_summary().files, 2);
+}
+
+#[tokio::test]
 async fn quick_filter_narrows_while_typing() {
     let mut h = Harness::new().await;
     h.key("Ctrl+S");

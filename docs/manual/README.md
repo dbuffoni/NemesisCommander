@@ -373,6 +373,10 @@ what the folder is for.
   **\*** inverts the selection, **Ctrl+A** selects everything. A mask that
   starts with `re:` is a regular expression (`re:^img-\d+\.jpe?g$`); the
   same works in the search, the quick filter and `nmc find --name`.
+  `has:text` matches names that contain the text. The question shows how
+  many files match while you type; **F2** switches between select, unselect
+  and keep only; **Ctrl+O** lists ready-made masks; **F1** explains the
+  syntax; the last mask is offered again.
 
 Selected entries are tinted, bold and marked at the left edge, so they stay
 visible under the cursor. The panel footer counts the selected files,

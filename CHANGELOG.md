@@ -28,6 +28,10 @@ Not published yet.
   source editors (installed ones first), a Git section, the help of the
   selected setting under the list (F1 for all of it), and Find also matches
   section titles and help.
+- Select by mask: the question shows how many files match while you type,
+  F2 switches between select, unselect and keep only, Ctrl+O lists ready-made
+  masks, F1 explains the syntax, `has:text` is a new mask, and the last mask
+  is remembered.
 - The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
   is not installed the system fonts are used.
 

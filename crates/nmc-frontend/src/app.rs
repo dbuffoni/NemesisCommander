@@ -399,6 +399,8 @@ pub struct App {
     visited: [Option<String>; 2],
     /// The last search, to save it.
     last_search: Option<nmc_config::SavedSearch>,
+    /// The mask of the last Select / Unselect, offered again.
+    last_mask: String,
     /// Items for the commands to act on instead of the panel's selection
     /// (the basket's).
     target_override: Option<Vec<VfsPath>>,
@@ -719,6 +721,7 @@ impl App {
             fonts: Vec::new(),
             visited: [None, None],
             last_search: None,
+            last_mask: String::new(),
             target_override: None,
             compare_marks: false,
             held: (false, false, false),
@@ -1523,6 +1526,38 @@ impl App {
                     self.ask_pack_format(paths.clone(), dialog.field.text());
                     return None;
                 }
+                if matches!(
+                    dialog.purpose,
+                    InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask
+                ) {
+                    if key == Some(Key::F(2)) {
+                        let next = match dialog.purpose {
+                            InputPurpose::SelectMask => InputPurpose::UnselectMask,
+                            InputPurpose::UnselectMask => InputPurpose::KeepMask,
+                            _ => InputPurpose::SelectMask,
+                        };
+                        let text = dialog.field.text().to_owned();
+                        self.ask_mask(next, Some(&text));
+                        return self.overlay.take();
+                    }
+                    if press.chord.ctrl && press.chord.key == Key::Char('o') {
+                        let rows = crate::masks::PRESETS
+                            .iter()
+                            .map(|(name, mask)| format!("{name:<28} {mask}"))
+                            .collect();
+                        return Some(Overlay::Choose(ChooseDialog::new(
+                            "Ready-made masks",
+                            rows,
+                            ChoosePurpose::MaskPresets(dialog.purpose.clone()),
+                        )));
+                    }
+                    if key == Some(Key::F(1)) {
+                        let mut help =
+                            MessageDialog::new("Select by mask", crate::masks::help_lines());
+                        help.then = Some(dialog);
+                        return Some(Overlay::Message(help));
+                    }
+                }
                 if dialog.purpose.testable()
                     && press.chord.ctrl
                     && press.chord.key == Key::Char('t')
@@ -1550,6 +1585,14 @@ impl App {
                         }
                         InputPurpose::QuickFilter => {
                             self.workspace.active_mut().set_filter(dialog.field.text())
+                        }
+                        InputPurpose::SelectMask
+                        | InputPurpose::UnselectMask
+                        | InputPurpose::KeepMask => {
+                            dialog.preview = crate::masks::preview(
+                                self.workspace.active().entries(),
+                                dialog.field.text(),
+                            )
                         }
                         // The new names follow the template as it is typed.
                         InputPurpose::MultiRename(paths) => {
@@ -1788,6 +1831,25 @@ impl App {
         });
     }
 
+    /// The question of Select, Unselect and Keep only: the last mask (or
+    /// `text`) in the field, and a live count of the files that match.
+    fn ask_mask(&mut self, purpose: InputPurpose, text: Option<&str>) {
+        let (title, verb) = match purpose {
+            InputPurpose::UnselectMask => ("Unselect", "Unselect files matching"),
+            InputPurpose::KeepMask => ("Keep only", "Keep selected only the files matching"),
+            _ => ("Select", "Select files matching"),
+        };
+        let initial = match text {
+            Some(text) => text.to_owned(),
+            None if self.last_mask.is_empty() => "*".to_owned(),
+            None => self.last_mask.clone(),
+        };
+        let prompt = format!("{verb} (*.jpg;*.png, has:text, re:REGEX; F1 explains):");
+        let mut dialog = InputDialog::new(title, &prompt, &initial, purpose);
+        dialog.preview = crate::masks::preview(self.workspace.active().entries(), &initial);
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
     fn ask(&mut self, title: &str, prompt: &str, initial: &str, purpose: InputPurpose) {
         self.overlay = Some(Overlay::Input(InputDialog::new(title, prompt, initial, purpose)));
     }
@@ -1963,15 +2025,8 @@ impl App {
                 self.ask("Save search", "Name for this search:", "", InputPurpose::NameSearch)
             }
             Action::ToggleSelect => self.workspace.active_mut().toggle_current(),
-            Action::SelectMask => self.ask(
-                "Select",
-                "Select files matching (e.g. *.jpg, or re:REGEX):",
-                "*",
-                InputPurpose::SelectMask,
-            ),
-            Action::UnselectMask => {
-                self.ask("Unselect", "Unselect files matching:", "*", InputPurpose::UnselectMask)
-            }
+            Action::SelectMask => self.ask_mask(InputPurpose::SelectMask, None),
+            Action::UnselectMask => self.ask_mask(InputPurpose::UnselectMask, None),
             Action::InvertSelect => self.workspace.active_mut().invert_selection(),
             Action::SelectAll => self.workspace.active_mut().select_all(),
             Action::Open => {
@@ -2351,10 +2406,20 @@ impl App {
                 }
                 Err(e) => self.set_error(e),
             },
-            InputPurpose::SelectMask | InputPurpose::UnselectMask => {
-                let select = dialog.purpose == InputPurpose::SelectMask;
+            InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => {
                 match Mask::parse(&text) {
-                    Ok(mask) => self.workspace.active_mut().select_mask(&mask, select, false),
+                    Ok(mask) => {
+                        self.last_mask = text.clone();
+                        let panel = self.workspace.active_mut();
+                        match dialog.purpose {
+                            InputPurpose::KeepMask => {
+                                panel.clear_selection();
+                                panel.select_mask(&mask, true, false);
+                            }
+                            InputPurpose::SelectMask => panel.select_mask(&mask, true, false),
+                            _ => panel.select_mask(&mask, false, false),
+                        }
+                    }
                     Err(e) => self.set_error(e.to_string()),
                 }
             }
@@ -2668,6 +2733,11 @@ impl App {
                     self.setting_typed(field, name);
                 }
                 self.overlay = Some(Overlay::Settings(*screen));
+            }
+            ChoosePurpose::MaskPresets(purpose) => {
+                if let Some((_, mask)) = crate::masks::PRESETS.get(cursor) {
+                    self.ask_mask(purpose, Some(mask));
+                }
             }
             ChoosePurpose::Checksums { base, sources, verify } => {
                 self.checksum_chosen(base, sources, verify, cursor);

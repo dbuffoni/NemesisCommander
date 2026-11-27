@@ -35,6 +35,7 @@ pub mod hints;
 pub mod icons;
 mod input;
 pub mod install;
+pub mod masks;
 pub mod preview;
 pub mod properties;
 pub mod searches;

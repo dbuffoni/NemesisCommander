@@ -174,6 +174,8 @@ pub enum InputPurpose {
     SelectMask,
     /// Unselect entries matching the typed mask.
     UnselectMask,
+    /// Keep selected only the entries matching the typed mask.
+    KeepMask,
     /// Filter the panel while typing.
     QuickFilter,
     /// Pack these items into the typed archive.
@@ -298,6 +300,7 @@ impl InputPurpose {
             InputPurpose::InstallServe => 10,
             purpose if purpose.is_address() => 8,
             InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 12,
+            InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => 6,
             _ => 1,
         }
     }
@@ -367,6 +370,13 @@ impl InputDialog {
     pub fn hint(&self) -> String {
         match &self.purpose {
             InputPurpose::PackInto(_) => crate::hints::question(&["Ctrl+O: more options"]),
+            InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => {
+                crate::hints::question(&[
+                    "F2: select / unselect / keep only",
+                    "Ctrl+O: presets",
+                    "F1: help",
+                ])
+            }
             InputPurpose::InstallServe => crate::hints::question(&["Ctrl+T: test", "F1: help"]),
             purpose if purpose.testable() => crate::hints::question(&["Ctrl+T: test"]),
             _ => crate::hints::question(&[]),
@@ -546,6 +556,9 @@ pub enum ChoosePurpose {
         /// The rows' font families.
         names: Vec<String>,
     },
+    /// Ready-made masks; the choice opens the selection question for
+    /// `purpose` with the mask in it.
+    MaskPresets(InputPurpose),
     /// Checksum files to write for `sources` (relative to `base`), and, when
     /// the cursor is on a checksum file, to check it (the first row).
     Checksums {
