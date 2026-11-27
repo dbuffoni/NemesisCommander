@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.6.1 (in progress)
+## 0.6.1
+
+Released 2026-11-27. This release also contains everything listed under 0.6.0
+below: 0.6.0 was never published on its own.
 
 Fixes from the visual check of the 0.6.0 window on the desktop.
 
@@ -20,7 +23,9 @@ Fixes from the visual check of the 0.6.0 window on the desktop.
   and Multi-rename names Ctrl+O and F1.
 - Image duplicates plugin 1.0.1: the report shows paths from the panel's folder.
 
-## 0.6.0 (in progress)
+## 0.6.0
+
+Not published on its own; included in 0.6.1.
 
 - **Internal: ports and adapters** (ADR 0061). Saved logins moved to a new crate
   `pnxr-secrets`; the interfaces reach terminals, Git, disks, SSH, S3 keys and
