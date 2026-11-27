@@ -113,7 +113,7 @@ async fn agent(_context: AppContext, _args: crate::cli::AgentArgs) -> CmdResult 
 fn desktop(args: crate::cli::DesktopArgs) -> CmdResult {
     use crate::cli::DesktopAction;
     let lines = match args.action {
-        DesktopAction::Install => pnxr_app::desktop::install(),
+        DesktopAction::Install { force } => pnxr_app::desktop::install(force),
         DesktopAction::Remove => pnxr_app::desktop::remove(),
     }?;
     for line in lines {

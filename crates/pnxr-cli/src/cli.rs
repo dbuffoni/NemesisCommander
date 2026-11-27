@@ -683,8 +683,13 @@ pub enum DesktopAction {
     /// Write the launcher (applications menu, dock) with the current icon.
     /// The icon is named by its content, so the desktop never shows an old
     /// one. Run it again after an update; the window also does it by itself
-    /// when its launcher exists.
-    Install,
+    /// when its launcher exists. A `pairnox.desktop` written by another tool
+    /// is not replaced unless you pass `--force`.
+    Install {
+        /// Replace a launcher that Pairnox did not write.
+        #[arg(long)]
+        force: bool,
+    },
     /// Remove the launcher and the icons written by `install`.
     Remove,
 }

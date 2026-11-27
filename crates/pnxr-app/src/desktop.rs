@@ -102,6 +102,14 @@ fn program() -> Result<String, String> {
     Err("cannot find the window program (pnxr-gui next to pnxr, or an AppImage)".into())
 }
 
+/// The launcher in the way: one that exists and was not written by this
+/// program (another tool's `pairnox.desktop`), which is left alone.
+fn foreign_launcher(data: &Path) -> Option<PathBuf> {
+    let file = launcher_path(data);
+    let text = std::fs::read_to_string(&file).ok()?;
+    (!text.contains(MARKER)).then_some(file)
+}
+
 fn install_in(data: &Path, exec: &str) -> Result<PathBuf, String> {
     let icon = write_icon(data).map_err(|e| format!("cannot write the icon: {e}"))?;
     let file = launcher_path(data);
@@ -111,9 +119,17 @@ fn install_in(data: &Path, exec: &str) -> Result<PathBuf, String> {
 }
 
 /// Writes the launcher and its icon for this user; returns what was done,
-/// as lines to print.
-pub fn install() -> Result<Vec<String>, String> {
+/// as lines to print. A `pairnox.desktop` that another tool wrote is not
+/// replaced unless `force` is set.
+pub fn install(force: bool) -> Result<Vec<String>, String> {
     let data = data_home().ok_or("cannot find the home folder")?;
+    if !force && let Some(other) = foreign_launcher(&data) {
+        return Err(format!(
+            "{} was not written by Pairnox (it has no Pairnox marker), so it is left alone. \
+             Rename or remove it and run this again, or use --force to replace it",
+            other.display()
+        ));
+    }
     let exec = program()?;
     let file = install_in(&data, &exec)?;
     refresh_caches(&data);
@@ -187,6 +203,18 @@ mod tests {
         assert!(icon.is_absolute() && icon.exists());
         assert!(icon.display().to_string().contains(&hash(ICON)));
         assert!(text.contains(MARKER));
+    }
+
+    #[test]
+    fn a_launcher_of_another_tool_is_not_overwritten_without_force() {
+        let data = tempfile::tempdir().unwrap();
+        let file = launcher_path(data.path());
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "[Desktop Entry]\nName=Other\nExec=other\n").unwrap();
+        assert_eq!(foreign_launcher(data.path()), Some(file.clone()));
+        install_in(data.path(), "pnxr-gui").unwrap();
+        assert_eq!(foreign_launcher(data.path()), None, "ours now, with the marker");
+        assert!(std::fs::read_to_string(&file).unwrap().contains(MARKER));
     }
 
     #[test]

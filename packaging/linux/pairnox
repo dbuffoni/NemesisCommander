@@ -14,4 +14,10 @@ if [ "${1:-}" = pnxr ]; then
     shift
     exec "$here/pnxr" "$@"
 fi
+# GNOME: Qt only dresses the title bar in the dark theme; with the desktop
+# portal as its platform theme the window follows the light/dark setting.
+# A theme the user chose (QT_QPA_PLATFORMTHEME) is left alone.
+case "${XDG_CURRENT_DESKTOP:-}" in
+    *GNOME*) : "${QT_QPA_PLATFORMTHEME:=xdgdesktopportal}"; export QT_QPA_PLATFORMTHEME ;;
+esac
 exec "$here/pnxr-gui" "$@"
