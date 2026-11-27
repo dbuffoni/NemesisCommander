@@ -36,6 +36,7 @@ pub mod icons;
 mod input;
 pub mod install;
 pub mod preview;
+pub mod properties;
 pub mod searches;
 pub mod settings;
 pub mod similar;

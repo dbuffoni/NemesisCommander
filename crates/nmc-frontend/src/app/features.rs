@@ -598,6 +598,7 @@ impl App {
             ChoosePurpose::Bookmarks(_) => self.bookmarks_key(dialog, press),
             ChoosePurpose::DiskUsage { .. } => self.disk_usage_key(dialog, press),
             ChoosePurpose::Font { .. } => self.fonts_key(dialog, press),
+            ChoosePurpose::Properties(_) => self.properties_key(dialog, press),
             ChoosePurpose::SavedSearches if key == Some(Key::Delete) => {
                 let index = dialog.cursor;
                 match self.context.config.searches.get(index) {

@@ -1031,8 +1031,9 @@ async fn checksums_and_properties() {
     assert!(message.lines.iter().any(|l| l.starts_with("BLAKE3")));
     h.key("Esc");
     h.key("Ctrl+E");
-    let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("properties") };
-    assert!(message.lines.iter().any(|l| l.contains("6 bytes")));
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("properties") };
+    assert!(dialog.items.iter().any(|l| l.contains("6 bytes")));
+    assert!(dialog.footer.contains("e or F2: edit"), "opens read-only: {}", dialog.footer);
 }
 
 #[cfg(unix)]
@@ -1042,12 +1043,28 @@ async fn permissions_can_be_changed() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
     h.key("Ctrl+E");
+    h.type_text("e"); // edit mode: the cursor is on the date
+    h.key("Down"); // the permissions as an octal number
     h.key("Enter");
-    h.type_text("mode=600");
+    for _ in 0..4 {
+        h.key("Backspace");
+    }
+    h.type_text("600");
     h.key("Enter");
+    h.key("Ctrl+S");
     h.settle().await;
     let mode = fs::metadata(h.path("left/a.txt")).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o600);
+
+    // A check box changes one permission and the octal number follows.
+    h.key("Ctrl+E");
+    h.type_text("e");
+    h.key("Down");
+    h.key("Down"); // owner read
+    h.key("Space");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("properties") };
+    assert!(dialog.items.iter().any(|l| l.contains("[ ] Owner: read")), "{:?}", dialog.items);
+    assert!(dialog.items.iter().any(|l| l.contains("(0200)")), "{:?}", dialog.items);
 }
 
 #[tokio::test]
@@ -1717,23 +1734,30 @@ async fn dates_and_permissions_change_on_the_selection() {
     use std::os::unix::fs::PermissionsExt;
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("F9");
-    h.type_text("dates and perm");
-    h.key("Enter");
-    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "asks what to change");
+    h.key("Shift+F4");
+    h.type_text("e");
+    h.key("Enter"); // the date
     for _ in 0..3 {
         h.key("Backspace");
     }
-    h.type_text("2001-02-03 04:05 mode=640");
+    h.type_text("2001-02-03 04:05");
     h.key("Enter");
+    h.key("Down");
+    h.key("Enter"); // the octal number
+    for _ in 0..4 {
+        h.key("Backspace");
+    }
+    h.type_text("640");
+    h.key("Enter");
+    h.key("Ctrl+S");
     h.settle().await;
     let meta = fs::metadata(h.path("left/a.txt")).unwrap();
     assert_eq!(meta.permissions().mode() & 0o7777, 0o640);
     let seconds = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
     assert!((981_000_000..982_000_000).contains(&seconds), "February 2001: {seconds}");
-    // A wrong word changes nothing and says why.
-    h.key("F9");
-    h.type_text("dates and perm");
+    // A wrong word is refused where it is typed, and says why.
+    h.key("Shift+F4");
+    h.type_text("e");
     h.key("Enter");
     for _ in 0..3 {
         h.key("Backspace");
@@ -1741,6 +1765,7 @@ async fn dates_and_permissions_change_on_the_selection() {
     h.type_text("yesterday");
     h.key("Enter");
     assert!(h.status().contains("Not understood"), "{}", h.status());
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "back in the dialog");
 }
 
 #[tokio::test]
@@ -3517,7 +3542,7 @@ async fn every_dialog_has_a_key_row_in_one_convention() {
         ("search", &["Ctrl+F2"]),
         ("drives", &["Shift+F1"]),
         ("bookmarks", &["Ctrl+D"]),
-        ("properties", &["Ctrl+E"]),
+        ("properties", &["Shift+F4"]),
         ("pack", &["Shift+F5"]),
         ("copy path", &["Ctrl+P"]),
         ("link", &["Shift+F7"]),

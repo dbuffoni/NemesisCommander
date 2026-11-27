@@ -228,8 +228,7 @@ default; the destination can be edited before you confirm.
 | F8 or Delete | Delete (to the recycle bin when there is one) |
 | Shift+F8 | Delete permanently |
 | Shift+F5 / Shift+F6 | Pack into an archive / unpack one |
-| Shift+F4 or Ctrl+E | Properties, and change the dates and permissions |
-| F9, Files/Change dates and permissions… | Set the date and time and the permissions of the selection (words: `2026-11-17`, `10:30`, `now`, `mode=644`, `-r` for the contents of folders) |
+| Shift+F4 or Ctrl+E | Properties: opens read-only; `e` or F2 turns on editing of the date (`now`, `2026-11-17`, `10:30`) and permissions (a check box for each, with the octal number), Ctrl+S applies |
 | Ctrl+Z | Undo the last rename, new folder or move (up to 50 steps, until you quit) |
 | Ctrl+F6 or Ctrl+K | Checksum (BLAKE3, XXH3 or SHA-256) |
 

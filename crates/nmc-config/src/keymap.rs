@@ -110,9 +110,8 @@ actions! {
     DeleteForever = "files.delete-forever", Files, false, "Delete permanently",       "Erase", ["Shift+F8", "Shift+Delete"];
     Pack          = "files.pack",           Files, true,  "Pack into archive…",       "Pack", ["Shift+F5"];
     Unpack        = "files.unpack",         Files, false, "Unpack archive…",          "Unpack", ["Shift+F6"];
-    Properties    = "files.properties",     Files, false, "Properties and permissions", "Props", ["Shift+F4", "Ctrl+E"];
+    Properties    = "files.properties",     Files, false, "Properties…", "Props", ["Shift+F4", "Ctrl+E"];
     Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", "Undo", ["Ctrl+Z"];
-    Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", "Attribs", [];
     Checksum      = "files.checksum",       Files, false, "Checksum",                 "Checksum", ["Ctrl+F6", "Ctrl+K"];
     CopyPath      = "files.copy-path",      Files, false, "Copy path to clipboard…",  "CopyPath", ["Ctrl+P"];
     Export        = "files.export",         Files, false, "Export listing…",          "Export", [];
@@ -248,13 +247,10 @@ impl Action {
                 "Unpacks the archive under the cursor into the other panel's folder. An encrypted archive asks for its password."
             }
             Action::Properties => {
-                "Shows size, dates, owner and permissions of the item under the cursor, and lets you change the permissions."
+                "Shows size, dates, owner and permissions of the selected items. It opens read-only; e or F2 turns on editing: a check box for each permission with the octal number kept in step, a checked date, and optionally everything inside folders. Ctrl+S applies."
             }
             Action::Undo => {
                 "Undoes the last rename, new folder or move, up to 50 steps in this session."
-            }
-            Action::Attributes => {
-                "Changes dates and permissions of the selected items: a date, a time, `now`, `mode=644`, `-r` for folders inside."
             }
             Action::Checksum => {
                 "Computes the checksum (SHA-256 and others) of the file under the cursor and can copy it or compare it with one you paste."
@@ -629,7 +625,13 @@ impl Keymap {
             by_action.insert(action, chords.collect());
         }
         let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
-        for (id, keys) in overrides {
+        // "Change dates and permissions" became part of Properties (0.5.0):
+        // a key given to it now opens Properties.
+        let mut overrides = overrides.clone();
+        if let Some(keys) = overrides.remove("files.attributes") {
+            overrides.entry("files.properties".to_owned()).or_insert(keys);
+        }
+        for (id, keys) in &overrides {
             let action = Action::from_id(id);
             if action.is_none() && RETIRED.contains(&id.as_str()) {
                 continue;

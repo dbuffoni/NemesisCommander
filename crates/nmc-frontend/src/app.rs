@@ -44,6 +44,7 @@ mod plugin_store;
 mod plugin_views;
 mod plugins;
 mod pointer;
+mod properties;
 mod settings_screen;
 mod terminal;
 
@@ -1486,6 +1487,18 @@ impl App {
             Overlay::Help => None,
             Overlay::Commands(palette) => self.palette_key(palette, press),
             Overlay::Input(mut dialog) => {
+                if let InputPurpose::PropsEdit { row, state } = &dialog.purpose {
+                    let (row, state) = (*row, (**state).clone());
+                    if is_esc {
+                        self.overlay = Some(Overlay::Choose(Self::properties_dialog(state, 0)));
+                        return self.overlay.take();
+                    }
+                    if key == Some(Key::Enter) {
+                        let text = dialog.field.text().to_owned();
+                        self.properties_typed(row, state, &text);
+                        return self.overlay.take();
+                    }
+                }
                 let back = dialog.purpose.settings_screen().cloned().map(Overlay::Settings);
                 if is_esc {
                     if let InputPurpose::ArchivePassword(container) = &dialog.purpose {
@@ -1921,20 +1934,7 @@ impl App {
                 self.ask("Pack", &prompt, &output, InputPurpose::PackInto(targets));
             }
             Action::Unpack => self.unpack_current(),
-            Action::Properties => self.show_properties(),
-            Action::Attributes if nothing => self.set_error("Nothing to change"),
-            Action::Attributes => {
-                let prompt = format!(
-                    "Change {} (date 2026-11-17, time 10:30, now, mode=644, -r):",
-                    Self::count_text(&targets)
-                );
-                self.ask(
-                    "Dates and permissions",
-                    &prompt,
-                    "now",
-                    InputPurpose::Attributes(targets),
-                );
-            }
+            Action::Properties => self.open_properties(),
             Action::Undo => self.undo_last(),
             Action::Checksum => self.checksum_current(),
             Action::CopyPath => self.ask_copy_path(),
@@ -2405,6 +2405,7 @@ impl App {
             InputPurpose::ExportTo { format, selection_only } => {
                 self.export_listing(format, selection_only, &text)
             }
+            InputPurpose::PropsEdit { .. } => {}
             InputPurpose::Attributes(paths) => {
                 let change = match nmc_ops::parse_change(&text, std::time::SystemTime::now()) {
                     Ok(change) => change,
@@ -2658,7 +2659,7 @@ impl App {
                 self.chosen_disk_tool(purpose, cursor);
             }
             // Enter is handled by its own key.
-            ChoosePurpose::DiskUsage { .. } => {}
+            ChoosePurpose::DiskUsage { .. } | ChoosePurpose::Properties(_) => {}
             ChoosePurpose::Font { field, screen, names } => {
                 if let Some(name) = names.get(cursor) {
                     self.setting_typed(field, name);
@@ -3057,65 +3058,6 @@ impl App {
                 focus: None,
             }
         });
-    }
-
-    fn show_properties(&mut self) {
-        let panel = self.workspace.active();
-        let Some(path) = panel.current_path() else { return };
-        let Some(entry) = panel.current_entry().cloned() else { return };
-        let kind = match entry.kind {
-            EntryKind::File => "file",
-            EntryKind::Directory => "folder",
-            EntryKind::Symlink => "symbolic link",
-            EntryKind::Other => "special file",
-        };
-        let mut lines = vec![
-            format!("Name:        {}", entry.name),
-            format!("Location:    {}", display_location(panel.location())),
-            format!("Type:        {kind}"),
-        ];
-        if !entry.is_dir() {
-            lines.push(format!(
-                "Size:        {} ({} bytes)",
-                nmc_panel::format::human_size(entry.size),
-                entry.size
-            ));
-        }
-        if let Some(modified) = entry.modified {
-            lines.push(format!("Modified:    {}", nmc_panel::format::local_time(modified)));
-        }
-        if let Some(target) = &entry.symlink_target {
-            lines.push(format!("Points to:   {target}"));
-        }
-        let mut suggestion = "now".to_owned();
-        if let Some(mode) = entry.permissions {
-            lines.push(format!(
-                "Permissions: {} ({:o})",
-                nmc_panel::format::permissions(mode),
-                mode & 0o7777
-            ));
-            suggestion = format!("mode={:o}", mode & 0o7777);
-        }
-        if let Some(flags) = entry.os_flags {
-            let names = nmc_vfs::os_flags::describe(flags);
-            let shown = if names.is_empty() { "none".to_owned() } else { names.join(", ") };
-            lines.push(format!("Attributes:  {shown}"));
-        }
-        let then = Some(InputDialog::new(
-            "Dates and permissions",
-            &format!("Change {} (date, time, now, mode=644, -r):", entry.name),
-            &suggestion,
-            InputPurpose::Attributes(vec![path.clone()]),
-        ));
-        self.overlay = Some(Overlay::Message(MessageDialog {
-            title: "Properties".into(),
-            lines,
-            then,
-            then_choose: None,
-            back_to_settings: None,
-            logo: false,
-            busy: false,
-        }));
     }
 
     fn checksum_current(&mut self) {

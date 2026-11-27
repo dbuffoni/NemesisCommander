@@ -237,6 +237,13 @@ pub enum InputPurpose {
     },
     /// Change the dates and permissions of these items.
     Attributes(Vec<VfsPath>),
+    /// A value typed for a row of the Properties dialog, which opens again.
+    PropsEdit {
+        /// The row.
+        row: crate::properties::PropRow,
+        /// The dialog's state.
+        state: Box<crate::properties::PropsState>,
+    },
     /// Write the settings to the typed file.
     ExportSettings,
     /// Read settings from the typed file.
@@ -537,6 +544,8 @@ pub enum ChoosePurpose {
         /// The rows' font families.
         names: Vec<String>,
     },
+    /// The Properties of the items: read-only until `e` or F2.
+    Properties(Box<crate::properties::PropsState>),
     /// An editor command for a setting; the first row is the default and the
     /// last lets the user type a command, back to the settings afterwards.
     Editor {
