@@ -56,7 +56,7 @@ mod terminal;
 pub use checksums::ChecksumJob;
 pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
-pub use plugins::{PluginChoice, plugin_short_name};
+pub use plugins::{PluginChoice, plugin_key_defaults, plugin_short_name};
 
 /// Results of background work, delivered to [`App::handle_event`].
 #[derive(Debug)]
@@ -689,10 +689,17 @@ impl App {
     /// a tokio runtime. Returns the receiver of background results, to be
     /// fed to [`handle_event`](Self::handle_event).
     pub fn new(
-        context: AppContext,
+        mut context: AppContext,
         left: VfsPath,
         right: VfsPath,
     ) -> Result<(App, mpsc::UnboundedReceiver<AppEvent>), String> {
+        // Plugins declare defaults for the keys of their commands.
+        context.config.plugin_defaults = plugin_key_defaults(&context.paths.plugins_dir());
+        if !context.config.plugin_defaults.is_empty() {
+            let (keymap, warnings) = Keymap::from_config(&context.config);
+            context.keymap = keymap;
+            context.warnings.extend(warnings);
+        }
         let (events, receiver) = mpsc::unbounded_channel();
         let resolver = Arc::new(DialogResolver { events: events.clone() });
         let manager = context.transfer_manager_with(Some(resolver)).map_err(|e| e.to_string())?;
@@ -717,8 +724,11 @@ impl App {
         let sort = SortSpec { key: panels.sort, descending: panels.descending };
         pnxr_panel::set_hide_ds_store(panels.hide_ds_store);
         let (workspace, requests) = Workspace::new(left, right, sort, panels.show_hidden);
-        let status = (!context.warnings.is_empty())
-            .then(|| Status { text: context.warnings.join("; "), error: true });
+        let status = if !context.warnings.is_empty() {
+            Some(Status { text: context.warnings.join("; "), error: true })
+        } else {
+            context.notes.first().map(|note| Status { text: note.clone(), error: false })
+        };
         let frecency =
             crate::frecency::Frecency::load(&context.paths.data_dir.join("frecency.json"));
         let mut app = App {
@@ -2208,6 +2218,8 @@ impl App {
     }
 
     fn apply_key_overrides(&mut self) {
+        self.context.config.plugin_defaults =
+            plugin_key_defaults(&self.context.paths.plugins_dir());
         let (keymap, warnings) = Keymap::from_config(&self.context.config);
         self.context.keymap = keymap;
         if !warnings.is_empty() {

@@ -269,6 +269,10 @@ impl App {
             }
             AppEvent::Conflict(pending) => self.conflicts.push_back(pending),
             AppEvent::TaskDone { message, error, reload, focus } => {
+                if !error && message.starts_with("Installed ") && message.contains(" It asks to") {
+                    // A plugin was installed: its default keys come into effect.
+                    self.apply_key_overrides();
+                }
                 if error {
                     self.set_error(message);
                 } else if !message.is_empty() {

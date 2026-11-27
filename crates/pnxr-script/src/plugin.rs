@@ -144,8 +144,20 @@ pub struct CommandSpec {
     pub category: Option<String>,
     /// A name of 1 to 8 characters for a function-key button (shown on the
     /// bottom bar and in the command list). Missing: the title's first word.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// `label` is another name for the same field. The user's own name for
+    /// the button (`[labels]` in the settings) wins.
+    #[serde(default, alias = "label", skip_serializing_if = "Option::is_none")]
     pub short: Option<String>,
+    /// A default standard shortcut, such as `Ctrl+Alt+D` (a function key
+    /// goes in `fkey`). Missing: none. The user's `[keys]` win, and a chord
+    /// that a built-in command or another plugin already has is not taken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shortcut: Option<String>,
+    /// A default function key: `F1` to `F10`, with `Shift+` or `Ctrl+`.
+    /// Missing: none. The user's `[fkeys]` win, and the same conflict rule
+    /// as for `shortcut` applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fkey: Option<String>,
 }
 
 /// The longest short name of a command.
@@ -188,6 +200,13 @@ impl Plugin {
                 )
             })
             .collect()
+    }
+}
+
+impl Manifest {
+    /// The id the settings use for the command `command` of this plugin.
+    pub fn command_key(&self, command: &str) -> String {
+        format!("plugin.{}.{command}", self.name)
     }
 }
 

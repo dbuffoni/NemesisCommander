@@ -458,6 +458,7 @@ impl App {
     pub(super) fn uninstall_plugin(&mut self, name: &str) {
         match live::uninstall(&self.context.paths, name) {
             Ok(()) => {
+                self.apply_key_overrides();
                 self.set_status(format!("Uninstalled {name}"));
                 self.open_plugin_store(false);
             }

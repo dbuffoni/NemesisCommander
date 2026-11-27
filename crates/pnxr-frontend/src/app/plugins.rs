@@ -353,6 +353,31 @@ pub fn plugin_short_name(dir: &Path, command: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The shortcut, function key and button name every installed plugin
+/// declares for its commands (the button name falls back to the short name
+/// derived from the title).
+#[cfg(feature = "scripting")]
+pub fn plugin_key_defaults(dir: &Path) -> Vec<pnxr_config::PluginKeyDefault> {
+    let (plugins, _) = pnxr_script::plugin::discover(dir);
+    plugins
+        .iter()
+        .flat_map(|plugin| {
+            plugin.manifest.commands.iter().map(|c| pnxr_config::PluginKeyDefault {
+                id: plugin.manifest.command_key(&c.id),
+                shortcut: c.shortcut.clone(),
+                fkey: c.fkey.clone(),
+                label: Some(c.short_name()),
+            })
+        })
+        .collect()
+}
+
+/// Without the plugin engine there are no plugin commands.
+#[cfg(not(feature = "scripting"))]
+pub fn plugin_key_defaults(_dir: &Path) -> Vec<pnxr_config::PluginKeyDefault> {
+    Vec::new()
+}
+
 /// Without the plugin engine there are no plugin commands.
 #[cfg(not(feature = "scripting"))]
 pub fn plugin_short_name(_dir: &Path, _command: &str) -> String {
@@ -682,5 +707,30 @@ mod rename_tests {
         assert_eq!(rule.find, "(\\d+)");
         assert_eq!(rule.case, pnxr_ops::CaseChange::Lower);
         assert!(super::rename_answer("oops").is_err());
+    }
+}
+
+#[cfg(all(test, feature = "scripting"))]
+mod default_key_tests {
+    use super::*;
+
+    /// The plugins that ship in the repository declare keys that fit with the
+    /// built-in ones.
+    #[test]
+    fn the_bundled_plugins_have_conflict_free_default_keys() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let mut config = pnxr_config::Config::default();
+        config.plugin_defaults = plugin_key_defaults(&dir);
+        let image = config
+            .plugin_defaults
+            .iter()
+            .find(|d| d.id == "plugin.image-duplicates.find")
+            .expect("image-duplicates declares its keys");
+        assert_eq!(image.fkey.as_deref(), Some("Shift+F9"));
+        let (keymap, warnings) = pnxr_config::Keymap::from_config(&config);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let ctrl_f7: pnxr_config::KeyChord = "Shift+F9".parse().unwrap();
+        assert_eq!(keymap.extra_for(&ctrl_f7), Some("plugin.image-duplicates.find"));
+        assert_eq!(keymap.bar_label(&ctrl_f7).as_deref(), Some("Similar"));
     }
 }

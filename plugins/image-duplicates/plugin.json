@@ -1,13 +1,13 @@
 {
   "name": "image-duplicates",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Finds similar and duplicate pictures: groups them, shows how alike they are in panel columns, and moves the extra copies aside",
   "author": "Pairnox",
   "license": "MIT",
-  "min_pnxr": "0.6.0",
+  "min_pnxr": "0.7.0",
   "main": "main.ts",
   "commands": [
-    { "id": "find", "title": "Find similar pictures", "short": "Similar", "category": "Tools" },
+    { "id": "find", "title": "Find similar pictures", "short": "Similar", "fkey": "Shift+F9", "shortcut": "Ctrl+Shift+I", "category": "Tools" },
     { "id": "move-extras", "title": "Move the extra copies of similar pictures aside", "short": "MoveDups", "category": "Tools" }
   ],
   "columns": [
