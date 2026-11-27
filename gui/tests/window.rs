@@ -144,7 +144,8 @@ fn the_command_list_finds_commands_and_takes_shortcuts() {
     assert_eq!(list["filter"], "sett");
     assert_eq!(list["categories"][0], "All");
     assert_eq!(list["rows"][0]["name"], "Pairnox/Settings…", "{list}");
-    assert_eq!(list["rows"][0]["keys"], "Ctrl+, / Ctrl+F1");
+    assert_eq!(list["rows"][0]["keys"], "Ctrl+,");
+    assert!(list["rows"][0]["fkey"].as_str().unwrap().starts_with("Ctrl+F1"), "{list}");
     let ran = run(home.path(), "F9 s e t t Enter", None);
     assert_eq!(ran.screen["overlay"]["kind"], "settings");
     // Files is the second category button; the shortcut is saved.

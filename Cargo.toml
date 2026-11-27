@@ -36,6 +36,7 @@ debug = false
 [workspace.dependencies]
 # internal crates
 pnxr-vfs = { path = "crates/pnxr-vfs" }
+pnxr-secrets = { path = "crates/pnxr-secrets" }
 pnxr-hash = { path = "crates/pnxr-hash" }
 pnxr-providers = { path = "crates/pnxr-providers", default-features = false }
 pnxr-ops = { path = "crates/pnxr-ops" }

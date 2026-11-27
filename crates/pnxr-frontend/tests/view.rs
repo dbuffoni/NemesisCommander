@@ -90,7 +90,9 @@ async fn dialogs_are_described() {
     assert_eq!(json["overlay"]["categories"][0], "All");
     let copy = json["overlay"]["rows"].as_array().unwrap().iter().find(|r| r["id"] == "files.copy");
     assert_eq!(copy.unwrap()["name"], "Files/Copy");
-    assert_eq!(copy.unwrap()["keys"], "F5");
+    // Copy has a function key and no shortcut: two columns.
+    assert_eq!(copy.unwrap()["keys"], "");
+    assert_eq!(copy.unwrap()["fkey"], "F5 Copy");
     assert_eq!(json["panels"][0]["rows"][0]["size"], "UP");
 }
 

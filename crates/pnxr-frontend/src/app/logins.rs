@@ -2,7 +2,8 @@
 //! (asked every time, or saved in the system keyring), and testing a connection
 //! while it is being created.
 
-use pnxr_vfs::{VfsPath, keyring, netrc};
+use pnxr_secrets::netrc;
+use pnxr_vfs::VfsPath;
 
 use super::App;
 use crate::connections::{
@@ -68,10 +69,14 @@ impl App {
             } else {
                 "Keep it as it is (use the login ~/.netrc already has)"
             };
-            let save = if keyring::available() {
-                format!("Save the login in {}", keyring::store_name())
+            let save = if self.context.secrets.available() {
+                format!("Save the login in {}", self.context.secrets.name())
             } else {
-                format!("Save the login in {} ({})", keyring::store_name(), keyring::missing())
+                format!(
+                    "Save the login in {} ({})",
+                    self.context.secrets.name(),
+                    self.context.secrets.missing()
+                )
             };
             vec![
                 "Ask for the password every time (kept in memory only)".to_owned(),
@@ -250,7 +255,7 @@ impl App {
         match next {
             S3Next::Open { uri, test } => {
                 let Ok(path) = VfsPath::parse(&uri) else { return };
-                pnxr_s3::settings::set_session(profile_of(&path).as_deref(), access, secret);
+                self.context.remotes.s3_set_session(profile_of(&path).as_deref(), access, secret);
                 self.context.registry.forget(&path);
                 if test {
                     self.test_connection(uri, None);
@@ -262,9 +267,9 @@ impl App {
             S3Next::Save { name, uri, replace } => {
                 let Ok(path) = VfsPath::parse(&uri) else { return };
                 let profile = profile_of(&path);
-                match pnxr_s3::settings::save(profile.as_deref(), access, secret) {
+                match self.context.remotes.s3_save(profile.as_deref(), access, secret) {
                     Ok(file) => {
-                        pnxr_s3::settings::set_session(profile.as_deref(), access, secret);
+                        self.context.remotes.s3_set_session(profile.as_deref(), access, secret);
                         self.store_connection(name, uri, replace, false);
                         self.set_status(format!("S3 keys saved in {}", file.display()));
                     }
@@ -278,18 +283,18 @@ impl App {
     fn save_login(&mut self, name: String, uri: String, replace: Replace, password: &str) {
         let Ok(path) = VfsPath::parse(&uri) else { return };
         let (host, user) = (host_of(&path), user_of(&path).unwrap_or_default());
-        match keyring::store(&host, &user, password) {
+        match self.context.secrets.store(&host, &user, password) {
             Ok(()) => {
                 netrc::set_session(&host, &user, password);
                 self.store_connection(name, uri, replace, false);
                 self.set_status(format!(
                     "Login of {user}@{host} saved in {}",
-                    keyring::store_name()
+                    self.context.secrets.name()
                 ));
             }
             Err(e) => self.set_error(format!(
                 "Cannot save the login in {}: {e}. Choose \"ask every time\" instead",
-                keyring::store_name()
+                self.context.secrets.name()
             )),
         }
     }
@@ -368,7 +373,7 @@ impl App {
     pub(super) fn open_connection(&mut self, uri: &str, path: VfsPath, test: bool) {
         if self.connection_asks(uri)
             && uses_keys(&path)
-            && !pnxr_s3::settings::has_session(profile_of(&path).as_deref())
+            && !self.context.remotes.s3_has_session(profile_of(&path).as_deref())
         {
             return self.ask_s3_keys(S3Next::Open { uri: uri.to_owned(), test });
         }
@@ -421,7 +426,11 @@ impl App {
                 if !typed.is_empty()
                     && let Ok(path) = VfsPath::parse(uri)
                 {
-                    pnxr_s3::settings::set_session(profile_of(&path).as_deref(), access, &typed);
+                    self.context.remotes.s3_set_session(
+                        profile_of(&path).as_deref(),
+                        access,
+                        &typed,
+                    );
                     self.context.registry.forget(&path);
                 }
                 (uri.clone(), String::new())

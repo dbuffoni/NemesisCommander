@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 pnxr-vfs.workspace = true
+pnxr-secrets.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true

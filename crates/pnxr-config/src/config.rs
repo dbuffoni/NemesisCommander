@@ -358,6 +358,12 @@ impl Connection {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// Which shortcut model the file was written for: absent is the first one
+    /// (every chord of a command in `keys`, function keys too), 2 splits
+    /// them into `keys` (shortcuts), `fkeys` and `labels` (ADR 0059).
+    /// Written whenever one of the three is not empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shortcut_model: Option<u32>,
     /// General behavior.
     pub general: GeneralSettings,
     /// Panels.
@@ -372,8 +378,15 @@ pub struct Config {
     pub plugins: PluginSettings,
     /// Git.
     pub git: GitSettings,
-    /// Shortcut overrides: action id → key chords (empty list unbinds).
+    /// Standard shortcut overrides: command id → chords that are not
+    /// function keys (empty list: no shortcut).
     pub keys: BTreeMap<String, Vec<String>>,
+    /// Function-key overrides: command id → `F5`, `Shift+F5` or `Ctrl+F5`
+    /// (empty text: no function key).
+    pub fkeys: BTreeMap<String, String>,
+    /// Short names of the bottom bar buttons: command id → name (at most
+    /// [`crate::keymap::LABEL_MAX`] characters).
+    pub labels: BTreeMap<String, String>,
     /// Bookmarks, in menu order.
     pub bookmarks: Vec<Bookmark>,
     /// Saved connections, in menu order.
@@ -386,13 +399,47 @@ impl Config {
     /// Parses settings from TOML text. Missing sections and keys get their
     /// defaults; unknown keys are an error (to catch typos).
     pub fn from_toml(text: &str, origin: &str) -> Result<Self, ConfigError> {
-        toml::from_str(text)
-            .map_err(|e| ConfigError::Parse { path: origin.to_owned(), message: e.to_string() })
+        let mut config: Config = toml::from_str(text)
+            .map_err(|e| ConfigError::Parse { path: origin.to_owned(), message: e.to_string() })?;
+        config.migrate_shortcuts();
+        Ok(config)
+    }
+
+    /// Moves a settings file written for the first shortcut model to the
+    /// current one: function-key chords go to `fkeys`, the others stay in
+    /// `keys`. Nothing is lost. Returns whether anything was converted.
+    pub fn migrate_shortcuts(&mut self) -> bool {
+        if self.shortcut_model.is_some() || self.keys.is_empty() {
+            return false;
+        }
+        self.shortcut_model = Some(crate::keymap::SHORTCUT_MODEL);
+        let mut changed = false;
+        for (id, list) in self.keys.iter_mut() {
+            let (functions, others): (Vec<_>, Vec<_>) =
+                list.iter().cloned().partition(|k| crate::keymap::is_function_key_text(k));
+            if functions.is_empty() && !crate::keymap::Action::from_id(id).is_some() {
+                continue;
+            }
+            // The first model replaced every chord of a command: no function
+            // key in the list meant no function key.
+            if !self.fkeys.contains_key(id) {
+                self.fkeys.insert(id.clone(), functions.first().cloned().unwrap_or_default());
+            }
+            if !functions.is_empty() || crate::keymap::Action::from_id(id).is_some() {
+                changed = true;
+            }
+            *list = others;
+        }
+        changed
     }
 
     /// Serializes to TOML.
     pub fn to_toml(&self) -> String {
-        toml::to_string_pretty(self).expect("settings are always representable as TOML")
+        let mut config = self.clone();
+        if !config.keys.is_empty() || !config.fkeys.is_empty() || !config.labels.is_empty() {
+            config.shortcut_model = Some(crate::keymap::SHORTCUT_MODEL);
+        }
+        toml::to_string_pretty(&config).expect("settings are always representable as TOML")
     }
 
     /// Loads `path`, or returns defaults if the file does not exist.
@@ -457,6 +504,53 @@ mod tests {
     }
 
     #[test]
+    fn settings_of_the_first_shortcut_model_are_migrated_without_losing_a_key() {
+        let old = r#"
+[keys]
+"files.copy" = ["Ctrl+C", "F5"]
+"files.move" = ["Ctrl+X"]
+"files.pack" = ["Shift+F5"]
+"plugin.tidy.run" = ["Ctrl+K"]
+"plugin.tidy.go" = ["Ctrl+F10"]
+"#;
+        let config = Config::from_toml(old, "test").unwrap();
+        assert_eq!(config.shortcut_model, Some(2));
+        assert_eq!(config.keys["files.copy"], ["Ctrl+C"]);
+        assert_eq!(config.fkeys["files.copy"], "F5");
+        // The first model replaced every chord: no function key meant none.
+        assert_eq!(config.keys["files.move"], ["Ctrl+X"]);
+        assert_eq!(config.fkeys["files.move"], "");
+        assert_eq!(config.keys["files.pack"], Vec::<String>::new());
+        assert_eq!(config.fkeys["files.pack"], "Shift+F5");
+        assert_eq!(config.keys["plugin.tidy.run"], ["Ctrl+K"]);
+        assert!(!config.fkeys.contains_key("plugin.tidy.run"));
+        assert_eq!(config.fkeys["plugin.tidy.go"], "Ctrl+F10");
+        // The behaviour is the same as before.
+        let (keymap, warnings) = crate::Keymap::from_config(&config);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.action_for(&"F5".parse().unwrap()), Some(crate::Action::Copy));
+        assert_eq!(keymap.action_for(&"Ctrl+X".parse().unwrap()), Some(crate::Action::Move));
+        assert_eq!(keymap.fkey_for_id("files.move"), None);
+        // It is written in the new shape and read back unchanged.
+        let again = Config::from_toml(&config.to_toml(), "test").unwrap();
+        assert_eq!(again, config);
+        assert_eq!(again.fkeys["files.move"], "", "still no function key after the second load");
+        let mut twice = config.clone();
+        assert!(!twice.migrate_shortcuts(), "a second migration changes nothing");
+    }
+
+    #[test]
+    fn the_new_shortcut_sections_round_trip() {
+        let mut config = Config::default();
+        config.fkeys.insert("files.copy".into(), "Ctrl+F5".into());
+        config.labels.insert("files.copy".into(), "Duplicate".into());
+        let back = Config::from_toml(&config.to_toml(), "test").unwrap();
+        assert_eq!(back.fkeys, config.fkeys);
+        assert_eq!(back.labels, config.labels);
+        assert_eq!(back.shortcut_model, Some(2));
+    }
+
+    #[test]
     fn unknown_keys_are_reported_with_location() {
         let err = Config::from_toml("[panels]\nshow_hiden = true\n", "my.toml").unwrap_err();
         let message = err.to_string();
@@ -468,6 +562,7 @@ mod tests {
     fn roundtrip_through_toml_and_disk() {
         let mut config = Config::default();
         config.transfers.verify = VerifyMode::Full;
+        config.shortcut_model = Some(2);
         config.keys.insert("panel.copy".into(), vec!["Ctrl+C".into()]);
         config.bookmarks.push(Bookmark {
             name: "logs".into(),

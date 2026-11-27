@@ -40,6 +40,7 @@
     stat: (path) => ops.op_pnxr_stat(stringArgument("path", path)),
     exists: (path) => ops.op_pnxr_exists(stringArgument("path", path)),
     readText: (path) => ops.op_pnxr_read_text(stringArgument("path", path)),
+    imageHash: (path) => ops.op_pnxr_image_hash(stringArgument("path", path)),
     writeText: (path, content) =>
       ops.op_pnxr_write_text(stringArgument("path", path), stringArgument("text", content)),
     writeBytes: (path, bytes) => {

@@ -154,6 +154,7 @@ actions! {
     SortExtension = "view.sort-ext",        View, false, "Sort by extension",         "SortExt", ["Ctrl+2"];
     SortModified  = "view.sort-date",       View, false, "Sort by date",              "SortDate", ["Ctrl+3"];
     QuickView     = "view.quick-view",      View, false, "Quick view in other panel", "QuickVw", ["Shift+F3", "Ctrl+Q"];
+    BarRow        = "view.bar-row",         View, false, "Bottom bar: next row (Shift / Ctrl)", "BarRow", ["Ctrl+F"];
     // Tools
     Search        = "tools.search",         Tools, true,  "Search…",                  "Search", ["Ctrl+F2"];
     Compare       = "tools.compare",        Tools, false, "Compare files / folders",  "Compare", ["Ctrl+F3"];
@@ -164,7 +165,6 @@ actions! {
     DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", "DiskUse", ["Ctrl+F7"];
     Git           = "tools.git",            Tools, false, "Git actions…",             "Git", ["Ctrl+F11", "Ctrl+Shift+G"];
     Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    "Disks", ["Ctrl+F8"];
-    SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    "Similar", [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          "Searches", [];
     SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    "SaveSrch", [];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           "Queue", ["Ctrl+J"];
@@ -326,6 +326,9 @@ impl Action {
             Action::SortModified => {
                 "Sorts by modification date; pressing it again reverses the order."
             }
+            Action::BarRow => {
+                "Switches the bottom bar between its three rows: F1-F10, Shift+F1-F10 and Ctrl+F1-F10. Terminals do not report a held Shift or Ctrl, so this key stands in for holding it; the window also switches while the key is held."
+            }
             Action::QuickView => {
                 "Shows a preview of the file under the cursor in the other panel. Shift+arrows and Shift+PgUp/PgDn scroll it."
             }
@@ -351,9 +354,6 @@ impl Action {
                 "Basic Git actions on the repository of this folder: stage and unstage, diff, commit, discard changes (asks first), switch branch, log, pull and push. Works on the selected files; needs git installed."
             }
             Action::Disks => "Lists the disks and partitions with size, type, file system and use.",
-            Action::SimilarImages => {
-                "Finds pictures that look alike, even when resized or saved in another format."
-            }
             Action::SavedSearches => "Lists the searches you saved and runs the one you choose.",
             Action::SaveSearch => "Saves the last search under a name so you can run it again.",
             Action::Jobs => {
@@ -593,14 +593,40 @@ pub fn is_extra_command(id: &str) -> bool {
     EXTRA_PREFIXES.iter().any(|prefix| id.starts_with(prefix))
 }
 
+/// The shortcut model written by this version (ADR 0059): standard shortcuts
+/// in `keys`, one function key per command in `fkeys`, short names in `labels`.
+pub const SHORTCUT_MODEL: u32 = 2;
+
+/// The longest short name of a function key, in characters.
+pub const LABEL_MAX: usize = 12;
+
+/// Whether `chord` is a function key of the bottom bar: F1 to F10, bare or
+/// with Shift or Ctrl (never Alt).
+pub fn is_function_key(chord: &KeyChord) -> bool {
+    matches!(chord.key, Key::F(n) if (1..=10).contains(&n))
+        && !chord.alt
+        && !(chord.ctrl && chord.shift)
+}
+
+/// [`is_function_key`] for chord text; text that is no chord is not one.
+pub fn is_function_key_text(text: &str) -> bool {
+    text.parse::<KeyChord>().is_ok_and(|c| is_function_key(&c))
+}
+
 /// The effective key bindings: defaults plus user overrides.
 #[derive(Debug, Clone)]
 pub struct Keymap {
+    /// Every chord that runs a built-in action (shortcuts and function keys).
     by_chord: HashMap<KeyChord, Action>,
+    /// The chords of an action: its function key first, then its shortcuts.
     by_action: BTreeMap<Action, Vec<KeyChord>>,
     /// Plugin and script commands, by id.
     extra_by_chord: HashMap<KeyChord, String>,
     by_extra: BTreeMap<String, Vec<KeyChord>>,
+    /// The function key of each command (built-in or extra), by id.
+    fkey_by_id: BTreeMap<String, KeyChord>,
+    /// The custom short names, by id.
+    labels: BTreeMap<String, String>,
 }
 
 impl Default for Keymap {
@@ -613,57 +639,214 @@ impl Default for Keymap {
 /// one is not a mistake, so no warning is made.
 const RETIRED: &[&str] = &["view.folder-sizes"];
 
-impl Keymap {
-    /// Builds the keymap from defaults and `overrides` (action id → chords).
-    /// Overriding an action replaces all its default chords; a chord given to
-    /// one action is taken away from any other. Problems (unknown actions,
-    /// bad chords) are returned as warnings and otherwise ignored.
-    pub fn with_overrides(overrides: &BTreeMap<String, Vec<String>>) -> (Keymap, Vec<String>) {
-        let mut warnings = Vec::new();
-        let mut by_action: BTreeMap<Action, Vec<KeyChord>> = BTreeMap::new();
-        for &action in Action::ALL {
-            let chords = action.default_keys().iter().map(|k| {
-                k.parse::<KeyChord>()
-                    .unwrap_or_else(|_| panic!("built-in key {k:?} for {} must parse", action.id()))
-            });
-            by_action.insert(action, chords.collect());
+/// Commands that moved to a plugin: a key given to the old id is given to the
+/// plugin's command, and works once the plugin is installed (ADR 0060).
+pub const MOVED_TO_PLUGIN: &[(&str, &str)] =
+    &[("tools.similar-images", "plugin.image-duplicates.find")];
+
+/// The id a command has now (`id` itself unless it moved to a plugin).
+pub fn current_id(id: &str) -> &str {
+    MOVED_TO_PLUGIN.iter().find(|(old, _)| *old == id).map_or(id, |(_, new)| new)
+}
+
+/// A command's two slots while the keymap is built.
+#[derive(Debug, Clone, Default)]
+struct Slots {
+    shortcuts: Vec<KeyChord>,
+    fkey: Option<KeyChord>,
+}
+
+impl Slots {
+    fn drop_chord(&mut self, chord: &KeyChord) {
+        self.shortcuts.retain(|c| c != chord);
+        if self.fkey.as_ref() == Some(chord) {
+            self.fkey = None;
         }
-        let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
+    }
+}
+
+impl Action {
+    /// The built-in standard shortcuts: the default chords that are not
+    /// function keys.
+    pub fn default_shortcuts(self) -> Vec<KeyChord> {
+        self.default_keys()
+            .iter()
+            .filter(|k| !is_function_key_text(k))
+            .map(|k| k.parse().unwrap_or_else(|_| panic!("built-in key {k:?} must parse")))
+            .collect()
+    }
+
+    /// The built-in function key, if it has one.
+    pub fn default_fkey(self) -> Option<KeyChord> {
+        self.default_keys().iter().find(|k| is_function_key_text(k)).and_then(|k| k.parse().ok())
+    }
+}
+
+impl Keymap {
+    /// Builds the keymap from the defaults and the `keys` overrides alone
+    /// (command id → standard shortcuts).
+    pub fn with_overrides(overrides: &BTreeMap<String, Vec<String>>) -> (Keymap, Vec<String>) {
+        Keymap::build(overrides, &BTreeMap::new(), &BTreeMap::new())
+    }
+
+    /// Builds the keymap from the defaults and the overrides of `config`.
+    pub fn from_config(config: &crate::Config) -> (Keymap, Vec<String>) {
+        Keymap::build(&config.keys, &config.fkeys, &config.labels)
+    }
+
+    /// Builds the keymap. `keys` replace the shortcuts of a command, `fkeys`
+    /// its function key (empty text: none) and `labels` its short name. A
+    /// chord given to one command is taken away from any other. Problems
+    /// (unknown commands, bad chords) are returned as warnings and otherwise
+    /// ignored.
+    pub fn build(
+        keys: &BTreeMap<String, Vec<String>>,
+        fkeys: &BTreeMap<String, String>,
+        labels: &BTreeMap<String, String>,
+    ) -> (Keymap, Vec<String>) {
+        let mut warnings = Vec::new();
+        let mut slots: BTreeMap<String, Slots> = BTreeMap::new();
+        for &action in Action::ALL {
+            slots.insert(
+                action.id().to_owned(),
+                Slots { shortcuts: action.default_shortcuts(), fkey: action.default_fkey() },
+            );
+        }
         // "Change dates and permissions" became part of Properties (0.5.0):
         // a key given to it now opens Properties.
-        let mut overrides = overrides.clone();
-        if let Some(keys) = overrides.remove("files.attributes") {
-            overrides.entry("files.properties".to_owned()).or_insert(keys);
+        let mut keys = keys.clone();
+        if let Some(list) = keys.remove("files.attributes") {
+            keys.entry("files.properties".to_owned()).or_insert(list);
         }
-        for (id, keys) in &overrides {
+        // Keys of a command that moved to a plugin follow it.
+        let rename = |map: &mut BTreeMap<String, Vec<String>>| {
+            for (old, new) in MOVED_TO_PLUGIN {
+                if let Some(list) = map.remove(*old) {
+                    map.entry((*new).to_owned()).or_insert(list);
+                }
+            }
+        };
+        rename(&mut keys);
+        let mut fkeys = fkeys.clone();
+        let mut labels = labels.clone();
+        for (old, new) in MOVED_TO_PLUGIN {
+            if let Some(v) = fkeys.remove(*old) {
+                fkeys.entry((*new).to_owned()).or_insert(v);
+            }
+            if let Some(v) = labels.remove(*old) {
+                labels.entry((*new).to_owned()).or_insert(v);
+            }
+        }
+        let (fkeys, labels) = (&fkeys, &labels);
+        let known = |id: &str, warnings: &mut Vec<String>| {
             let action = Action::from_id(id);
-            if action.is_none() && RETIRED.contains(&id.as_str()) {
-                continue;
+            if action.is_none() && RETIRED.contains(&id) {
+                return false;
             }
             if action.is_none() && !is_extra_command(id) {
                 warnings.push(format!("unknown action {id:?} in [keys]"));
+                return false;
+            }
+            true
+        };
+        // What each overridden command ends up with, applied in id order.
+        let mut overridden: BTreeMap<String, Slots> = BTreeMap::new();
+        for (id, list) in &keys {
+            if !known(id, &mut warnings) {
                 continue;
             }
-            let mut chords = Vec::new();
-            for key in keys {
+            let entry = overridden.entry(id.clone()).or_default();
+            for key in list {
                 match key.parse::<KeyChord>() {
-                    Ok(chord) => chords.push(chord),
+                    // A function key in the shortcut list: accepted when the
+                    // command has no `fkeys` entry of its own.
+                    Ok(chord) if is_function_key(&chord) => {
+                        if !fkeys.contains_key(id) && entry.fkey.is_none() {
+                            entry.fkey = Some(chord);
+                        } else {
+                            warnings.push(format!(
+                                "{chord} is a function key: it belongs in [fkeys], not in [keys] ({id})"
+                            ));
+                        }
+                    }
+                    Ok(chord) => entry.shortcuts.push(chord),
                     Err(e) => warnings.push(format!("{e} for {id}")),
                 }
             }
-            for other in by_action.values_mut().chain(by_extra.values_mut()) {
-                other.retain(|c| !chords.contains(c));
+        }
+        for (id, text) in fkeys {
+            if !known(id, &mut warnings) {
+                continue;
             }
-            match action {
-                Some(action) => {
-                    by_action.insert(action, chords);
-                }
-                None => {
-                    by_extra.insert(id.clone(), chords);
+            let entry = overridden.entry(id.clone()).or_default();
+            entry.fkey = None;
+            if text.trim().is_empty() {
+                continue;
+            }
+            match text.parse::<KeyChord>() {
+                Ok(chord) if is_function_key(&chord) => entry.fkey = Some(chord),
+                Ok(chord) => warnings.push(format!(
+                    "{chord} cannot be a function key (F1 to F10, with Shift or Ctrl) for {id}"
+                )),
+                Err(e) => warnings.push(format!("{e} for {id}")),
+            }
+        }
+        // A shortcut override keeps the function key of the defaults, and the
+        // other way round.
+        for (id, entry) in &mut overridden {
+            let base = slots.get(id).cloned().unwrap_or_default();
+            if !keys.contains_key(id) {
+                entry.shortcuts = base.shortcuts;
+            }
+            if !fkeys.contains_key(id) && entry.fkey.is_none() {
+                entry.fkey = base.fkey;
+            }
+        }
+        for (id, entry) in &overridden {
+            let mine: Vec<KeyChord> = entry.shortcuts.iter().copied().chain(entry.fkey).collect();
+            for (other, slot) in slots.iter_mut() {
+                if other != id {
+                    for chord in &mine {
+                        slot.drop_chord(chord);
+                    }
                 }
             }
         }
-        by_extra.retain(|_, chords| !chords.is_empty());
+        for (id, entry) in overridden {
+            slots.insert(id, entry);
+        }
+        let mut by_action: BTreeMap<Action, Vec<KeyChord>> = BTreeMap::new();
+        let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
+        let mut fkey_by_id = BTreeMap::new();
+        for (id, slot) in &slots {
+            let chords: Vec<KeyChord> =
+                slot.fkey.iter().copied().chain(slot.shortcuts.iter().copied()).collect();
+            if let Some(chord) = slot.fkey {
+                fkey_by_id.insert(id.clone(), chord);
+            }
+            match Action::from_id(id) {
+                Some(action) => {
+                    by_action.insert(action, chords);
+                }
+                None if !chords.is_empty() => {
+                    by_extra.insert(id.clone(), chords);
+                }
+                None => {}
+            }
+        }
+        let mut short_names = BTreeMap::new();
+        for (id, name) in labels {
+            let name = name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            if name.chars().count() > LABEL_MAX {
+                warnings
+                    .push(format!("the short name of {id} is longer than {LABEL_MAX} characters"));
+                continue;
+            }
+            short_names.insert(id.clone(), name.to_owned());
+        }
         let extra_by_chord = by_extra
             .iter()
             .flat_map(|(id, chords)| chords.iter().map(move |&chord| (chord, id.clone())))
@@ -680,7 +863,49 @@ impl Keymap {
                 }
             }
         }
-        (Keymap { by_chord, by_action, extra_by_chord, by_extra }, warnings)
+        (
+            Keymap {
+                by_chord,
+                by_action,
+                extra_by_chord,
+                by_extra,
+                fkey_by_id,
+                labels: short_names,
+            },
+            warnings,
+        )
+    }
+
+    /// The standard shortcuts of the command `id` (no function key).
+    pub fn shortcuts_for_id(&self, id: &str) -> Vec<KeyChord> {
+        self.chords_for_id(id).iter().copied().filter(|c| !is_function_key(c)).collect()
+    }
+
+    /// The function key of the command `id`, if it has one.
+    pub fn fkey_for_id(&self, id: &str) -> Option<KeyChord> {
+        self.fkey_by_id.get(id).copied()
+    }
+
+    /// The short name the bottom bar shows for `id`: the custom one, else the
+    /// command's built-in name (extra commands have none: `None`).
+    pub fn label_for_id(&self, id: &str) -> Option<String> {
+        self.labels.get(id).cloned().or_else(|| Action::from_id(id).map(|a| a.short().to_owned()))
+    }
+
+    /// Whether `id` has a short name of its own (not the built-in one).
+    pub fn has_custom_label(&self, id: &str) -> bool {
+        self.labels.contains_key(id)
+    }
+
+    /// What the bottom bar says for the function key `chord`: the label of
+    /// the command bound to it (empty names are never returned).
+    pub fn bar_label(&self, chord: &KeyChord) -> Option<String> {
+        let id = self.command_for(chord)?;
+        if self.fkey_for_id(&id) != Some(*chord) {
+            return None;
+        }
+        self.label_for_id(&id)
+            .or_else(|| Some(id.rsplit('.').next().unwrap_or(&id).chars().take(8).collect()))
     }
 
     /// The plugin or script command bound to `chord`, if any.
@@ -900,6 +1125,158 @@ mod tests {
         assert!(keymap.chords_for(Action::View).is_empty());
         assert_eq!(keymap.shortcut_text(Action::Copy), "F3");
         assert_eq!(warnings.len(), 2, "{warnings:?}");
-        assert!(keymap.chords_for(Action::Move).is_empty(), "invalid override unbinds");
+        // An invalid shortcut list leaves no shortcut, and the function key stays.
+        assert_eq!(keymap.chords_for(Action::Move), [chord("F6")]);
+    }
+
+    #[test]
+    fn a_command_has_at_most_one_function_key_by_default() {
+        for action in Action::ALL {
+            let functions =
+                action.default_keys().iter().filter(|k| is_function_key_text(k)).count();
+            assert!(functions <= 1, "{} has {functions} function keys", action.id());
+            assert_eq!(
+                action.default_shortcuts().len() + functions,
+                action.default_keys().len(),
+                "{}",
+                action.id()
+            );
+        }
+        assert_eq!(Action::Rename.default_fkey(), Some(chord("F2")));
+        assert_eq!(Action::Properties.default_shortcuts(), [chord("Ctrl+E")]);
+        assert_eq!(Action::Properties.default_fkey(), Some(chord("Shift+F4")));
+    }
+
+    #[test]
+    fn function_keys_are_f1_to_f10_without_alt() {
+        for yes in ["F1", "F10", "Shift+F5", "Ctrl+F9"] {
+            assert!(is_function_key(&chord(yes)), "{yes}");
+        }
+        // Ctrl+Shift+F5 is no slot of the bar: it counts as a shortcut chord.
+        for no in ["F11", "Ctrl+Shift+F5", "Alt+F4", "Ctrl+E", "Delete"] {
+            assert!(!is_function_key(&chord(no)), "{no}");
+        }
+    }
+
+    fn built(
+        keys: &[(&str, &[&str])],
+        fkeys: &[(&str, &str)],
+        labels: &[(&str, &str)],
+    ) -> (Keymap, Vec<String>) {
+        Keymap::build(
+            &keys
+                .iter()
+                .map(|(id, list)| {
+                    ((*id).to_owned(), list.iter().map(|k| (*k).to_owned()).collect())
+                })
+                .collect(),
+            &fkeys.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
+            &labels.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
+        )
+    }
+
+    #[test]
+    fn shortcuts_and_the_function_key_are_independent() {
+        // Copy gets a shortcut: its F5 stays.
+        let (keymap, warnings) = built(&[("files.copy", &["Ctrl+C"])], &[], &[]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.fkey_for_id("files.copy"), Some(chord("F5")));
+        assert_eq!(keymap.shortcuts_for_id("files.copy"), [chord("Ctrl+C")]);
+        // Copy gets another function key: its shortcuts stay.
+        let (keymap, _) = built(&[], &[("files.properties", "Ctrl+F4")], &[]);
+        assert_eq!(keymap.fkey_for_id("files.properties"), Some(chord("Ctrl+F4")));
+        assert_eq!(keymap.shortcuts_for_id("files.properties"), [chord("Ctrl+E")]);
+        assert_eq!(keymap.action_for(&chord("Shift+F4")), None, "the old key is free");
+        // An empty text removes the function key only.
+        let (keymap, _) = built(&[], &[("files.copy", "")], &[]);
+        assert_eq!(keymap.fkey_for_id("files.copy"), None);
+        assert_eq!(keymap.action_for(&chord("F5")), None);
+    }
+
+    #[test]
+    fn a_function_key_taken_by_another_command_is_removed_from_its_owner() {
+        let (keymap, warnings) = built(&[], &[("files.copy", "F8")], &[]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.action_for(&chord("F8")), Some(Action::Copy));
+        assert_eq!(keymap.fkey_for_id("files.delete"), None);
+        assert_eq!(
+            keymap.shortcuts_for_id("files.delete"),
+            [chord("Delete")],
+            "its shortcut stays"
+        );
+        assert_eq!(keymap.bar_label(&chord("F8")).as_deref(), Some("Copy"));
+        assert_eq!(keymap.bar_label(&chord("F5")), None);
+    }
+
+    #[test]
+    fn a_shortcut_taken_by_another_command_is_removed_from_its_owner() {
+        let (keymap, _) = built(&[("files.copy", &["Ctrl+E"])], &[], &[]);
+        assert_eq!(keymap.action_for(&chord("Ctrl+E")), Some(Action::Copy));
+        assert_eq!(keymap.shortcuts_for_id("files.properties"), Vec::<KeyChord>::new());
+        assert_eq!(keymap.fkey_for_id("files.properties"), Some(chord("Shift+F4")));
+    }
+
+    #[test]
+    fn bad_function_keys_and_labels_are_warned_about_and_ignored() {
+        let (keymap, warnings) = built(
+            &[],
+            &[("files.copy", "Alt+F5"), ("files.move", "Ctrl+Shift+F6"), ("files.view", "F11")],
+            &[("files.copy", "A name that is too long"), ("files.move", "  ")],
+        );
+        assert_eq!(warnings.len(), 4, "{warnings:?}");
+        assert_eq!(keymap.fkey_for_id("files.copy"), None);
+        assert_eq!(keymap.label_for_id("files.copy").as_deref(), Some("Copy"));
+        assert_eq!(keymap.label_for_id("files.move").as_deref(), Some("Move"));
+    }
+
+    #[test]
+    fn a_short_name_changes_the_bar_label_and_the_default_comes_back_without_it() {
+        let (keymap, _) = built(&[], &[], &[("files.copy", "Duplicate")]);
+        assert_eq!(keymap.bar_label(&chord("F5")).as_deref(), Some("Duplicate"));
+        assert!(keymap.has_custom_label("files.copy"));
+        let (keymap, _) = built(&[], &[], &[]);
+        assert_eq!(keymap.bar_label(&chord("F5")).as_deref(), Some("Copy"));
+        assert!(!keymap.has_custom_label("files.copy"));
+    }
+
+    #[test]
+    fn plugin_commands_can_have_a_function_key_and_a_name() {
+        let (keymap, warnings) = built(
+            &[("plugin.tidy.run", &["Ctrl+K"])],
+            &[("plugin.tidy.run", "Ctrl+F10")],
+            &[("plugin.tidy.run", "Tidy")],
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.extra_for(&chord("Ctrl+F10")), Some("plugin.tidy.run"));
+        assert_eq!(keymap.bar_label(&chord("Ctrl+F10")).as_deref(), Some("Tidy"));
+        assert_eq!(keymap.shortcuts_for_id("plugin.tidy.run"), [chord("Ctrl+K")]);
+    }
+
+    #[test]
+    fn keys_of_a_command_that_moved_to_a_plugin_follow_it() {
+        let (keymap, warnings) = built(
+            &[("tools.similar-images", &["Ctrl+Alt+S"])],
+            &[("tools.similar-images", "Ctrl+F10")],
+            &[("tools.similar-images", "Pics")],
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.extra_for(&chord("Ctrl+Alt+S")), Some("plugin.image-duplicates.find"));
+        assert_eq!(keymap.extra_for(&chord("Ctrl+F10")), Some("plugin.image-duplicates.find"));
+        assert_eq!(keymap.bar_label(&chord("Ctrl+F10")).as_deref(), Some("Pics"));
+        assert_eq!(current_id("tools.similar-images"), "plugin.image-duplicates.find");
+        assert_eq!(current_id("files.copy"), "files.copy");
+        assert!(Action::from_id("tools.similar-images").is_none());
+    }
+
+    #[test]
+    fn a_function_key_in_the_shortcut_list_is_read_as_the_function_key() {
+        // A hand-written settings file of the first model.
+        let (keymap, warnings) = built(&[("files.copy", &["Shift+F5", "Ctrl+C"])], &[], &[]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.fkey_for_id("files.copy"), Some(chord("Shift+F5")));
+        assert_eq!(keymap.shortcuts_for_id("files.copy"), [chord("Ctrl+C")]);
+        // With an [fkeys] entry the list may not hold one.
+        let (_, warnings) = built(&[("files.copy", &["F4"])], &[("files.copy", "F5")], &[]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
     }
 }

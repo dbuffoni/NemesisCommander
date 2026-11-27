@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.0 (in progress)
+
+- **Internal: ports and adapters** (ADR 0061). Saved logins moved to a new crate
+  `pnxr-secrets`; the interfaces reach terminals, Git, disks, SSH, S3 keys and
+  the server install through ports (`HostTools`, `Remotes`, `SecretStore`) with
+  fakes for tests, and a test fails if a front-end crate depends on an adapter
+  crate. No change in behaviour.
+
+- **Find similar pictures is now a plugin**, `image-duplicates` (ADR 0060): it
+  groups pictures by a perceptual hash, adds the panel columns Similar and
+  Picture and a command that moves the extra copies aside. The built-in command,
+  its dialog and its code are gone; a key you had given to it follows the
+  plugin. New script function `pnxr.imageHash(path)`.
+
+- **Shortcut model** (ADR 0059): every command has standard shortcuts and,
+  independently, one function key (F, Shift+F or Ctrl+F) with a short name
+  shown on the bottom bar. The command list has Ctrl+K (shortcut) and Ctrl+F
+  (function key, name behind Ctrl+N); Ctrl+F in the main window switches the bar
+  row in a terminal. Settings of earlier versions are converted when read.
+
+- **New Pairnox logo** (ADR 0058): the round icon and the wordmark replace the old
+  picture everywhere (window and taskbar icon, About, AppImage, macOS bundle,
+  Windows `.ico`, README). All pictures are made from three SVG masters by
+  `scripts/make-icons.py`.
+
 ## 0.5.0
 
 Released 2026-11-27.

@@ -208,10 +208,10 @@ pub fn choose_help(purpose: &ChoosePurpose, cursor: usize) -> Option<Help> {
                 "work on all of them. Enter shows an item in the panel.",
             ],
         ),
-        ChoosePurpose::Duplicates(_) | ChoosePurpose::Similar(_) => one(
+        ChoosePurpose::Duplicates(_) => one(
             "Duplicates",
             &[
-                "Groups of files with the same content (or similar pictures).",
+                "Groups of files with the same content.",
                 "The first of each group is kept; the first row puts the extra copies",
                 "in the basket, so you decide what to do with them.",
             ],

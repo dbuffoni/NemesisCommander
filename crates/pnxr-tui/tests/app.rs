@@ -33,6 +33,10 @@ impl Harness {
     }
 
     async fn with_settings(change: impl FnOnce(&mut pnxr_config::Config)) -> Self {
+        Self::with_context(|context| change(&mut context.config)).await
+    }
+
+    async fn with_context(change: impl FnOnce(&mut AppContext)) -> Self {
         let dir = TempDir::new().unwrap();
         let root = dir.path();
         fs::create_dir_all(root.join("left/docs")).unwrap();
@@ -45,7 +49,7 @@ impl Harness {
         let mut context = AppContext::load_from(paths).unwrap();
         // Tests must not depend on a desktop recycle bin.
         context.config.general.use_trash = false;
-        change(&mut context.config);
+        change(&mut context);
         let left = VfsPath::from_local(root.join("left")).unwrap();
         let right = VfsPath::from_local(root.join("right")).unwrap();
         let (app, events) = App::new(context, left, right).unwrap();
@@ -536,6 +540,163 @@ async fn typing_in_the_command_list_finds_commands() {
 }
 
 #[tokio::test]
+async fn a_function_key_is_refused_as_a_shortcut_and_the_function_key_stays() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    save_screen("commands-two-columns", &h.screen());
+    h.type_text("refresh");
+    h.key("Ctrl+K");
+    h.key("Shift+F8");
+    assert!(h.screen().contains("function key"), "a hint to use the other action: {}", h.screen());
+    assert!(h.app.context().config.keys.is_empty());
+    assert!(h.app.context().config.fkeys.is_empty());
+    // A shortcut given to a command with a function key keeps it.
+    h.key("Esc");
+    h.key("Esc");
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+K");
+    h.key("Ctrl+C");
+    let keymap = &h.app.context().keymap;
+    assert_eq!(keymap.fkey_for_id("files.copy"), Some("F5".parse().unwrap()));
+    assert_eq!(keymap.shortcuts_for_id("files.copy"), ["Ctrl+C".parse().unwrap()]);
+    assert!(h.app.context().config.fkeys.is_empty(), "the function key is still the built-in one");
+}
+
+#[tokio::test]
+async fn a_command_gets_a_free_function_key_with_its_own_name_and_the_bar_shows_it() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+F");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    let screen = h.screen();
+    assert!(screen.contains("Function key for View/Refresh"), "{screen}");
+    assert!(screen.contains("Ctrl+N: short name"), "{screen}");
+    save_screen("function-key-list", &screen);
+    // The list starts on the first free slot: Ctrl+F10 is taken (Choose), so go and look.
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!() };
+    assert_eq!(dialog.items.len(), 30);
+    assert!(dialog.items[4].contains("Copy"), "{:?}", dialog.items[4]);
+    h.key("Enter");
+    assert!(h.app.overlay().is_none());
+    let keymap = &h.app.context().keymap;
+    let chord = keymap.fkey_for_id("view.refresh").expect("it has a function key now");
+    assert_eq!(h.app.context().config.fkeys["view.refresh"], chord.to_string());
+    assert_eq!(keymap.shortcuts_for_id("view.refresh"), ["Ctrl+R".parse().unwrap()]);
+    assert_eq!(keymap.bar_label(&chord).as_deref(), Some("Refresh"));
+}
+
+#[tokio::test]
+async fn taking_a_function_key_from_another_command_asks_first() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+F");
+    // Go to F5 (Copy's).
+    h.key("Home");
+    for _ in 0..4 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))));
+    assert!(h.screen().contains("F5 belongs to"), "{}", h.screen());
+    save_screen("function-key-replace", &h.screen());
+    // No: nothing changes.
+    h.key("n");
+    assert!(h.app.context().config.fkeys.is_empty());
+    assert_eq!(h.app.context().keymap.fkey_for_id("files.copy"), Some("F5".parse().unwrap()));
+    // Yes: Copy loses it, Refresh has it, and Copy keeps its other keys.
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+F");
+    h.key("Home");
+    for _ in 0..4 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.key("y");
+    let keymap = &h.app.context().keymap;
+    assert_eq!(keymap.fkey_for_id("view.refresh"), Some("F5".parse().unwrap()));
+    assert_eq!(keymap.fkey_for_id("files.copy"), None);
+    assert_eq!(h.app.context().config.fkeys["files.copy"], "");
+}
+
+#[tokio::test]
+async fn the_short_name_of_a_button_is_changed_behind_ctrl_n_and_can_be_restored() {
+    let mut h = Harness::new().await;
+    assert!(h.screen().contains("F5Copy"));
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+F");
+    h.key("Ctrl+N");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))));
+    save_screen("function-key-name", &h.screen());
+    // The built-in name is in the field: nothing has to be typed to assign a key.
+    h.key("Ctrl+U");
+    h.type_text("Dup");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.labels["files.copy"], "Dup");
+    let screen = h.screen();
+    assert!(screen.contains("F5Dup") && !screen.contains("F5Copy"), "{screen}");
+    save_screen("bar-custom-name", &screen);
+    // Empty text brings the built-in name back.
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+F");
+    h.key("Ctrl+N");
+    h.key("Ctrl+U");
+    h.key("Enter");
+    assert!(h.app.context().config.labels.is_empty());
+    assert!(h.screen().contains("F5Copy"), "{}", h.screen());
+    // Too long: refused.
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+F");
+    h.key("Ctrl+N");
+    h.key("Ctrl+U");
+    h.type_text("A name that is far too long");
+    h.key("Enter");
+    assert!(h.app.context().config.labels.is_empty());
+    assert!(h.screen().contains("at most 12"), "{}", h.screen());
+}
+
+#[tokio::test]
+async fn delete_in_the_slot_list_removes_the_function_key_only() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("files/delete");
+    h.key("Ctrl+F");
+    h.key("Delete");
+    let keymap = &h.app.context().keymap;
+    assert_eq!(keymap.fkey_for_id("files.delete"), None);
+    assert_eq!(keymap.shortcuts_for_id("files.delete"), ["Delete".parse().unwrap()]);
+    // Ctrl+R in the list brings the built-in key and name back.
+    h.key("F9");
+    h.type_text("files/delete");
+    h.key("Ctrl+F");
+    h.key("Ctrl+R");
+    assert_eq!(h.app.context().keymap.fkey_for_id("files.delete"), Some("F8".parse().unwrap()));
+    assert!(h.app.context().config.fkeys.is_empty());
+}
+
+#[tokio::test]
+async fn the_bar_row_key_stands_in_for_a_held_shift_or_ctrl() {
+    let mut h = Harness::new().await;
+    assert!(h.screen().contains("F5Copy"));
+    h.key("Ctrl+F");
+    let shifted = h.screen();
+    assert!(shifted.contains("F5Pack"), "{shifted}");
+    save_screen("bar-shift-row", &shifted);
+    h.key("Ctrl+F");
+    let ctrl = h.screen();
+    assert!(!ctrl.contains("F5Pack") && !ctrl.contains("F5Copy"), "{ctrl}");
+    save_screen("bar-ctrl-row", &ctrl);
+    h.key("Ctrl+F");
+    assert!(h.screen().contains("F5Copy"));
+}
+
+#[tokio::test]
 async fn shortcuts_are_given_from_the_command_list() {
     let mut h = Harness::new().await;
     h.key("F9");
@@ -671,6 +832,7 @@ async fn about_shows_the_logo_and_the_version() {
     assert!(text.contains(&title), "version");
     assert!(text.contains("MIT"), "license");
     assert!(text.contains("github.com/dbuffoni/Pairnox"), "source");
+    save_screen("about-new-logo", &text_of(buffer));
     // The logo is drawn with half blocks, some of them the blue band.
     let blue = buffer
         .content()
@@ -1388,7 +1550,10 @@ async fn without_plugins_ctrl_x_offers_the_plugin_list() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
     h.key("Ctrl+X");
-    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    let status = h.status();
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else {
+        panic!("a list; status: {status}; {:?}", h.app.overlay().is_some())
+    };
     assert_eq!(dialog.items, ["Browse and install plugins…"]);
 }
 
@@ -2395,35 +2560,12 @@ async fn the_basket_can_be_emptied_and_shows_an_item() {
 }
 
 #[tokio::test]
-async fn similar_pictures_are_grouped_and_the_extra_copies_go_to_the_basket() {
-    use image::{DynamicImage, ImageBuffer, Rgb};
-    let scene = |width: u32, height: u32, cx: f32| {
-        DynamicImage::ImageRgb8(ImageBuffer::from_fn(width, height, |x, y| {
-            let (u, v) = (x as f32 / width as f32, y as f32 / height as f32);
-            let blob = (-(((u - cx).powi(2) + (v - 0.4).powi(2)) * 40.0)).exp();
-            let value = (u * 120.0 + v * 60.0 + blob * 120.0).min(255.0) as u8;
-            Rgb([value, value / 2, 255 - value])
-        }))
-    };
+async fn finding_similar_pictures_is_no_built_in_command_any_more() {
     let mut h = Harness::new().await;
-    let big = scene(300, 200, 0.3);
-    big.save(h.path("left/photo.png")).unwrap();
-    big.resize_exact(60, 40, image::imageops::FilterType::Lanczos3)
-        .save(h.path("left/docs/thumb.png"))
-        .unwrap();
-    scene(300, 200, 0.85).save(h.path("left/other.png")).unwrap();
-    h.key("Ctrl+R");
-    h.settle().await;
     h.key("F9");
     h.type_text("similar");
-    h.key("Enter");
-    h.settle().await;
-    let rows = results(&h);
-    assert_eq!(rows.len(), 2, "the basket row and one group: {rows:?}");
-    assert!(rows[1].contains("keep photo.png") && rows[1].contains("thumb.png"), "{rows:?}");
-    h.key("Enter"); // the extra copies
-    assert_eq!(h.app.basket.len(), 1);
-    assert!(h.app.basket[0].to_string().ends_with("docs/thumb.png"));
+    assert!(h.screen().contains("Nothing matches"), "{}", h.screen());
+    assert!(pnxr_config::keymap::Action::from_id("tools.similar-images").is_none());
 }
 
 #[tokio::test]
@@ -3087,7 +3229,7 @@ esac
     );
     fs::write(&script, body).unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-    pnxr_vfs::keyring::set_command(Some(script));
+    pnxr_secrets::keyring::set_command(Some(script));
     Harness::new().await
 }
 
@@ -3108,6 +3250,37 @@ async fn the_new_connection_prompt_lists_one_example_per_line() {
         dialog.preview
     );
     assert!(dialog.hint().contains("Ctrl+T: test"));
+}
+
+/// The login question saves through the `SecretStore` of the context, so a fake
+/// store is enough: no keyring, no `secret-tool` (ADR 0061).
+#[tokio::test]
+async fn a_login_is_saved_in_the_secret_store_of_the_context() {
+    use std::sync::Arc;
+    let store = Arc::new(pnxr_secrets::MemorySecrets::new());
+    let shared = Arc::clone(&store);
+    let mut h = Harness::with_context(move |context| context.secrets = shared).await;
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("dav://anna:s3cret@files3.invalid/docs");
+    h.key("Enter");
+    h.type_text("files3");
+    h.key("Enter");
+    let Some(Overlay::Choose(choice)) = h.app.overlay() else { panic!("no login question") };
+    assert!(
+        choice.items.iter().any(|row| row.contains("the test store")),
+        "the question names the store of the context: {:?}",
+        choice.items
+    );
+    h.key("Enter");
+    h.settle().await;
+    use pnxr_secrets::SecretStore as _;
+    let stored = store.lookup("files3.invalid", Some("anna")).expect("saved in the fake store");
+    assert_eq!(stored.password, "s3cret");
+    assert_eq!(h.app.context().config.connections[0].uri, "dav://anna@files3.invalid/docs");
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -3138,7 +3311,7 @@ async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let saved = &h.app.context().config.connections[0];
     assert_eq!(saved.uri, "dav://anna@files.invalid/docs", "no password in the settings");
     assert!(!saved.options.contains_key("password"));
-    let stored = pnxr_vfs::keyring::lookup("files.invalid", Some("anna")).unwrap();
+    let stored = pnxr_secrets::keyring::lookup("files.invalid", Some("anna")).unwrap();
     assert_eq!(stored.password, "s3cret", "the keyring holds the password");
     let settings = format!("{:?}", h.app.context().config.connections);
     assert!(!settings.contains("s3cret"), "the password never reaches the settings");
@@ -3165,7 +3338,10 @@ async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let saved = &h.app.context().config.connections[1];
     assert_eq!(saved.uri, "dav://bob@files2.invalid/docs");
     assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
-    assert!(pnxr_vfs::keyring::lookup("files2.invalid", Some("bob")).is_none(), "nothing saved");
+    assert!(
+        pnxr_secrets::keyring::lookup("files2.invalid", Some("bob")).is_none(),
+        "nothing saved"
+    );
 
     // Opening it asks for the password (hidden), once per session.
     drive_row(&mut h, "second");
@@ -3204,7 +3380,7 @@ async fn ssh_and_s3_connections_offer_the_login_choice_too() {
     let dir = TempDir::new().unwrap();
     let aws = dir.path().join("credentials");
     pnxr_s3::settings::set_credentials_file(Some(aws.clone()));
-    pnxr_vfs::netrc::set_file(Some(dir.path().join("netrc")));
+    pnxr_secrets::netrc::set_file(Some(dir.path().join("netrc")));
     let mut h = Harness::new().await;
 
     // S3: save the keys (access key, then hidden secret).
@@ -3339,6 +3515,71 @@ async fn install_asks_before_it_starts_and_shift_tab_goes_back() {
     assert!(h.app.overlay().is_none(), "nothing to go back to");
 }
 
+/// The install runs through the `Remotes` of the context: with a fake, no SSH
+/// is started and the whole flow (question, yes, log, save) can be driven
+/// (ADR 0061).
+#[tokio::test]
+async fn the_install_runs_through_the_remotes_of_the_context() {
+    use std::sync::Arc;
+    let fake = Arc::new(pnxr_app::FakeRemotes::new());
+    let shared = Arc::clone(&fake);
+    let mut h = Harness::with_context(move |context| context.remotes = shared).await;
+    h.app.perform(Action::InstallServe);
+    h.type_text("me@nas.lan --port 9000");
+    h.key("Enter");
+    let Some(Overlay::Confirm(_)) = h.app.overlay() else { panic!("confirm dialog") };
+    h.key("Enter");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Message(m)) if !m.busy)).await;
+    let Some(Overlay::Message(done)) = h.app.overlay() else { panic!("the install log") };
+    let text = done.lines.join("\n");
+    assert!(text.contains("scs://me@nas.lan:9000"), "{text}");
+    assert_eq!(*fake.installs.lock().unwrap(), ["me@nas.lan"]);
+    // A bad server is refused by the port, before anything runs.
+    h.key("Esc");
+    h.key("Esc");
+    h.app.perform(Action::InstallServe);
+    h.type_text("me@nas.lan:x");
+    h.key("Enter");
+    assert!(!matches!(h.app.overlay(), Some(Overlay::Confirm(_))));
+}
+
+/// Terminals, Git and disks go through `HostTools`: with the fake, no process
+/// is started (ADR 0061).
+#[tokio::test]
+async fn terminal_git_and_disks_go_through_the_host_port() {
+    use pnxr_frontend::disks::DiskRow;
+    use pnxr_frontend::git::GitStatus;
+    use pnxr_frontend::ports::FakeHost;
+    use std::sync::Arc;
+    let fake = Arc::new(FakeHost::new());
+    let mut h = Harness::new().await;
+    h.app.set_host(fake.clone());
+    h.app.graphical = true;
+
+    h.app.perform(Action::OpenTerminal);
+    let launches = fake.launches.lock().unwrap().clone();
+    assert_eq!(launches.len(), 1, "one terminal asked for");
+    assert_eq!(launches[0].1.as_deref(), Some(h.path("left").as_path()));
+
+    // Git: the panel marks come from the host, and so does the repository check.
+    h.app.perform(Action::Git);
+    assert!(!matches!(h.app.overlay(), Some(Overlay::Choose(_))), "no repository by default");
+    *fake.git.lock().unwrap() = Some(GitStatus { branch: "main".into(), ..GitStatus::default() });
+    h.app.perform(Action::Git);
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "the Git actions are offered");
+    h.key("Esc");
+
+    // Disks: whatever the host lists is shown.
+    fake.disks.lock().unwrap().push(DiskRow {
+        name: "fakedisk0".into(),
+        kind: "disk".into(),
+        ..DiskRow::default()
+    });
+    h.app.perform(Action::Disks);
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Choose(_)))).await;
+    assert!(h.screen().contains("fakedisk0"), "{}", h.screen());
+}
+
 #[tokio::test]
 async fn binary_files_show_their_properties_and_hex_on_request() {
     let mut h = Harness::new().await;
@@ -3379,6 +3620,17 @@ async fn the_transfer_queue_lists_the_newest_first() {
 }
 
 // ---- parallelism, help and generated files (ADR 0044)
+
+/// The characters of a test buffer as lines of text.
+fn text_of(buffer: &ratatui::buffer::Buffer) -> String {
+    let width = buffer.area.width as usize;
+    buffer
+        .content()
+        .chunks(width)
+        .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim_end().to_owned())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Where the screens of these tests are written when `PNXR_SCREENS` is set
 /// (the text "screenshots" of the transfer indicators).

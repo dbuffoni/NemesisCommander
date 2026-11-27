@@ -19,16 +19,8 @@ use crate::dialogs::Forget;
 use crate::dialogs::{ChooseDialog, ChoosePurpose, InputPurpose, JumpRow, Overlay};
 use crate::export::{Format, PathVariant};
 use crate::input::KeyPress;
-use crate::similar::{self, Picture};
 use crate::syncplan::SyncRun;
 use crate::viewer::Viewer;
-
-/// Picture files bigger than this are not looked at.
-const PICTURE_LIMIT: u64 = 48 << 20;
-
-/// Extensions of the pictures the similar-picture search reads.
-const PICTURE_EXTENSIONS: [&str; 9] =
-    ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "ico"];
 
 /// Recent folders shown under the bookmarks.
 const RECENT_LIMIT: usize = 5;
@@ -541,6 +533,9 @@ impl App {
         if let Some(handled) = self.plugin_store_key(dialog, press) {
             return Some(handled);
         }
+        if let Some(handled) = self.function_key_list_key(dialog, press) {
+            return Some(handled);
+        }
         match &dialog.purpose {
             ChoosePurpose::Drives(drives) if key == Some(Key::F(2)) => {
                 match drives.get(dialog.cursor).filter(|d| d.saved) {
@@ -710,98 +705,8 @@ impl App {
                     self.start_sync(*mode);
                 }
             }
-            ChoosePurpose::Similar(groups) => {
-                if cursor == 0 {
-                    let extras: Vec<VfsPath> = groups
-                        .iter()
-                        .flat_map(|g| g.iter().skip(1).map(|p| p.path.clone()))
-                        .collect();
-                    let added = self.basket_add(extras);
-                    let key = self.context.keymap.shortcut_text(Action::Basket);
-                    self.set_status(format!(
-                        "{added} extra copies are in the basket ({key}): delete them from there"
-                    ));
-                } else if let Some(best) = groups.get(cursor - 1).and_then(|g| g.first()) {
-                    let request = self.workspace.active_mut().reveal(&best.path);
-                    self.load_opt(request);
-                }
-            }
             _ => {}
         }
-    }
-
-    // ---------------------------------------------------- similar pictures
-
-    pub(super) fn find_similar(&mut self) {
-        let root = self.workspace.active().location().clone();
-        let registry = self.context.registry.clone();
-        self.set_status("Looking for similar pictures…");
-        self.spawn_task(async move {
-            let provider = match registry.provider_for(&root).await {
-                Ok(provider) => provider,
-                Err(e) => return done(Err(e), None),
-            };
-            let mut files = Vec::new();
-            let mut items = pnxr_vfs::walk(provider.as_ref(), &root, None);
-            while let Some(item) = items.next().await {
-                let Ok(item) = item else { continue };
-                let name = item.entry.name.to_lowercase();
-                let is_picture =
-                    name.rsplit_once('.').is_some_and(|(_, ext)| PICTURE_EXTENSIONS.contains(&ext));
-                if item.entry.is_file() && is_picture && item.entry.size <= PICTURE_LIMIT {
-                    files.push(item.path);
-                }
-            }
-            drop(items);
-            let total = files.len();
-            let pictures: Vec<Picture> = futures::stream::iter(files)
-                .map(|path| {
-                    let registry = registry.clone();
-                    async move {
-                        let (data, cut) =
-                            crate::viewer::load(&registry, &path, PICTURE_LIMIT).await.ok()?;
-                        if cut {
-                            return None;
-                        }
-                        tokio::task::spawn_blocking(move || Picture::from_bytes(path, &data))
-                            .await
-                            .ok()
-                            .flatten()
-                    }
-                })
-                .buffer_unordered(4)
-                .filter_map(|p| async move { p })
-                .collect()
-                .await;
-            let groups = similar::group(pictures, similar::MAX_DISTANCE);
-            if groups.is_empty() {
-                return done(Ok(format!("No similar pictures among {total} pictures")), None);
-            }
-            let extras: usize = groups.iter().map(|g| g.len() - 1).sum();
-            let mut items = vec![format!(
-                "Put {extras} extra cop{} in the basket (all but the best of each group)",
-                if extras == 1 { "y" } else { "ies" }
-            )];
-            for group in &groups {
-                let best = &group[0];
-                let others: Vec<&str> =
-                    group[1..].iter().map(|p| p.path.file_name().unwrap_or("")).collect();
-                items.push(format!(
-                    "{} similar: keep {} ({}), also {}",
-                    group.len(),
-                    best.path.file_name().unwrap_or(""),
-                    best.describe(),
-                    others.join(", ")
-                ));
-            }
-            let mut dialog = ChooseDialog::new(
-                &format!("Similar pictures: {} groups among {total}", groups.len()),
-                items,
-                ChoosePurpose::Similar(groups),
-            );
-            dialog.footer = crate::hints::list("show the best copy", &[], "close");
-            AppEvent::Show(Box::new(Overlay::Choose(dialog)))
-        });
     }
 
     // ----------------------------------------------------- compare by hash

@@ -180,6 +180,7 @@ mod tests {
         let other = VfsPath::from_local(dir.path().join("other/.config/pairnox")).unwrap();
         let mut mine = Config::default();
         mine.transfers.parallel_jobs = 1;
+        mine.shortcut_model = Some(2);
         mine.keys.insert("files.copy".into(), vec!["Ctrl+C".into()]);
 
         // A folder that does not exist yet: given as the file itself.

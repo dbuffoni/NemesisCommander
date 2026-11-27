@@ -71,6 +71,19 @@ declare namespace pnxr {
   function exists(path: string): Promise<boolean>;
   /** A whole file as UTF-8 text. */
   function readText(path: string): Promise<string>;
+  /** What `imageHash` says about a picture. */
+  interface ImageHash {
+    /** A perceptual hash: 16 hexadecimal digits. Copies of a picture that were
+     * resized or saved again differ from it in a few of the 64 bits. */
+    hash: string;
+    width: number;
+    height: number;
+    /** Size of the file in bytes. */
+    bytes: number;
+  }
+  /** The perceptual hash of a picture (PNG, JPEG, GIF, WebP, BMP, TIFF, ICO up to
+   * 48 MiB), or `null` when the file is not one (or is a flat one). */
+  function imageHash(path: string): Promise<ImageHash | null>;
   /** Writes (replaces) a file with UTF-8 text. */
   function writeText(path: string, text: string): Promise<void>;
   /** Writes (replaces) a file with raw bytes, for binary formats such as images. */

@@ -79,6 +79,7 @@ deno_core::extension!(
         op_pnxr_stat,
         op_pnxr_exists,
         op_pnxr_read_text,
+        op_pnxr_image_hash,
         op_pnxr_write_text,
         op_pnxr_write_bytes,
         op_pnxr_mkdir,
@@ -269,6 +270,32 @@ async fn op_pnxr_read_text(
         return Err(JsErrorBox::generic(format!("{path}: too large for readText; use copy")));
     }
     String::from_utf8(data).map_err(|_| JsErrorBox::type_error(format!("{path}: not UTF-8 text")))
+}
+
+/// The perceptual hash of a picture (`null` when it is not one, or a flat one).
+#[op2]
+#[serde]
+async fn op_pnxr_image_hash(
+    state: Rc<RefCell<OpState>>,
+    #[string] path: String,
+) -> Result<Option<crate::imagehash::ImageInfo>, JsErrorBox> {
+    let (provider, path) = open(&state, &path, Access::Read).await?;
+    let size = provider.stat(&path).await.map_err(vfs_error)?.size;
+    if size > crate::imagehash::PICTURE_LIMIT {
+        return Ok(None);
+    }
+    let reader = provider.read(&path, 0).await.map_err(vfs_error)?;
+    let mut data = Vec::new();
+    let mut limited = reader.take(crate::imagehash::PICTURE_LIMIT + 1);
+    limited.read_to_end(&mut data).await.map_err(|e| vfs_error(VfsError::from_io(&path, e)))?;
+    if data.len() as u64 > crate::imagehash::PICTURE_LIMIT {
+        return Ok(None);
+    }
+    // Decoding takes a while: not on the thread of the script.
+    let info = tokio::task::spawn_blocking(move || crate::imagehash::describe(&data))
+        .await
+        .map_err(|e| JsErrorBox::generic(e.to_string()))?;
+    Ok(info)
 }
 
 #[op2]

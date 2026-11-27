@@ -8,7 +8,7 @@ use super::App;
 use crate::commands::CommandPalette;
 use crate::dialogs::Overlay;
 use crate::input::KeyPress;
-use crate::settings::{assign_key_to, clear_keys_of};
+use crate::settings::{assign_shortcut_to, clear_shortcuts_of};
 
 impl App {
     /// Opens the command list.
@@ -53,6 +53,17 @@ impl App {
                 palette.move_category(-1)
             }
             _ if chord.ctrl && !chord.alt && chord.key == Key::Char('u') => palette.clear_filter(),
+            _ if chord.ctrl && !chord.alt && chord.key == Key::Char('f') => {
+                match palette.selected().cloned() {
+                    Some(entry) if entry.can_have_keys() => {
+                        return Some(self.open_function_key_dialog(&entry.id, &entry.name()));
+                    }
+                    Some(entry) => {
+                        self.set_error(format!("{} cannot have a function key", entry.name()))
+                    }
+                    None => {}
+                }
+            }
             _ if chord.ctrl && !chord.alt && chord.key == Key::Char('k') => {
                 match palette.selected() {
                     Some(entry) if entry.can_have_keys() => palette.recording = true,
@@ -107,7 +118,14 @@ impl App {
     /// Gives the pressed key to the highlighted command.
     fn give_key(&mut self, palette: &CommandPalette, press: KeyPress) {
         let Some(entry) = palette.selected() else { return };
-        let previous = assign_key_to(&mut self.context.config, &entry.id, press.chord, false);
+        if pnxr_config::is_function_key(&press.chord) {
+            self.set_error(format!(
+                "{} is a function key: use Ctrl+F (Assign function key) for it",
+                press.chord
+            ));
+            return;
+        }
+        let previous = assign_shortcut_to(&mut self.context.config, &entry.id, press.chord);
         let mut message = format!("{}: {}", entry.name(), press.chord);
         if let Some(other) = previous {
             message.push_str(&format!(" (taken from {})", self.command_label(&other)));
@@ -118,7 +136,7 @@ impl App {
     /// Removes the shortcuts of the highlighted command.
     fn remove_keys(&mut self, palette: &CommandPalette) {
         let Some(entry) = palette.selected().filter(|e| e.can_have_keys()) else { return };
-        clear_keys_of(&mut self.context.config, &entry.id);
+        clear_shortcuts_of(&mut self.context.config, &entry.id);
         self.settings_changed(format!("{} has no shortcut now", entry.name()));
     }
 }

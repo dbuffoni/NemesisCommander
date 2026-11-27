@@ -20,5 +20,7 @@ pub use config::{
     PluginSettings, SavedSearch, TransferProfile, TransferSettings, ViewerSettings,
 };
 pub use export::{ExportBundle, ImportMode};
-pub use keymap::{Action, Category, Key, KeyChord, Keymap};
+pub use keymap::{
+    Action, Category, Key, KeyChord, Keymap, LABEL_MAX, is_function_key, is_function_key_text,
+};
 pub use paths::AppPaths;

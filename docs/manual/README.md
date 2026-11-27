@@ -76,10 +76,24 @@ shortcuts on the right.
   window you can also click them.
 - **Up/Down**, Page Up/Down, Home/End move; **Enter** (or a click in the
   window) runs the command.
+- Every command has two independent keys: **standard shortcuts** (Ctrl+letter,
+  Delete... any number, never a function key) and **one function key** (F1 to
+  F10, with Shift or with Ctrl: 30 slots) whose button on the bottom bar has a
+  **short name**. The list shows both: the function key and its name in the
+  first column, the shortcuts in the second.
 - **Ctrl+K** gives the highlighted command a shortcut: press the new key
-  (Esc cancels). If another command had that key, it loses it and the status
-  line says which one. **Delete** removes the command's shortcuts. The
-  change is saved at once, as on the settings screen.
+  (Esc cancels; a function key is refused, use Ctrl+F). If another command had
+  that key, it loses it and the status line says which one. **Delete** removes
+  the command's shortcuts (its function key stays). The change is saved at once.
+- **Ctrl+F** gives the command a function key: a list of the 30 slots shows who
+  has each one. **Enter** assigns the highlighted slot (the command keeps its
+  built-in button name; if another command has the slot you are asked first),
+  **Ctrl+N** changes the button name (at most 12 characters, empty restores the
+  built-in one), **Delete** removes the function key, **Ctrl+R** restores the
+  built-in key and name.
+- The bottom bar shows the names of F1 to F10. Hold **Shift** or **Ctrl** (the
+  window), or press **Ctrl+F** in the main window (the terminal, which cannot
+  see a held key), to show the Shift+F or Ctrl+F row.
 - **F1** explains the highlighted command in a sentence or two; F1 or Esc
   hides the explanation.
 
@@ -557,14 +571,24 @@ shows the copy that is kept; the first row puts every extra copy in the basket
 (Ctrl+B), ready to delete or move. Nothing is deleted by the command itself,
 and empty files are ignored.
 
-### Similar pictures
+### Similar pictures (a plugin)
 
-**Find similar pictures** (F9) looks at the pictures in this folder and below
-and groups those that are resized or re-saved copies of each other (a
-perceptual hash of each picture, so different formats and sizes match). Each
-group names the best copy (most pixels, then the largest file); Enter on a
-group shows it, and the first row puts every other copy in the basket, ready to
-delete.
+Finding pictures that are resized or re-saved copies of each other is the
+plugin **image-duplicates**, not a built-in command (it keeps the program
+light). Install it from the plugin list (Ctrl+X, "Browse and install plugins…",
+or `pnxr plugin install image-duplicates`). It adds, under Tools:
+
+- **Find similar pictures** groups the pictures of the folder and below it (or of
+  the selection) by a perceptual hash, so different formats and sizes match, and
+  prints each group with the copy to keep first, the likeness to it in percent,
+  the pixels and the size.
+- **Move the extra copies of similar pictures aside** moves all but the best copy
+  of each group to the folder `_similar-extras` (nothing is deleted).
+- Two panel columns, **Similar** (the group and the likeness to its best copy:
+  `#1 best`, `#1 97%`) and **Picture** (the pixels).
+
+A key you had given to the old built-in command is kept and works once the
+plugin is installed.
 
 ## Synchronizing folders
 
@@ -1161,7 +1185,7 @@ on the settings screen (Ctrl+,).
 | Ctrl+Shift+F | Flat (branch) view |
 | Ctrl+F7 | Disk usage of this folder |
 | Ctrl+F8 | Disks and partitions |
-| (F9 only) | Compare folders by content, Find similar pictures, Saved searches, Save the last search |
+| (F9 only) | Compare folders by content, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
 | Ctrl+F9, Ctrl+X | Plugins and scripts |
 | Ctrl+F11, Ctrl+Shift+G | Git actions |

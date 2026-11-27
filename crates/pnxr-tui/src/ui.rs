@@ -18,8 +18,8 @@ use pnxr_frontend::icons::icon_for;
 use pnxr_frontend::preview::Zoom;
 use pnxr_frontend::view::{
     column_headers, commands_view, describe, entry_details, git_mark, git_of, job_how, job_line,
-    job_route, jobs_progress, jobs_summary, key_bar_action, panel_footer, scroll_offset, size_text,
-    tab_title,
+    job_route, jobs_progress, jobs_summary, key_bar_label, key_bar_narrow, panel_footer,
+    scroll_offset, size_text, tab_title,
 };
 use pnxr_frontend::{
     App, ChooseDialog, InputDialog, Overlay, TextField, Viewer, display_location, side_index,
@@ -452,12 +452,8 @@ fn draw_key_bar(frame: &mut Frame, app: &App, area: Rect) {
     let mut spans = Vec::new();
     for n in 1..=10u8 {
         let width = key_bar_width(area.width as usize);
-        let label = match key_bar_action(app, n) {
-            Some(action) if width < 6 => action.narrow(),
-            Some(action) => action.short(),
-            None => "",
-        };
-        let label = fit(label, width).trim_end().to_owned();
+        let label = if width < 6 { key_bar_narrow(app, n) } else { key_bar_label(app, n) };
+        let label = fit(&label, width).trim_end().to_owned();
         spans.push(Span::raw(format!("F{n}")));
         spans.push(Span::styled(
             format!("{label:<width$}"),
@@ -751,6 +747,9 @@ const COMMANDS_HEIGHT: u16 = 24;
 
 /// The command list: category buttons, what was typed, then the commands
 /// as `Category/Command` with their shortcuts on the right.
+/// Columns of the function-key column of the command list (`Shift+F5 Unpack`).
+const FKEY_COLUMN: usize = 18;
+
 fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
     let view = commands_view(app, palette);
     let area = frame.area();
@@ -793,7 +792,7 @@ fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
         lines.push(Line::styled(" Nothing matches", dim()));
     }
     for (i, row) in view.rows.iter().enumerate().skip(skip).take(visible) {
-        let keys_width = row.keys.chars().count();
+        let keys_width = row.keys.chars().count() + FKEY_COLUMN + 1;
         let name = fit(&row.name, width.saturating_sub(keys_width + 3));
         let gap = width.saturating_sub(name.chars().count() + keys_width + 2);
         let selected = i == view.item;
@@ -801,6 +800,7 @@ fn draw_commands(frame: &mut Frame, app: &App, palette: &CommandPalette) {
         let keys_style = if selected { highlight() } else { Style::new().fg(Color::Cyan) };
         lines.push(Line::from(vec![
             Span::styled(format!(" {name}{}", " ".repeat(gap)), text_style),
+            Span::styled(format!("{:<FKEY_COLUMN$} ", fit(&row.fkey, FKEY_COLUMN)), keys_style),
             Span::styled(format!("{} ", row.keys), keys_style),
         ]));
     }

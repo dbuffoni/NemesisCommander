@@ -148,7 +148,7 @@ pub fn ssh_args(target: &Target, remote: Remote<'_>) -> Result<Vec<String>, Stri
 /// the keyring or `~/.netrc` for the same host and user.
 fn password_of(target: &Target) -> Option<String> {
     let user = target.user.as_deref()?;
-    pnxr_vfs::netrc::lookup(&target.host, Some(user)).map(|login| login.password)
+    pnxr_secrets::netrc::lookup(&target.host, Some(user)).map(|login| login.password)
 }
 
 /// The environment that lets `ssh` read the password of `authority` from
@@ -265,7 +265,7 @@ mod tests {
         assert!(batch.contains(&"BatchMode=yes".to_owned()));
         assert!(target_env(&target).is_empty());
 
-        pnxr_vfs::netrc::set_session("askpass-host.invalid", "tester", "pa ss");
+        pnxr_secrets::netrc::set_session("askpass-host.invalid", "tester", "pa ss");
         let args = ssh_args(&target, Remote::Subsystem("sftp")).unwrap();
         assert!(!args.contains(&"BatchMode=yes".to_owned()), "{args:?}");
         assert!(args.contains(&"NumberOfPasswordPrompts=1".to_owned()));

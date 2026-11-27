@@ -344,8 +344,11 @@ pub struct CommandRow {
     pub id: String,
     /// `Category/Command`.
     pub name: String,
-    /// Its shortcuts (`Ctrl+K / F5`), empty when none.
+    /// Its standard shortcuts (`Ctrl+K / Ctrl+E`), empty when none.
     pub keys: String,
+    /// Its function key with the short name of its button (`Shift+F5 Pack`),
+    /// empty when none.
+    pub fkey: String,
 }
 
 /// The viewer or quick view.
@@ -515,7 +518,7 @@ impl Screen {
             },
         };
         let keys = (1..=10u8)
-            .map(|number| KeyLabel { number, label: key_bar_label(app, number).to_owned() })
+            .map(|number| KeyLabel { number, label: key_bar_label(app, number) })
             .collect();
         let overlay = overlay_view(app, viewer_rows);
         let conflict = app.pending_conflict().map(|c| ConflictView {
@@ -556,13 +559,17 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     let keymap = &app.context().keymap;
     let recording = palette.recording.then(|| palette.selected().map(|e| e.name())).flatten();
     let hint = if let Some(name) = &recording {
-        format!("Press the new shortcut for {name}{}Esc: cancel", crate::hints::SEP)
+        format!(
+            "Press the new shortcut for {name} (not a function key: use Ctrl+F){}Esc: cancel",
+            crate::hints::SEP
+        )
     } else {
         [
             "Enter: run",
             "←/→: category",
-            "Ctrl+K: set key",
-            "Delete: remove key",
+            "Ctrl+K: shortcut",
+            "Ctrl+F: function key",
+            "Delete: remove shortcut",
             "Type: find",
             "F1: help",
             "Esc: close",
@@ -576,7 +583,23 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
         rows: palette
             .shown()
             .into_iter()
-            .map(|e| CommandRow { id: e.id.clone(), name: e.name(), keys: keymap.keys_text(&e.id) })
+            .map(|e| CommandRow {
+                id: e.id.clone(),
+                name: e.name(),
+                keys: keymap
+                    .shortcuts_for_id(&e.id)
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" / "),
+                fkey: keymap
+                    .fkey_for_id(&e.id)
+                    .map(|chord| {
+                        let label = keymap.label_for_id(&e.id).unwrap_or_default();
+                        format!("{chord} {label}").trim_end().to_owned()
+                    })
+                    .unwrap_or_default(),
+            })
             .collect(),
         item: palette.item,
         recording,
@@ -1134,19 +1157,36 @@ pub fn entry_details(panel: &Panel, git: Option<&crate::git::GitStatus>) -> Stri
     parts.join("  ")
 }
 
+/// The chord of F`number` with the modifiers held now (or the row chosen with
+/// the bar-row key). Alt is left out: desktops use it themselves (GNOME shows
+/// its own window menu and moves windows with it), and no command is on Alt+F.
+fn key_bar_chord(app: &App, number: u8) -> KeyChord {
+    let (ctrl, _alt, shift) = app.modifiers();
+    KeyChord::normalized(Key::F(number), ctrl, false, shift)
+}
+
 /// The command F`number` runs with the modifiers held now, for the function
 /// key bar: `None` when nothing is bound to that combination.
 pub fn key_bar_action(app: &App, number: u8) -> Option<Action> {
-    // Alt is left out: desktops use it themselves (GNOME shows its own
-    // window menu and moves windows with it), and no command is on Alt+F.
-    let (ctrl, _alt, shift) = app.modifiers();
-    app.context().keymap.action_for(&KeyChord::normalized(Key::F(number), ctrl, false, shift))
+    app.context().keymap.action_for(&key_bar_chord(app, number))
 }
 
-/// What F`number` says on the function key bar: the command's short name
-/// (empty when nothing is bound).
-pub fn key_bar_label(app: &App, number: u8) -> &'static str {
-    key_bar_action(app, number).map(Action::short).unwrap_or("")
+/// What F`number` says on the function key bar: the short name of the
+/// command on it, the user's own or the built-in one (empty when nothing is
+/// bound).
+pub fn key_bar_label(app: &App, number: u8) -> String {
+    app.context().keymap.bar_label(&key_bar_chord(app, number)).unwrap_or_default()
+}
+
+/// Like [`key_bar_label`] for a narrow bar (five columns): the built-in
+/// narrow name, or the first five characters of the user's own name.
+pub fn key_bar_narrow(app: &App, number: u8) -> String {
+    let chord = key_bar_chord(app, number);
+    let keymap = &app.context().keymap;
+    match (keymap.action_for(&chord), keymap.command_for(&chord)) {
+        (Some(action), Some(id)) if !keymap.has_custom_label(&id) => action.narrow().to_owned(),
+        _ => keymap.bar_label(&chord).unwrap_or_default().chars().take(5).collect(),
+    }
 }
 
 /// `done` as a percentage of `total` (`None` when the total is unknown).

@@ -22,6 +22,8 @@ pub mod catalog;
 #[cfg(feature = "engine")]
 mod engine;
 #[cfg(feature = "engine")]
+mod imagehash;
+#[cfg(feature = "engine")]
 mod ops;
 pub mod permissions;
 pub mod plugin;

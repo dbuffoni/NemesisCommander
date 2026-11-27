@@ -61,7 +61,7 @@ impl App {
         let Some(dir) = self.workspace.active().location().to_local_path() else {
             return self.set_error("Git actions work on local folders");
         };
-        if crate::git::read_with(self.context.config.git.program(), &dir).is_none() {
+        if self.host.git_status(self.context.config.git.program(), &dir).is_none() {
             return self.set_error(
                 "This folder is not in a Git repository (or git is not installed: Settings > Git)",
             );

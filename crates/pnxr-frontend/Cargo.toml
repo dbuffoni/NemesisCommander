@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 pnxr-vfs.workspace = true
+pnxr-secrets.workspace = true
 pnxr-hash.workspace = true
 pnxr-ops.workspace = true
 pnxr-transfer.workspace = true
@@ -17,10 +18,7 @@ pnxr-index.workspace = true
 pnxr-archive.workspace = true
 pnxr-config.workspace = true
 pnxr-panel.workspace = true
-pnxr-app.workspace = true
-pnxr-agent.workspace = true
-pnxr-ssh.workspace = true
-pnxr-s3.workspace = true
+pnxr-app = { workspace = true, features = ["remote"] }
 pnxr-preview.workspace = true
 async-trait.workspace = true
 similar.workspace = true
