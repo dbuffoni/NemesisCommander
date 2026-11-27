@@ -33,6 +33,10 @@ impl Harness {
     }
 
     async fn with_settings(change: impl FnOnce(&mut pnxr_config::Config)) -> Self {
+        Self::with_context(|context| change(&mut context.config)).await
+    }
+
+    async fn with_context(change: impl FnOnce(&mut AppContext)) -> Self {
         let dir = TempDir::new().unwrap();
         let root = dir.path();
         fs::create_dir_all(root.join("left/docs")).unwrap();
@@ -45,7 +49,7 @@ impl Harness {
         let mut context = AppContext::load_from(paths).unwrap();
         // Tests must not depend on a desktop recycle bin.
         context.config.general.use_trash = false;
-        change(&mut context.config);
+        change(&mut context);
         let left = VfsPath::from_local(root.join("left")).unwrap();
         let right = VfsPath::from_local(root.join("right")).unwrap();
         let (app, events) = App::new(context, left, right).unwrap();
@@ -3229,7 +3233,7 @@ esac
     );
     fs::write(&script, body).unwrap();
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-    pnxr_vfs::keyring::set_command(Some(script));
+    pnxr_secrets::keyring::set_command(Some(script));
     Harness::new().await
 }
 
@@ -3250,6 +3254,37 @@ async fn the_new_connection_prompt_lists_one_example_per_line() {
         dialog.preview
     );
     assert!(dialog.hint().contains("Ctrl+T: test"));
+}
+
+/// The login question saves through the `SecretStore` of the context, so a fake
+/// store is enough: no keyring, no `secret-tool` (ADR 0061).
+#[tokio::test]
+async fn a_login_is_saved_in_the_secret_store_of_the_context() {
+    use std::sync::Arc;
+    let store = Arc::new(pnxr_secrets::MemorySecrets::new());
+    let shared = Arc::clone(&store);
+    let mut h = Harness::with_context(move |context| context.secrets = shared).await;
+    h.key("Ctrl+N");
+    for _ in 0..40 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.type_text("dav://anna:s3cret@files3.invalid/docs");
+    h.key("Enter");
+    h.type_text("files3");
+    h.key("Enter");
+    let Some(Overlay::Choose(choice)) = h.app.overlay() else { panic!("no login question") };
+    assert!(
+        choice.items.iter().any(|row| row.contains("the test store")),
+        "the question names the store of the context: {:?}",
+        choice.items
+    );
+    h.key("Enter");
+    h.settle().await;
+    use pnxr_secrets::SecretStore as _;
+    let stored = store.lookup("files3.invalid", Some("anna")).expect("saved in the fake store");
+    assert_eq!(stored.password, "s3cret");
+    assert_eq!(h.app.context().config.connections[0].uri, "dav://anna@files3.invalid/docs");
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -3280,7 +3315,7 @@ async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let saved = &h.app.context().config.connections[0];
     assert_eq!(saved.uri, "dav://anna@files.invalid/docs", "no password in the settings");
     assert!(!saved.options.contains_key("password"));
-    let stored = pnxr_vfs::keyring::lookup("files.invalid", Some("anna")).unwrap();
+    let stored = pnxr_secrets::keyring::lookup("files.invalid", Some("anna")).unwrap();
     assert_eq!(stored.password, "s3cret", "the keyring holds the password");
     let settings = format!("{:?}", h.app.context().config.connections);
     assert!(!settings.contains("s3cret"), "the password never reaches the settings");
@@ -3307,7 +3342,7 @@ async fn a_login_is_saved_in_the_keyring_or_asked_every_time() {
     let saved = &h.app.context().config.connections[1];
     assert_eq!(saved.uri, "dav://bob@files2.invalid/docs");
     assert_eq!(saved.options.get("password").map(String::as_str), Some("ask"));
-    assert!(pnxr_vfs::keyring::lookup("files2.invalid", Some("bob")).is_none(), "nothing saved");
+    assert!(pnxr_secrets::keyring::lookup("files2.invalid", Some("bob")).is_none(), "nothing saved");
 
     // Opening it asks for the password (hidden), once per session.
     drive_row(&mut h, "second");
@@ -3346,7 +3381,7 @@ async fn ssh_and_s3_connections_offer_the_login_choice_too() {
     let dir = TempDir::new().unwrap();
     let aws = dir.path().join("credentials");
     pnxr_s3::settings::set_credentials_file(Some(aws.clone()));
-    pnxr_vfs::netrc::set_file(Some(dir.path().join("netrc")));
+    pnxr_secrets::netrc::set_file(Some(dir.path().join("netrc")));
     let mut h = Harness::new().await;
 
     // S3: save the keys (access key, then hidden secret).

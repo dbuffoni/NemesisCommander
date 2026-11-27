@@ -2,7 +2,8 @@
 //! (asked every time, or saved in the system keyring), and testing a connection
 //! while it is being created.
 
-use pnxr_vfs::{VfsPath, keyring, netrc};
+use pnxr_secrets::netrc;
+use pnxr_vfs::VfsPath;
 
 use super::App;
 use crate::connections::{
@@ -68,10 +69,10 @@ impl App {
             } else {
                 "Keep it as it is (use the login ~/.netrc already has)"
             };
-            let save = if keyring::available() {
-                format!("Save the login in {}", keyring::store_name())
+            let save = if self.context.secrets.available() {
+                format!("Save the login in {}", self.context.secrets.name())
             } else {
-                format!("Save the login in {} ({})", keyring::store_name(), keyring::missing())
+                format!("Save the login in {} ({})", self.context.secrets.name(), self.context.secrets.missing())
             };
             vec![
                 "Ask for the password every time (kept in memory only)".to_owned(),
@@ -278,18 +279,18 @@ impl App {
     fn save_login(&mut self, name: String, uri: String, replace: Replace, password: &str) {
         let Ok(path) = VfsPath::parse(&uri) else { return };
         let (host, user) = (host_of(&path), user_of(&path).unwrap_or_default());
-        match keyring::store(&host, &user, password) {
+        match self.context.secrets.store(&host, &user, password) {
             Ok(()) => {
                 netrc::set_session(&host, &user, password);
                 self.store_connection(name, uri, replace, false);
                 self.set_status(format!(
                     "Login of {user}@{host} saved in {}",
-                    keyring::store_name()
+                    self.context.secrets.name()
                 ));
             }
             Err(e) => self.set_error(format!(
                 "Cannot save the login in {}: {e}. Choose \"ask every time\" instead",
-                keyring::store_name()
+                self.context.secrets.name()
             )),
         }
     }

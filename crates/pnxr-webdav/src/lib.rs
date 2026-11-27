@@ -13,7 +13,7 @@
 //! permissions, so the provider supports neither resume nor attribute
 //! changes. Renames and copies happen on the server (`MOVE`, `COPY`).
 
-pub use pnxr_vfs::netrc;
+pub use pnxr_secrets::netrc;
 mod xml;
 
 use std::sync::Arc;

@@ -1,0 +1,19 @@
+[package]
+name = "pnxr-secrets"
+description = "Saved logins for Pairnox: the system keyring, ~/.netrc and logins typed for the session."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+directories.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# The Credential Manager (credential API only).
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+
+[lints]
+workspace = true

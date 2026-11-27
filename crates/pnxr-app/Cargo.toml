@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 pnxr-vfs.workspace = true
+pnxr-secrets.workspace = true
 pnxr-providers.workspace = true
 pnxr-archive.workspace = true
 pnxr-index.workspace = true

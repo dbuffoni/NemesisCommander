@@ -5,7 +5,7 @@
 //! (SMB 2.0.2 to 3.1.1, signing and encryption).
 //!
 //! The first path segment is the share. Logins come from the system
-//! keyring or `~/.netrc` like WebDAV ([`pnxr_vfs::netrc`]); a user name in the location
+//! keyring or `~/.netrc` like WebDAV ([`pnxr_secrets::netrc`]); a user name in the location
 //! picks the entry, and without one the session is a guest session.
 //! `user` may be `DOMAIN\user` or `user@domain` style as the server expects
 //! (`%5C` for the backslash in a URI).
@@ -22,8 +22,9 @@ use futures::{StreamExt, stream};
 use pnxr_vfs::{
     Capabilities, Entry, EntryKind, ListStream, Provider, ProviderFactory, ProviderRegistry,
     ReadStream, Result, SetAttributes, VfsError, VfsPath, WriteMode, WriteOptions, WriteSink,
-    netrc, upload_sink,
+    upload_sink,
 };
+use pnxr_secrets::netrc;
 use smb2::{ClientConfig, ErrorKind, FileTimes, RenameOptions, SmbClient, Tree};
 use tokio::sync::Mutex;
 use tokio_util::io::StreamReader;

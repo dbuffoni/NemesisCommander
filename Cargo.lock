@@ -4341,6 +4341,7 @@ dependencies = [
  "pnxr-ops",
  "pnxr-providers",
  "pnxr-s3",
+ "pnxr-secrets",
  "pnxr-sftp",
  "pnxr-smb",
  "pnxr-ssh",
@@ -4444,6 +4445,7 @@ dependencies = [
  "pnxr-providers",
  "pnxr-s3",
  "pnxr-script",
+ "pnxr-secrets",
  "pnxr-ssh",
  "pnxr-transfer",
  "pnxr-vfs",
@@ -4658,6 +4660,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pnxr-secrets"
+version = "0.5.0"
+dependencies = [
+ "directories",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "pnxr-sftp"
 version = "0.5.0"
 dependencies = [
@@ -4681,6 +4691,7 @@ dependencies = [
  "futures",
  "pnxr-ops",
  "pnxr-providers",
+ "pnxr-secrets",
  "pnxr-vfs",
  "smb2",
  "tempfile",
@@ -4692,6 +4703,7 @@ dependencies = [
 name = "pnxr-ssh"
 version = "0.5.0"
 dependencies = [
+ "pnxr-secrets",
  "pnxr-vfs",
  "tokio",
 ]
@@ -4747,6 +4759,7 @@ dependencies = [
  "pnxr-proto",
  "pnxr-providers",
  "pnxr-s3",
+ "pnxr-secrets",
  "pnxr-transfer",
  "pnxr-vfs",
  "ratatui",
@@ -4762,7 +4775,6 @@ dependencies = [
  "async-trait",
  "bitflags 2.13.2",
  "bytes",
- "directories",
  "futures",
  "proptest",
  "serde",
@@ -4770,7 +4782,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "unicode-normalization",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4787,6 +4798,7 @@ dependencies = [
  "percent-encoding",
  "pnxr-ops",
  "pnxr-providers",
+ "pnxr-secrets",
  "pnxr-vfs",
  "quick-xml",
  "reqwest",
