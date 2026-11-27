@@ -95,12 +95,23 @@ impl ExportBundle {
     /// Applies the imported settings to `current`.
     pub fn apply(self, current: &Config, mode: ImportMode) -> Config {
         match mode {
-            ImportMode::Replace => self.settings,
+            ImportMode::Replace => {
+                let mut settings = self.settings;
+                settings.migrate_shortcuts();
+                settings
+            }
             ImportMode::Merge => {
                 let mut merged = self.settings;
+                merged.migrate_shortcuts();
                 let mut keys = current.keys.clone();
                 keys.extend(std::mem::take(&mut merged.keys));
                 merged.keys = keys;
+                let mut fkeys = current.fkeys.clone();
+                fkeys.extend(std::mem::take(&mut merged.fkeys));
+                merged.fkeys = fkeys;
+                let mut labels = current.labels.clone();
+                labels.extend(std::mem::take(&mut merged.labels));
+                merged.labels = labels;
                 merged.bookmarks =
                     merge_by_name(&current.bookmarks, merged.bookmarks, |b| b.name.clone());
                 merged.connections =
