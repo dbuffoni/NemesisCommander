@@ -85,6 +85,10 @@ jobs:
           & (Join-Path $app "pnxr-gui.exe") --version
           if ($LASTEXITCODE -ne 0) { throw "pnxr-gui.exe --version failed" }
           if (-not (Test-Path (Join-Path $app "THIRD-PARTY-NOTICES.md"))) { throw "no notices" }
+          # The window carries the Pairnox icon as an icon resource (RT_GROUP_ICON).
+          python -m pip install --quiet pefile
+          python -c "import pefile,sys; pe=pefile.PE(sys.argv[1]); ids=[e.id for e in pe.DIRECTORY_ENTRY_RESOURCE.entries]; sys.exit(0 if 14 in ids else 'pnxr-gui.exe has no icon resource')" (Join-Path $app "pnxr-gui.exe")
+          if ($LASTEXITCODE -ne 0) { throw "pnxr-gui.exe has no icon" }
           Remove-Item -Recurse -Force $dir
       - name: Upload (Windows)
         if: runner.os == 'Windows'
@@ -121,6 +125,9 @@ jobs:
           hdiutil attach "$dmg" -mountpoint "$mount" -nobrowse -readonly
           app="$mount/Pairnox.app/Contents"
           test -f "$app/Resources/THIRD-PARTY-NOTICES.md"
+          # The bundle's icon, named in Info.plist.
+          test -f "$app/Resources/Pairnox.icns"
+          plutil -extract CFBundleIconFile raw "$app/Info.plist" | grep -qx Pairnox
           # A copy of the app, as a user installs it.
           cp -R "$mount/Pairnox.app" "$RUNNER_TEMP/"
           hdiutil detach "$mount"
