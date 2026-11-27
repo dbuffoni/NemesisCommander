@@ -568,11 +568,9 @@ pub fn commands_view(app: &App, palette: &CommandPalette) -> CommandsView {
     } else {
         [
             "Enter: run",
-            "←/→: category",
             "Ctrl+K: shortcut",
             "Ctrl+F: function key",
             "Delete: remove shortcut",
-            "Type: find",
             "F1: help",
             "Esc: close",
         ]

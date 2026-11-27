@@ -201,6 +201,15 @@ pub fn choose_help(purpose: &ChoosePurpose, cursor: usize) -> Option<Help> {
                 "Bookmarks are added with the Bookmark command; recent folders are kept alone.",
             ],
         ),
+        ChoosePurpose::PluginResults { .. } => one(
+            "Results of a plugin",
+            &[
+                "Space marks a file, a marks the extras (all but the best of each group), u clears the marks.",
+                "s sorts by the next column and r reverses the order. Delete moves the marked files",
+                "to the trash (after a question that lists them); the other keys are the plugin's.",
+                "Enter shows the file in the panel.",
+            ],
+        ),
         ChoosePurpose::Basket(_) => one(
             "Basket",
             &[

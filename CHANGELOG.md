@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.0
+
+Not released yet (version prepared; the tag waits for the go-ahead).
+
+- **Image duplicates plugin 1.1.0** (ADR 0062). *Find similar pictures* now shows
+  a list in the window and the terminal, with the columns Group, Match, Pixels,
+  Size, Date and File. `s` sorts by the next column, `r` reverses, `Space` marks,
+  `a` marks all but the best of each group, `Delete` moves the marked pictures to
+  the trash after a question that lists them, `m` moves them to
+  `_similar-extras`. Hashes are remembered between runs (`image-hashes.tsv` in
+  the data folder), so a second look at a big folder is quick. Scripts get
+  `pnxr.showResults()` for such lists. Not done: a virtual panel with its own
+  columns, RAW/HEIC pictures, a choice of the similarity threshold.
+- **Plugin manifest defaults** (ADR 0062): a command in `plugin.json` can declare
+  `shortcut`, `fkey` and `label` (a second name for `short`). They are defaults
+  below everything the user sets; a chord that a built-in command or another
+  plugin has is not taken. image-duplicates uses Shift+F9 and Ctrl+Shift+I.
+- **A note after the shortcut settings were converted.** The first start after the
+  conversion to the new shortcut model (0.6.0) says so on the status line once
+  and keeps the old file as `config.toml.before-shortcut-model-2`.
+- **Windows:** `pnxr-gui.exe` carries the Pairnox icon (window, taskbar, Alt+Tab,
+  shortcuts); the installer smoke tests check the icon resource of the exe and
+  the icon of the macOS bundle.
+- **Fixes from the check on a GNOME desktop** (AppImage 0.6.1): the window follows
+  the dark theme (the AppImage starts with the desktop portal as Qt's platform
+  theme on GNOME unless you set `QT_QPA_PLATFORMTHEME`), `pnxr desktop install`
+  no longer overwrites a `pairnox.desktop` written by another tool (`--force`
+  does), and the group titles of the F1 help are readable on the light theme.
+- The command list no longer repeats what is obvious in its hint line (the
+  category arrows and "Type: find").
+- **README:** the window and the terminal side by side with real screenshots, how
+  settings are shared (`pnxr config push`/`pull`) and how servers are set up.
+  `scripts/tui-screenshot.py` takes terminal screenshots of the real program.
+
 ## 0.6.1
 
 Released 2026-11-27. This release also contains everything listed under 0.6.0

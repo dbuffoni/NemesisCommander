@@ -55,6 +55,7 @@ that still names it.
 | 0059 | [Shortcut model: standard shortcuts and function keys with names](0059-shortcut-model.md) | Accepted |
 | 0060 | [Finding similar pictures is a plugin](0060-similar-images-plugin.md) | Accepted |
 | 0061 | [Ports and adapters for the interfaces](0061-ports-and-adapters.md) | Accepted |
+| 0062 | [Plugin defaults for keys, and a list of results](0062-plugin-key-defaults-and-results.md) | Accepted |
 
 Template:
 

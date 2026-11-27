@@ -268,7 +268,7 @@ Item {
                                 text: modelData.title
                                 font.bold: true
                                 elide: Text.ElideRight
-                                color: dialogs.theme.accent
+                                color: dialogs.theme.headingColor
                             }
                             Repeater {
                                 model: modelData.rows

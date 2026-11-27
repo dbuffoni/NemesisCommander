@@ -32,6 +32,8 @@ pub struct AppContext {
     pub keymap: Keymap,
     /// Problems found while loading settings (shown, never fatal).
     pub warnings: Vec<String>,
+    /// Things worth one line on the status line, shown once (not errors).
+    pub notes: Vec<String>,
     /// All providers of this build.
     pub registry: Arc<ProviderRegistry>,
     /// Where saved logins are kept (the system keyring; tests put a fake).
@@ -48,7 +50,22 @@ impl AppContext {
 
     /// Loads settings from `paths`. A missing settings file means defaults.
     pub fn load_from(paths: AppPaths) -> Result<Self, ConfigError> {
-        let config = Config::load(&paths.config_file())?;
+        let (config, converted) = Config::load_noting(&paths.config_file())?;
+        let mut notes = Vec::new();
+        if converted {
+            // Written back in the new shape, so the note appears only once;
+            // the old file is kept next to it.
+            let file = paths.config_file();
+            let backup = file.with_extension("toml.before-shortcut-model-2");
+            let kept = backup.exists() || std::fs::copy(&file, &backup).is_ok();
+            if kept && config.save(&file).is_ok() {
+                notes.push(
+                    "Shortcut settings converted; the old file is kept as \
+                     config.toml.before-shortcut-model-2"
+                        .to_owned(),
+                );
+            }
+        }
         let (keymap, warnings) = Keymap::from_config(&config);
         let registry = Arc::new(build_registry_for(&paths));
         Ok(AppContext {
@@ -56,6 +73,7 @@ impl AppContext {
             config,
             keymap,
             warnings,
+            notes,
             registry,
             secrets: Arc::new(SystemSecrets),
             remotes: Arc::new(SystemRemotes),
@@ -285,6 +303,32 @@ mod tests {
         context.save_config().unwrap();
         let reloaded = AppContext::load_from(paths).unwrap();
         assert_eq!(reloaded.warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_converted_settings_file_is_noted_once_and_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = AppPaths::in_dir(dir.path());
+        std::fs::create_dir_all(paths.config_file().parent().unwrap()).unwrap();
+        std::fs::write(paths.config_file(), "[keys]\n\"files.pack\" = [\"Shift+F5\"]\n").unwrap();
+        let first = AppContext::load_from(paths.clone()).unwrap();
+        assert_eq!(first.notes.len(), 1, "{:?}", first.notes);
+        assert!(first.notes[0].contains("converted"));
+        assert_eq!(first.config.fkeys["files.pack"], "Shift+F5");
+        let backups = std::fs::read_dir(paths.config_file().parent().unwrap())
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("before-shortcut-model-2")
+            })
+            .count();
+        assert_eq!(backups, 1);
+        let second = AppContext::load_from(paths).unwrap();
+        assert!(second.notes.is_empty(), "the note is shown once");
+        assert_eq!(second.config.fkeys["files.pack"], "Shift+F5");
     }
 
     #[tokio::test]

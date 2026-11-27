@@ -63,6 +63,7 @@ impl World {
             other: Some(local(self.path("right"))),
             selection: vec![local(self.path("left/a.txt")), local(self.path("left/b.txt"))],
             home: None,
+            results: false,
         }
     }
 }

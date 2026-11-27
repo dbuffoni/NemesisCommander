@@ -144,8 +144,20 @@ pub struct CommandSpec {
     pub category: Option<String>,
     /// A name of 1 to 8 characters for a function-key button (shown on the
     /// bottom bar and in the command list). Missing: the title's first word.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// `label` is another name for the same field. The user's own name for
+    /// the button (`[labels]` in the settings) wins.
+    #[serde(default, alias = "label", skip_serializing_if = "Option::is_none")]
     pub short: Option<String>,
+    /// A default standard shortcut, such as `Ctrl+Alt+D` (a function key
+    /// goes in `fkey`). Missing: none. The user's `[keys]` win, and a chord
+    /// that a built-in command or another plugin already has is not taken.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shortcut: Option<String>,
+    /// A default function key: `F1` to `F10`, with `Shift+` or `Ctrl+`.
+    /// Missing: none. The user's `[fkeys]` win, and the same conflict rule
+    /// as for `shortcut` applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fkey: Option<String>,
 }
 
 /// The longest short name of a command.
@@ -188,6 +200,13 @@ impl Plugin {
                 )
             })
             .collect()
+    }
+}
+
+impl Manifest {
+    /// The id the settings use for the command `command` of this plugin.
+    pub fn command_key(&self, command: &str) -> String {
+        format!("plugin.{}.{command}", self.name)
     }
 }
 
@@ -463,12 +482,16 @@ impl Plugin {
             output,
             heap_limit: limits.memory.max(16) * 1024 * 1024,
             time_limit: Some(std::time::Duration::from_secs(limits.timeout.max(1))),
-            invocation: Some(crate::Invocation::new(
-                command,
-                context.panel.as_ref(),
-                context.other.as_ref(),
-                &context.selection,
-            )),
+            invocation: Some({
+                let mut invocation = crate::Invocation::new(
+                    command,
+                    context.panel.as_ref(),
+                    context.other.as_ref(),
+                    &context.selection,
+                );
+                invocation.results |= context.results;
+                invocation
+            }),
         };
         crate::run(&main.display().to_string(), &source, options).await.map_err(failed)
     }
@@ -485,6 +508,8 @@ pub struct Context {
     pub selection: Vec<VfsPath>,
     /// The user's home folder.
     pub home: Option<PathBuf>,
+    /// The front end can show a list of results (`pnxr.showResults`).
+    pub results: bool,
 }
 
 fn validate(manifest: &Manifest) -> Result<(), String> {
@@ -741,6 +766,7 @@ mod tests {
             other: Some(path("/backup")),
             selection: vec![path("/home/me/a.txt")],
             home: None,
+            results: false,
         };
         let permissions = plugin.permissions(&context).unwrap();
         use crate::Access::{Read, Write};

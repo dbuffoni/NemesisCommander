@@ -49,6 +49,9 @@ pub struct Invocation {
     pub other: Option<String>,
     /// The selected (or current) entries of the active panel.
     pub selection: Vec<String>,
+    /// Whether the program that started the command can show a list of
+    /// results (`pnxr.showResults`); the window and the terminal can.
+    pub results: bool,
 }
 
 impl Invocation {
@@ -64,6 +67,7 @@ impl Invocation {
             panel: panel.map(display),
             other: other.map(display),
             selection: selection.iter().map(display).collect(),
+            results: std::env::var_os("PNXR_RESULTS").is_some_and(|v| v == "1"),
         }
     }
 }
@@ -280,9 +284,15 @@ async fn op_pnxr_image_hash(
     #[string] path: String,
 ) -> Result<Option<crate::imagehash::ImageInfo>, JsErrorBox> {
     let (provider, path) = open(&state, &path, Access::Read).await?;
-    let size = provider.stat(&path).await.map_err(vfs_error)?.size;
+    let entry = provider.stat(&path).await.map_err(vfs_error)?;
+    let size = entry.size;
     if size > crate::imagehash::PICTURE_LIMIT {
         return Ok(None);
+    }
+    // A picture that has not changed since an earlier run keeps its hash.
+    let key = crate::hashcache::key(&display(&path), size, entry.modified);
+    if let Some(info) = key.as_deref().and_then(crate::hashcache::get) {
+        return Ok(Some(info));
     }
     let reader = provider.read(&path, 0).await.map_err(vfs_error)?;
     let mut data = Vec::new();
@@ -295,6 +305,9 @@ async fn op_pnxr_image_hash(
     let info = tokio::task::spawn_blocking(move || crate::imagehash::describe(&data))
         .await
         .map_err(|e| JsErrorBox::generic(e.to_string()))?;
+    if let (Some(key), Some(info)) = (key, &info) {
+        crate::hashcache::put(&key, info);
+    }
     Ok(info)
 }
 

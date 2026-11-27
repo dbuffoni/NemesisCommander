@@ -4307,7 +4307,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-agent"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -4330,7 +4330,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-app"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -4354,7 +4354,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-archive"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4380,7 +4380,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-cli"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -4412,7 +4412,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-config"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "directories",
  "pnxr-index",
@@ -4426,7 +4426,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-frontend"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4457,7 +4457,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-gui"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "cxx",
  "cxx-qt",
@@ -4471,11 +4471,12 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "winresource",
 ]
 
 [[package]]
 name = "pnxr-hash"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "blake3",
  "hex",
@@ -4488,7 +4489,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-index"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "futures",
  "globset",
@@ -4505,14 +4506,14 @@ dependencies = [
 
 [[package]]
 name = "pnxr-libarchive"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "cmake",
 ]
 
 [[package]]
 name = "pnxr-mcp"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "futures",
  "pnxr-hash",
@@ -4530,7 +4531,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-ops"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4550,7 +4551,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-panel"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "jiff",
  "pnxr-archive",
@@ -4562,7 +4563,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-preview"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "calamine",
  "gltf",
@@ -4578,7 +4579,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-proto"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "bytes",
  "hyper-util",
@@ -4594,7 +4595,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-providers"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4612,7 +4613,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-s3"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4640,12 +4641,13 @@ dependencies = [
 
 [[package]]
 name = "pnxr-script"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "deno_ast",
  "deno_core",
  "deno_error",
  "image",
+ "pnxr-config",
  "pnxr-ops",
  "pnxr-providers",
  "pnxr-vfs",
@@ -4658,7 +4660,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-secrets"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "directories",
  "windows-sys 0.61.2",
@@ -4666,7 +4668,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-sftp"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -4681,7 +4683,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-smb"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4698,7 +4700,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-ssh"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "pnxr-secrets",
  "pnxr-vfs",
@@ -4707,7 +4709,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-tls"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "base64 0.22.1",
  "rcgen",
@@ -4723,7 +4725,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-transfer"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "pnxr-ops",
@@ -4740,7 +4742,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-tui"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "crossterm",
@@ -4767,7 +4769,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-vfs"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bitflags 2.13.2",
@@ -4783,7 +4785,7 @@ dependencies = [
 
 [[package]]
 name = "pnxr-webdav"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -8252,6 +8254,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winresource"
+version = "0.1.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2bc6d36480b829272a5bdabf08e6dca8004761c1da7e35efef800540c66221b"
+dependencies = [
+ "toml",
+ "version_check",
 ]
 
 [[package]]

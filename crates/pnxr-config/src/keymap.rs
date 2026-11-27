@@ -649,6 +649,21 @@ pub fn current_id(id: &str) -> &str {
     MOVED_TO_PLUGIN.iter().find(|(old, _)| *old == id).map_or(id, |(_, new)| new)
 }
 
+/// What a plugin declares for one of its commands in `plugin.json`: the
+/// defaults of the shortcut, the function key and the button name. They sit
+/// below everything the user sets.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PluginKeyDefault {
+    /// The command id, `plugin.NAME.COMMAND`.
+    pub id: String,
+    /// A standard shortcut (not a function key).
+    pub shortcut: Option<String>,
+    /// A function key (F1 to F10, with Shift or Ctrl).
+    pub fkey: Option<String>,
+    /// The short name of the button.
+    pub label: Option<String>,
+}
+
 /// A command's two slots while the keymap is built.
 #[derive(Debug, Clone, Default)]
 struct Slots {
@@ -691,7 +706,7 @@ impl Keymap {
 
     /// Builds the keymap from the defaults and the overrides of `config`.
     pub fn from_config(config: &crate::Config) -> (Keymap, Vec<String>) {
-        Keymap::build(&config.keys, &config.fkeys, &config.labels)
+        Keymap::build_with(&config.keys, &config.fkeys, &config.labels, &config.plugin_defaults)
     }
 
     /// Builds the keymap. `keys` replace the shortcuts of a command, `fkeys`
@@ -704,6 +719,19 @@ impl Keymap {
         fkeys: &BTreeMap<String, String>,
         labels: &BTreeMap<String, String>,
     ) -> (Keymap, Vec<String>) {
+        Keymap::build_with(keys, fkeys, labels, &[])
+    }
+
+    /// Like [`build`](Keymap::build), with the defaults that plugins declare
+    /// for their commands. A plugin default never takes a chord that a
+    /// built-in command or an earlier plugin has, and everything the user
+    /// sets (`keys`, `fkeys`, `labels`, an empty text for none) wins.
+    pub fn build_with(
+        keys: &BTreeMap<String, Vec<String>>,
+        fkeys: &BTreeMap<String, String>,
+        labels: &BTreeMap<String, String>,
+        defaults: &[PluginKeyDefault],
+    ) -> (Keymap, Vec<String>) {
         let mut warnings = Vec::new();
         let mut slots: BTreeMap<String, Slots> = BTreeMap::new();
         for &action in Action::ALL {
@@ -711,6 +739,51 @@ impl Keymap {
                 action.id().to_owned(),
                 Slots { shortcuts: action.default_shortcuts(), fkey: action.default_fkey() },
             );
+        }
+        let mut default_labels: BTreeMap<String, String> = BTreeMap::new();
+        for default in defaults {
+            if !is_extra_command(&default.id) || slots.contains_key(&default.id) {
+                continue;
+            }
+            let taken = |slots: &BTreeMap<String, Slots>, chord: &KeyChord| {
+                slots.iter().find_map(|(other, slot)| {
+                    (slot.fkey.as_ref() == Some(chord) || slot.shortcuts.contains(chord))
+                        .then(|| other.clone())
+                })
+            };
+            let mut slot = Slots::default();
+            for (text, function) in [(&default.shortcut, false), (&default.fkey, true)] {
+                let Some(text) = text.as_deref().map(str::trim).filter(|t| !t.is_empty()) else {
+                    continue;
+                };
+                let chord = match text.parse::<KeyChord>() {
+                    Ok(chord) => chord,
+                    Err(e) => {
+                        warnings.push(format!("{e} in the plugin default of {}", default.id));
+                        continue;
+                    }
+                };
+                if is_function_key(&chord) != function {
+                    warnings.push(format!(
+                        "{chord} is {} in the plugin default of {}",
+                        if function { "not a function key" } else { "a function key" },
+                        default.id
+                    ));
+                } else if let Some(owner) = taken(&slots, &chord) {
+                    warnings.push(format!(
+                        "{chord} wanted by {} is already used by {owner}; not set",
+                        default.id
+                    ));
+                } else if function {
+                    slot.fkey = Some(chord);
+                } else {
+                    slot.shortcuts.push(chord);
+                }
+            }
+            slots.insert(default.id.clone(), slot);
+            if let Some(label) = default.label.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+                default_labels.insert(default.id.clone(), label.to_owned());
+            }
         }
         // "Change dates and permissions" became part of Properties (0.5.0):
         // a key given to it now opens Properties.
@@ -729,6 +802,9 @@ impl Keymap {
         rename(&mut keys);
         let mut fkeys = fkeys.clone();
         let mut labels = labels.clone();
+        for (id, label) in default_labels {
+            labels.entry(id).or_insert(label);
+        }
         for (old, new) in MOVED_TO_PLUGIN {
             if let Some(v) = fkeys.remove(*old) {
                 fkeys.entry((*new).to_owned()).or_insert(v);
@@ -1173,6 +1249,78 @@ mod tests {
             &fkeys.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
             &labels.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
         )
+    }
+
+    fn with_defaults(
+        keys: &[(&str, &[&str])],
+        fkeys: &[(&str, &str)],
+        labels: &[(&str, &str)],
+        defaults: &[PluginKeyDefault],
+    ) -> (Keymap, Vec<String>) {
+        Keymap::build_with(
+            &keys
+                .iter()
+                .map(|(id, list)| {
+                    ((*id).to_owned(), list.iter().map(|k| (*k).to_owned()).collect())
+                })
+                .collect(),
+            &fkeys.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
+            &labels.iter().map(|(id, k)| ((*id).to_owned(), (*k).to_owned())).collect(),
+            defaults,
+        )
+    }
+
+    fn plugin_default(id: &str, shortcut: &str, fkey: &str, label: &str) -> PluginKeyDefault {
+        let some = |t: &str| (!t.is_empty()).then(|| t.to_owned());
+        PluginKeyDefault {
+            id: id.to_owned(),
+            shortcut: some(shortcut),
+            fkey: some(fkey),
+            label: some(label),
+        }
+    }
+
+    #[test]
+    fn a_plugin_declares_defaults_and_the_user_wins() {
+        let tidy = plugin_default("plugin.tidy.run", "Ctrl+Shift+I", "Shift+F9", "Tidy");
+        let (keymap, warnings) = with_defaults(&[], &[], &[], std::slice::from_ref(&tidy));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.fkey_for_id("plugin.tidy.run"), Some(chord("Shift+F9")));
+        assert_eq!(keymap.shortcuts_for_id("plugin.tidy.run"), [chord("Ctrl+Shift+I")]);
+        assert_eq!(keymap.extra_for(&chord("Shift+F9")), Some("plugin.tidy.run"));
+        assert_eq!(keymap.bar_label(&chord("Shift+F9")).as_deref(), Some("Tidy"));
+        // The user's own function key, shortcut and name replace the defaults.
+        let (keymap, _) = with_defaults(
+            &[("plugin.tidy.run", &["Ctrl+J"])],
+            &[("plugin.tidy.run", "Shift+F10")],
+            &[("plugin.tidy.run", "Clean")],
+            std::slice::from_ref(&tidy),
+        );
+        assert_eq!(keymap.fkey_for_id("plugin.tidy.run"), Some(chord("Shift+F10")));
+        assert_eq!(keymap.shortcuts_for_id("plugin.tidy.run"), [chord("Ctrl+J")]);
+        assert_eq!(keymap.extra_for(&chord("Shift+F9")), None);
+        assert_eq!(keymap.label_for_id("plugin.tidy.run").as_deref(), Some("Clean"));
+        // An empty text removes the default function key only.
+        let (keymap, _) =
+            with_defaults(&[], &[("plugin.tidy.run", "")], &[], std::slice::from_ref(&tidy));
+        assert_eq!(keymap.fkey_for_id("plugin.tidy.run"), None);
+        assert_eq!(keymap.shortcuts_for_id("plugin.tidy.run"), [chord("Ctrl+Shift+I")]);
+    }
+
+    #[test]
+    fn a_plugin_default_never_takes_a_chord_that_is_in_use() {
+        let greedy = plugin_default("plugin.greedy.go", "Ctrl+D", "F5", "Go");
+        let (keymap, warnings) = with_defaults(&[], &[], &[], &[greedy]);
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert_eq!(keymap.action_for(&chord("F5")), Some(Action::Copy));
+        assert_eq!(keymap.action_for(&chord("Ctrl+D")), Some(Action::Bookmarks));
+        assert_eq!(keymap.fkey_for_id("plugin.greedy.go"), None);
+        // The first plugin keeps a chord two of them want; wrong kinds are told.
+        let first = plugin_default("plugin.a.x", "", "Shift+F9", "A");
+        let second = plugin_default("plugin.b.y", "F6", "Shift+F9", "B");
+        let (keymap, warnings) = with_defaults(&[], &[], &[], &[first, second]);
+        assert_eq!(keymap.extra_for(&chord("Shift+F9")), Some("plugin.a.x"));
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
     }
 
     #[test]

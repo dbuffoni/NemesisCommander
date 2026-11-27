@@ -94,12 +94,26 @@ A folder with `plugin.json` and the script (`main`, default `main.ts`):
   used and `pnxr test` warns.
 - `category` (optional): `Files`, `Select`, `Navigate`, `View`, `Tools`,
   `Pairnox`; anything else, or none, means `Plugins`.
+- `shortcut`, `fkey` (optional): default keys of the command: a standard
+  shortcut such as `Ctrl+Shift+I`, and a function key (`F1` to `F10`, with
+  `Shift+` or `Ctrl+`). `label` is another name for `short`. They are only
+  defaults: whatever the user sets in the settings wins, a chord that a
+  built-in command or an earlier plugin already has is not taken (the settings
+  screen reports it), and an empty `[fkeys]` entry turns the default off.
 - `permissions`: `read` and `write` lists of `$PANEL`, `$OTHER`,
   `$SELECTION`, `$HOME`, absolute paths or URIs, or `"all": true`. Ask
   for as little as possible: `$PANEL` or `$SELECTION` is usually enough.
   `pnxr test` grants only `$PANEL`, `$OTHER` and `$SELECTION`.
 - The script reads `pnxr.context`: `command` (the id), `panel`, `other`
   (folders) and `selection` (selected entries). `pnxr.args` is empty.
+
+A command that finds files can hand them over as a list with
+`pnxr.showResults({ title, columns, rows, actions })` when `pnxr.context.results`
+is true (the window and the terminal; print a text report otherwise). The list
+is sorted and marked by the user (`a` marks all rows but those with
+`keep: true`); Delete moves the marked files to the trash after the usual
+question, and each action runs one of the plugin's own commands with the
+marked files as `pnxr.context.selection`. `image-duplicates` is the example.
 
 Install and use: `pnxr plugin install FOLDER`, then Ctrl+X or F9 in the
 interface, or `pnxr plugin run NAME COMMAND --panel DIR FILES...`.

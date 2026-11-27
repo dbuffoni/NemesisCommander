@@ -24,6 +24,8 @@ use crate::commands::{CommandEntry, SCRIPTS, Target, plugin_category};
 use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay,
 };
+use crate::input::KeyPress;
+use pnxr_config::Key;
 
 /// One row of the Ctrl+X list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -237,6 +239,10 @@ impl App {
         let selection = self.targets();
         let registry = self.context.registry.clone();
         let paths = self.context.paths.clone();
+        let plugin = match &choice {
+            PluginChoice::Command { dir, .. } => Some(dir.clone()),
+            _ => None,
+        };
         self.spawn_task(async move {
             let printed = Arc::new(Mutex::new(Vec::<String>::new()));
             let sink = printed.clone();
@@ -246,12 +252,107 @@ impl App {
             let (title, result) =
                 run_choice(choice, panel, other, selection, registry, output, &paths).await;
             let lines = printed.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            AppEvent::ScriptDone { title, lines, error: result.err() }
+            AppEvent::ScriptDone { title, lines, error: result.err(), plugin }
         });
     }
 }
 
 impl App {
+    /// Shows what a plugin command found as a list to sort and mark.
+    pub(super) fn show_results(
+        &mut self,
+        results: crate::results::Results,
+        plugin: Option<PathBuf>,
+    ) {
+        let dialog = Self::results_dialog(results, plugin, 0);
+        self.overlay = Some(Overlay::Choose(dialog));
+    }
+
+    /// The list for `results`, the cursor on row `cursor`.
+    pub(super) fn results_dialog(
+        results: crate::results::Results,
+        plugin: Option<PathBuf>,
+        cursor: usize,
+    ) -> ChooseDialog {
+        let mut dialog = ChooseDialog::new(
+            &results.heading(),
+            results.lines(),
+            ChoosePurpose::PluginResults { results: Box::new(results), plugin },
+        );
+        if let ChoosePurpose::PluginResults { results, .. } = &dialog.purpose {
+            dialog.footer = results.hint();
+        }
+        dialog.cursor = cursor.min(dialog.items.len().saturating_sub(1));
+        dialog
+    }
+
+    /// Keys of a plugin's results list: marks, sort, trash and the plugin's
+    /// own actions. `None` when the key is not one of them.
+    pub(super) fn results_key(
+        &mut self,
+        dialog: &mut ChooseDialog,
+        press: &KeyPress,
+    ) -> Option<bool> {
+        let ChoosePurpose::PluginResults { results, plugin } = &mut dialog.purpose else {
+            return None;
+        };
+        let key = press.plain();
+        let delete = key == Some(Key::Delete)
+            || self.context.keymap.action_for(&press.chord) == Some(Action::Delete);
+        let cursor = dialog.cursor;
+        let current = results.rows.get(cursor).map(|r| r.path.clone());
+        let mut changed = true;
+        match key {
+            Some(Key::Space) => {
+                if let Some(row) = results.rows.get_mut(cursor) {
+                    row.marked = !row.marked;
+                }
+                dialog.cursor = (cursor + 1).min(results.rows.len().saturating_sub(1));
+            }
+            Some(Key::Char('a')) => results.toggle_all_but_best(),
+            Some(Key::Char('u')) => results.unmark_all(),
+            Some(Key::Char('s')) => results.next_sort(),
+            Some(Key::Char('r')) => results.reverse(),
+            _ if delete => {
+                let marked = results.marked();
+                if marked.is_empty() {
+                    self.set_error("Nothing is marked: Space marks a file, a marks the extras");
+                    return Some(true);
+                }
+                // The same question and trash as in a panel, for the marked files.
+                self.target_override = Some(marked);
+                self.perform(Action::Delete);
+                self.target_override = None;
+                return Some(false);
+            }
+            Some(Key::Char(c)) if results.action_for(c).is_some() => {
+                let marked = results.marked();
+                let command = results.action_for(c).map(|a| a.command.clone()).unwrap_or_default();
+                let (Some(dir), false) = (plugin.clone(), marked.is_empty()) else {
+                    self.set_error("Nothing is marked: Space marks a file, a marks the extras");
+                    return Some(true);
+                };
+                self.target_override = Some(marked);
+                self.plugin_chosen(PluginChoice::Command { dir, command });
+                self.target_override = None;
+                return Some(false);
+            }
+            _ => changed = false,
+        }
+        if !changed {
+            return None;
+        }
+        // Rebuild the rows, the cursor staying on the same file after a sort.
+        let keep_cursor = if matches!(key, Some(Key::Char('s' | 'r'))) {
+            current.and_then(|p| results.rows.iter().position(|r| r.path == p)).unwrap_or(0)
+        } else {
+            dialog.cursor
+        };
+        let (results, plugin) = (results.clone(), plugin.clone());
+        *dialog = Self::results_dialog(*results, plugin, keep_cursor);
+        Some(true)
+    }
+
     /// Tools, "Write a script with AI…": asks what the script should do.
     pub(super) fn ask_ai_script(&mut self) {
         if !cfg!(feature = "scripting") {
@@ -287,6 +388,7 @@ impl App {
                 title: "Write a script with AI".into(),
                 lines,
                 error: result.err(),
+                plugin: None,
             }
         });
     }
@@ -351,6 +453,31 @@ pub fn plugin_short_name(dir: &Path, command: &str) -> String {
         .ok()
         .and_then(|p| p.command(command).map(|c| c.short_name()))
         .unwrap_or_default()
+}
+
+/// The shortcut, function key and button name every installed plugin
+/// declares for its commands (the button name falls back to the short name
+/// derived from the title).
+#[cfg(feature = "scripting")]
+pub fn plugin_key_defaults(dir: &Path) -> Vec<pnxr_config::PluginKeyDefault> {
+    let (plugins, _) = pnxr_script::plugin::discover(dir);
+    plugins
+        .iter()
+        .flat_map(|plugin| {
+            plugin.manifest.commands.iter().map(|c| pnxr_config::PluginKeyDefault {
+                id: plugin.manifest.command_key(&c.id),
+                shortcut: c.shortcut.clone(),
+                fkey: c.fkey.clone(),
+                label: Some(c.short_name()),
+            })
+        })
+        .collect()
+}
+
+/// Without the plugin engine there are no plugin commands.
+#[cfg(not(feature = "scripting"))]
+pub fn plugin_key_defaults(_dir: &Path) -> Vec<pnxr_config::PluginKeyDefault> {
+    Vec::new()
 }
 
 /// Without the plugin engine there are no plugin commands.
@@ -446,6 +573,7 @@ pub(super) async fn run_choice(
                 other: Some(other),
                 selection,
                 home: home.map(PathBuf::from),
+                results: true,
             };
             let result = plugin.run(&command, &context, registry, output).await;
             (title, result.map_err(|e| e.to_string()))
@@ -537,6 +665,8 @@ async fn run_pnxr(
         .args(args)
         .env("PNXR_CONFIG_DIR", &paths.config_dir)
         .env("PNXR_DATA_DIR", &paths.data_dir)
+        // This front end can show a list of results (`pnxr.showResults`).
+        .env("PNXR_RESULTS", "1")
         .stdin(std::process::Stdio::null());
     if let Some(folder) = folder {
         command.current_dir(folder);
@@ -682,5 +812,32 @@ mod rename_tests {
         assert_eq!(rule.find, "(\\d+)");
         assert_eq!(rule.case, pnxr_ops::CaseChange::Lower);
         assert!(super::rename_answer("oops").is_err());
+    }
+}
+
+#[cfg(all(test, feature = "scripting"))]
+mod default_key_tests {
+    use super::*;
+
+    /// The plugins that ship in the repository declare keys that fit with the
+    /// built-in ones.
+    #[test]
+    fn the_bundled_plugins_have_conflict_free_default_keys() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        let config = pnxr_config::Config {
+            plugin_defaults: plugin_key_defaults(&dir),
+            ..Default::default()
+        };
+        let image = config
+            .plugin_defaults
+            .iter()
+            .find(|d| d.id == "plugin.image-duplicates.find")
+            .expect("image-duplicates declares its keys");
+        assert_eq!(image.fkey.as_deref(), Some("Shift+F9"));
+        let (keymap, warnings) = pnxr_config::Keymap::from_config(&config);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let ctrl_f7: pnxr_config::KeyChord = "Shift+F9".parse().unwrap();
+        assert_eq!(keymap.extra_for(&ctrl_f7), Some("plugin.image-duplicates.find"));
+        assert_eq!(keymap.bar_label(&ctrl_f7).as_deref(), Some("Similar"));
     }
 }

@@ -258,6 +258,7 @@ pub async fn plugin(context: &AppContext, args: PluginArgs) -> CmdResult {
                 other: other.as_deref().map(crate::location::parse).transpose()?,
                 selection: crate::location::parse_all(&selection)?,
                 home: home_dir(),
+                results: false,
             };
             let output: pnxr_script::Output = Arc::new(|line| crate::out!("{line}"));
             plugin.run(&command, &invocation, context.registry.clone(), output).await?;

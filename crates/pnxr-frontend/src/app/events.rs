@@ -269,6 +269,10 @@ impl App {
             }
             AppEvent::Conflict(pending) => self.conflicts.push_back(pending),
             AppEvent::TaskDone { message, error, reload, focus } => {
+                if !error && message.starts_with("Installed ") && message.contains(" It asks to") {
+                    // A plugin was installed: its default keys come into effect.
+                    self.apply_key_overrides();
+                }
                 if error {
                     self.set_error(message);
                 } else if !message.is_empty() {
@@ -361,8 +365,16 @@ impl App {
             AppEvent::PluginRepoChecked { repository, result } => {
                 self.plugin_repo_checked(repository, result)
             }
-            AppEvent::ScriptDone { title, lines, error } => {
+            AppEvent::ScriptDone { title, lines, error, plugin } => {
                 self.reload_panels(None);
+                if error.is_none()
+                    && let Some(found) = crate::results::find(&lines)
+                {
+                    match found {
+                        Ok(results) => return self.show_results(results, plugin),
+                        Err(problem) => return self.set_error(format!("{title}: {problem}")),
+                    }
+                }
                 match (&error, lines.len()) {
                     (None, 0) => self.set_status(format!("{title}: done")),
                     (None, 1) => self.set_status(format!("{title}: {}", lines[0])),

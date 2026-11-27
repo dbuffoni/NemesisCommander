@@ -4113,3 +4113,52 @@ async fn a_long_message_scrolls_with_the_keys() {
     h.type_text("x");
     assert_eq!(h.app.dialog_scroll, 0);
 }
+
+#[tokio::test]
+async fn plugin_results_are_sorted_marked_and_deleted_after_a_question() {
+    let mut h = Harness::new().await;
+    let (a, notes) = (h.path("left/a.txt"), h.path("left/notes.txt"));
+    let json = format!(
+        r##"{{"title":"Similar pictures","columns":["Group","Match","File"],
+        "actions":[{{"key":"m","title":"move aside","command":"move-marked"}}],
+        "rows":[
+          {{"path":{a:?},"cells":["#1","best","a.txt"],"values":[1,101],"keep":true}},
+          {{"path":{notes:?},"cells":["#1","95%","notes.txt"],"values":[1,95]}}]}}"##
+    );
+    let lines = vec!["a report".to_owned(), format!("{}{json}", pnxr_frontend::results::MARKER)];
+    h.app.handle_event(AppEvent::ScriptDone {
+        title: "Plugin".into(),
+        lines,
+        error: None,
+        plugin: Some(h.path("plugin")),
+    });
+    let screen = h.screen();
+    assert!(screen.contains("Similar pictures (2 files, sorted by Group ↑)"), "{screen}");
+    assert!(screen.contains("[ ] #1     best   a.txt"), "{screen}");
+    assert!(screen.contains("m: move aside") && screen.contains("a: extras"), "{screen}");
+
+    // Nothing marked yet: Delete says so and keeps the list.
+    h.key("Delete");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    // a marks the extra copy; s sorts by Match (the lower first).
+    h.press(KeyPress::char('a'));
+    assert!(h.screen().contains("(2 files, 1 marked, sorted by Group"), "{}", h.screen());
+    h.press(KeyPress::char('s'));
+    let screen = h.screen();
+    let first = screen.find("best   a.txt").unwrap();
+    let second = screen.find("95%    notes.txt").unwrap();
+    assert!(second < first && screen.contains("sorted by Match ↑"), "sorted: {screen}");
+    assert!(
+        screen.contains("[x] #1     95%    notes.txt"),
+        "the mark stays with its file: {screen}"
+    );
+
+    // Delete asks about the marked file only.
+    h.key("Delete");
+    h.settle().await;
+    let Some(Overlay::Confirm(dialog)) = h.app.overlay() else { panic!("confirmation") };
+    assert!(dialog.lines[0].contains("notes.txt"), "{:?}", dialog.lines);
+    h.press(KeyPress::char('y'));
+    h.settle().await;
+    assert!(!notes.exists() && a.exists());
+}

@@ -387,6 +387,10 @@ pub struct Config {
     /// Short names of the bottom bar buttons: command id → name (at most
     /// [`crate::keymap::LABEL_MAX`] characters).
     pub labels: BTreeMap<String, String>,
+    /// Defaults the installed plugins declare for their commands. Never
+    /// stored in the settings file: the front end fills it from the plugins.
+    #[serde(skip)]
+    pub plugin_defaults: Vec<crate::keymap::PluginKeyDefault>,
     /// Bookmarks, in menu order.
     pub bookmarks: Vec<Bookmark>,
     /// Saved connections, in menu order.
@@ -399,10 +403,16 @@ impl Config {
     /// Parses settings from TOML text. Missing sections and keys get their
     /// defaults; unknown keys are an error (to catch typos).
     pub fn from_toml(text: &str, origin: &str) -> Result<Self, ConfigError> {
+        Self::from_toml_noting(text, origin).map(|(config, _)| config)
+    }
+
+    /// Like [`from_toml`](Self::from_toml), and also says whether the text
+    /// was converted from the first shortcut model.
+    pub fn from_toml_noting(text: &str, origin: &str) -> Result<(Self, bool), ConfigError> {
         let mut config: Config = toml::from_str(text)
             .map_err(|e| ConfigError::Parse { path: origin.to_owned(), message: e.to_string() })?;
-        config.migrate_shortcuts();
-        Ok(config)
+        let converted = config.migrate_shortcuts();
+        Ok((config, converted))
     }
 
     /// Moves a settings file written for the first shortcut model to the
@@ -444,9 +454,15 @@ impl Config {
 
     /// Loads `path`, or returns defaults if the file does not exist.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
+        Self::load_noting(path).map(|(config, _)| config)
+    }
+
+    /// Like [`load`](Self::load), and also says whether the file was
+    /// converted from the first shortcut model.
+    pub fn load_noting(path: &Path) -> Result<(Self, bool), ConfigError> {
         match std::fs::read_to_string(path) {
-            Ok(text) => Self::from_toml(&text, &path.display().to_string()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+            Ok(text) => Self::from_toml_noting(&text, &path.display().to_string()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok((Config::default(), false)),
             Err(source) => Err(ConfigError::Io { path: path.display().to_string(), source }),
         }
     }

@@ -41,6 +41,7 @@ pub mod ports;
 pub mod preview;
 pub mod properties;
 pub mod renames;
+pub mod results;
 pub mod searches;
 pub mod settings;
 pub mod speed;
