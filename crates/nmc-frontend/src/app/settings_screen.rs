@@ -30,7 +30,8 @@ impl App {
         let typed = press.text.filter(|c| !press.chord.ctrl && !press.chord.alt && !c.is_control());
         match (key, typed) {
             (Some(Key::F(1)), _) => {
-                let mut help = MessageDialog::new("Settings help", crate::settings::help_lines());
+                let (title, lines) = crate::settings::help_for(screen.current());
+                let mut help = MessageDialog::new(&title, lines);
                 help.back_to_settings = Some(Box::new(screen));
                 return Some(Overlay::Message(help));
             }
@@ -71,6 +72,7 @@ impl App {
             Row::Option(field) => match field.kind() {
                 FieldKind::Toggle | FieldKind::Choice => self.step_option(Row::Option(field), 1),
                 FieldKind::Font => return Some(self.font_dialog(field, screen)),
+                FieldKind::Editor => return Some(self.editor_dialog(field, screen)),
                 FieldKind::Number(..) | FieldKind::Text => {
                     let value = field.value(&self.context.config);
                     return Some(Overlay::Input(InputDialog::new(
@@ -180,6 +182,25 @@ impl App {
         );
         dialog.query = Some(String::new());
         self.refresh_fonts(&mut dialog, &current);
+        Overlay::Choose(dialog)
+    }
+
+    /// The list of editors for `field`: the default, the known editors (the
+    /// installed ones first) and a row to type a command.
+    fn editor_dialog(&mut self, field: Field, screen: SettingsScreen) -> Overlay {
+        let window = !matches!(field, Field::TerminalEditor);
+        let suggestions = crate::editors::suggestions(window, &crate::editors::installed());
+        let mut items: Vec<String> = suggestions.iter().map(|s| s.label.clone()).collect();
+        let commands: Vec<String> = suggestions.into_iter().map(|s| s.command).collect();
+        items.push("Type a command myself…".to_owned());
+        let current = field.value(&self.context.config);
+        let mut dialog = ChooseDialog::new(
+            field.label(),
+            items,
+            ChoosePurpose::Editor { field, screen: Box::new(screen), commands: commands.clone() },
+        );
+        dialog.cursor = commands.iter().position(|c| *c == current).unwrap_or(0);
+        dialog.footer = crate::hints::list("choose", &[], "back");
         Overlay::Choose(dialog)
     }
 
@@ -439,6 +460,7 @@ impl App {
             then: Some(dialog),
             then_choose: None,
             back_to_settings: None,
+            back: false,
             logo: false,
             busy: false,
         }));

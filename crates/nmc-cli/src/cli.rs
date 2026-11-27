@@ -229,12 +229,25 @@ pub struct CatArgs {
 
 #[derive(Debug, Args)]
 pub struct HashArgs {
-    /// Files to hash.
-    #[arg(required = true)]
+    /// Files (or folders, with --write) to hash.
+    #[arg(required_unless_present = "check")]
     pub paths: Vec<String>,
     /// blake3, xxh3 or sha256.
     #[arg(short, long, default_value = "blake3")]
     pub algorithm: String,
+    /// Write the checksums of the paths to this file, in the format of
+    /// `sha256sum` / `b3sum` (names relative to its folder).
+    #[arg(short, long, value_name = "FILE", conflicts_with = "check")]
+    pub write: Option<String>,
+    /// With --write: also replace the file when it exists.
+    #[arg(long, requires = "write")]
+    pub force: bool,
+    /// Write one `name.sha256` / `name.b3` next to each file instead.
+    #[arg(long, conflicts_with_all = ["write", "check"])]
+    pub per_file: bool,
+    /// Check the files listed in this checksum file, as `sha256sum -c`.
+    #[arg(short, long, value_name = "FILE")]
+    pub check: Option<String>,
 }
 
 #[derive(Debug, Args)]

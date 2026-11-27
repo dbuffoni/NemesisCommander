@@ -54,6 +54,75 @@ pub async fn hash(context: &AppContext, args: HashArgs) -> CmdResult {
     let algorithm = nmc_hash::parse_algorithm(&args.algorithm)
         .ok_or_else(|| format!("unknown algorithm {:?} (blake3, xxh3, sha256)", args.algorithm))?;
     let mut status = ExitCode::SUCCESS;
+    if let Some(file) = &args.check {
+        use nmc_ops::checksums::{Verdict, check_checksums};
+        let results = check_checksums(&context.registry, &location::parse(file)?).await?;
+        let mut bad = 0;
+        for (name, verdict) in &results {
+            match verdict {
+                Verdict::Ok => crate::out!("{name}: OK"),
+                Verdict::Failed => {
+                    bad += 1;
+                    crate::out!("{name}: FAILED");
+                }
+                Verdict::Missing(why) => {
+                    bad += 1;
+                    crate::out!("{name}: FAILED open or read ({why})");
+                }
+            }
+        }
+        if bad > 0 {
+            eprintln!("nmc: WARNING: {bad} of {} listed files did not match", results.len());
+            status = ExitCode::from(1);
+        }
+        return Ok(status);
+    }
+    if args.write.is_some() || args.per_file {
+        use nmc_ops::checksums::{Layout, write_checksums};
+        let sources =
+            args.paths.iter().map(|p| location::parse(p)).collect::<Result<Vec<_>, _>>()?;
+        let (layout, target) = match &args.write {
+            Some(file) => (Layout::Combined, location::parse(file)?),
+            None => (Layout::PerFile, sources[0].parent().unwrap_or_else(|| sources[0].clone())),
+        };
+        // A combined file takes the name given; the folder is its own.
+        let (folder, base) = match layout {
+            Layout::Combined => {
+                let folder = target.parent().unwrap_or_else(|| target.clone());
+                (folder.clone(), folder)
+            }
+            Layout::PerFile => (target.clone(), target),
+        };
+        let written = write_checksums(
+            &context.registry,
+            &base,
+            &sources,
+            algorithm,
+            layout,
+            &folder,
+            args.force,
+        )
+        .await?;
+        // `--write FILE` names the file: move the standard name to it.
+        if let (Layout::Combined, Some(file)) = (layout, &args.write) {
+            let wanted = location::parse(file)?;
+            if let Some(made) = written.files.first()
+                && *made != wanted
+            {
+                let provider = context.registry.provider_for(made).await?;
+                if args.force {
+                    let _ = provider.remove_file(&wanted).await;
+                }
+                provider.rename(made, &wanted).await?;
+            }
+        }
+        eprintln!(
+            "nmc: wrote {} checksum file(s) for {} file(s)",
+            written.files.len(),
+            written.hashed
+        );
+        return Ok(status);
+    }
     for text in &args.paths {
         let path = location::parse(text)?;
         let provider = context.registry.provider_for(&path).await?;

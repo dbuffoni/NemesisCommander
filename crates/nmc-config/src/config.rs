@@ -42,6 +42,12 @@ pub struct GeneralSettings {
     pub use_trash: bool,
     /// External editor command for "Edit" (`$EDITOR` when empty).
     pub editor: String,
+    /// Editor of the window; empty: `editor` if it suits a window, else the
+    /// desktop's. `{file}` and `{line}` may be used.
+    pub gui_editor: String,
+    /// Editor of the terminal interface; empty: `editor` if it suits a
+    /// terminal, else `$VISUAL`, `$EDITOR`, then `vi`.
+    pub terminal_editor: String,
     /// Command that opens a terminal in a folder ("Open terminal here");
     /// `{dir}` is the folder. Empty: the terminal of the system.
     pub terminal: String,
@@ -53,8 +59,26 @@ impl Default for GeneralSettings {
             confirm_delete: true,
             use_trash: true,
             editor: String::new(),
+            gui_editor: String::new(),
+            terminal_editor: String::new(),
             terminal: String::new(),
         }
+    }
+}
+
+/// Git support: marks in the panels and the actions on a repository.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct GitSettings {
+    /// The `git` program (a name on `PATH` or a full path); empty: `git`.
+    pub executable: String,
+}
+
+impl GitSettings {
+    /// The program to run.
+    pub fn program(&self) -> &str {
+        let program = self.executable.trim();
+        if program.is_empty() { "git" } else { program }
     }
 }
 
@@ -114,8 +138,15 @@ impl PluginSettings {
     }
 }
 
+/// The font the window starts with: JetBrains Mono with the Nerd Font symbols
+/// (a window on a computer that does not have it shows the system fonts).
+pub const DEFAULT_FONT_FAMILY: &str = "JetBrainsMono Nerd Font Mono";
+
+/// The size, in points, the window starts with.
+pub const DEFAULT_FONT_SIZE: u32 = 11;
+
 /// Fonts of the window (the terminal interface uses the terminal's font).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AppearanceSettings {
     /// Font family of the text; empty for the system font.
@@ -124,6 +155,16 @@ pub struct AppearanceSettings {
     pub font_size: u32,
     /// Fixed-width font family (viewers, columns); empty for `monospace`.
     pub fixed_font_family: String,
+}
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        AppearanceSettings {
+            font_family: DEFAULT_FONT_FAMILY.to_owned(),
+            font_size: DEFAULT_FONT_SIZE,
+            fixed_font_family: DEFAULT_FONT_FAMILY.to_owned(),
+        }
+    }
 }
 
 /// How panels show files.
@@ -329,6 +370,8 @@ pub struct Config {
     pub appearance: AppearanceSettings,
     /// Plugin repositories.
     pub plugins: PluginSettings,
+    /// Git.
+    pub git: GitSettings,
     /// Shortcut overrides: action id → key chords (empty list unbinds).
     pub keys: BTreeMap<String, Vec<String>>,
     /// Bookmarks, in menu order.

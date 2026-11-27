@@ -35,18 +35,22 @@ use crate::input::KeyPress;
 use crate::viewer::{self, QUICK_VIEW_LIMIT, VIEW_LIMIT, Viewer};
 
 mod archives;
+mod checksums;
 mod diskwork;
 mod features;
 mod generate;
+mod git_actions;
 mod logins;
 mod palette;
 mod plugin_store;
 mod plugin_views;
 mod plugins;
 mod pointer;
+mod properties;
 mod settings_screen;
 mod terminal;
 
+pub use checksums::ChecksumJob;
 pub use plugin_store::{RepoRow, StoreRow};
 pub use plugin_views::{ColumnCells, ColumnHead};
 pub use plugins::{PluginChoice, plugin_short_name};
@@ -396,6 +400,8 @@ pub struct App {
     visited: [Option<String>; 2],
     /// The last search, to save it.
     last_search: Option<nmc_config::SavedSearch>,
+    /// The mask of the last Select / Unselect, offered again.
+    last_mask: String,
     /// Items for the commands to act on instead of the panel's selection
     /// (the basket's).
     target_override: Option<Vec<VfsPath>>,
@@ -498,8 +504,9 @@ impl App {
         }
         let Some(dir) = path.to_local_path() else { return };
         let path = path.clone();
+        let exe = self.context.config.git.program().to_owned();
         self.spawn_task(async move {
-            let status = tokio::task::spawn_blocking(move || crate::git::read(&dir))
+            let status = tokio::task::spawn_blocking(move || crate::git::read_with(&exe, &dir))
                 .await
                 .ok()
                 .flatten()
@@ -715,6 +722,7 @@ impl App {
             fonts: Vec::new(),
             visited: [None, None],
             last_search: None,
+            last_mask: String::new(),
             target_override: None,
             compare_marks: false,
             held: (false, false, false),
@@ -831,6 +839,15 @@ impl App {
         fonts.sort_by_key(|f| f.to_lowercase());
         fonts.dedup();
         self.fonts = fonts;
+    }
+
+    /// `family` if the window has that font installed (or does not know
+    /// the installed fonts), else empty: the window then uses the system
+    /// font, or `monospace` for the fixed-width one.
+    pub fn usable_font(&self, family: &str) -> String {
+        let known = self.fonts.is_empty()
+            || self.fonts.iter().any(|f| f.eq_ignore_ascii_case(family.trim()));
+        if known { family.to_owned() } else { String::new() }
     }
 
     /// The settings and key map in use.
@@ -1232,6 +1249,7 @@ impl App {
                             lines: text,
                             then: None,
                             then_choose: None,
+                            back: false,
                             back_to_settings: None,
                             logo: false,
                             busy: false,
@@ -1476,6 +1494,18 @@ impl App {
             Overlay::Help => None,
             Overlay::Commands(palette) => self.palette_key(palette, press),
             Overlay::Input(mut dialog) => {
+                if let InputPurpose::PropsEdit { row, state } = &dialog.purpose {
+                    let (row, state) = (*row, (**state).clone());
+                    if is_esc {
+                        self.overlay = Some(Overlay::Choose(Self::properties_dialog(state, 0)));
+                        return self.overlay.take();
+                    }
+                    if key == Some(Key::Enter) {
+                        let text = dialog.field.text().to_owned();
+                        self.properties_typed(row, state, &text);
+                        return self.overlay.take();
+                    }
+                }
                 let back = dialog.purpose.settings_screen().cloned().map(Overlay::Settings);
                 if is_esc {
                     if let InputPurpose::ArchivePassword(container) = &dialog.purpose {
@@ -1497,6 +1527,67 @@ impl App {
                     // The advanced options: the typed name picks the format.
                     self.ask_pack_format(paths.clone(), dialog.field.text());
                     return None;
+                }
+                if matches!(
+                    dialog.purpose,
+                    InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask
+                ) {
+                    if key == Some(Key::F(2)) {
+                        let next = match dialog.purpose {
+                            InputPurpose::SelectMask => InputPurpose::UnselectMask,
+                            InputPurpose::UnselectMask => InputPurpose::KeepMask,
+                            _ => InputPurpose::SelectMask,
+                        };
+                        let text = dialog.field.text().to_owned();
+                        self.ask_mask(next, Some(&text));
+                        return self.overlay.take();
+                    }
+                    if press.chord.ctrl && press.chord.key == Key::Char('o') {
+                        let rows = crate::masks::PRESETS
+                            .iter()
+                            .map(|(name, mask)| format!("{name:<28} {mask}"))
+                            .collect();
+                        return Some(Overlay::Choose(ChooseDialog::new(
+                            "Ready-made masks",
+                            rows,
+                            ChoosePurpose::MaskPresets(dialog.purpose.clone()),
+                        )));
+                    }
+                    if key == Some(Key::F(1)) {
+                        let mut help =
+                            MessageDialog::new("Select by mask", crate::masks::help_lines());
+                        help.then = Some(dialog);
+                        help.back = true;
+                        return Some(Overlay::Message(help));
+                    }
+                }
+                if let InputPurpose::MultiRename(paths) = &dialog.purpose {
+                    if press.chord.ctrl && press.chord.key == Key::Char('o') {
+                        let rows = crate::renames::PRESETS
+                            .iter()
+                            .map(|(name, rule)| format!("{name:<36} {rule}"))
+                            .collect();
+                        return Some(Overlay::Choose(ChooseDialog::new(
+                            "Ready-made rename rules",
+                            rows,
+                            ChoosePurpose::RenamePresets(paths.clone()),
+                        )));
+                    }
+                    if key == Some(Key::F(1)) {
+                        let mut help =
+                            MessageDialog::new("Multi-rename", crate::renames::help_lines());
+                        help.then = Some(dialog);
+                        help.back = true;
+                        return Some(Overlay::Message(help));
+                    }
+                }
+                if key == Some(Key::F(1))
+                    && let Some((title, text)) = crate::help::input_help(&dialog.purpose)
+                {
+                    let mut help = MessageDialog::new(&title, text);
+                    help.then = Some(dialog);
+                    help.back = true;
+                    return Some(Overlay::Message(help));
                 }
                 if dialog.purpose.testable()
                     && press.chord.ctrl
@@ -1525,6 +1616,14 @@ impl App {
                         }
                         InputPurpose::QuickFilter => {
                             self.workspace.active_mut().set_filter(dialog.field.text())
+                        }
+                        InputPurpose::SelectMask
+                        | InputPurpose::UnselectMask
+                        | InputPurpose::KeepMask => {
+                            dialog.preview = crate::masks::preview(
+                                self.workspace.active().entries(),
+                                dialog.field.text(),
+                            )
                         }
                         // The new names follow the template as it is typed.
                         InputPurpose::MultiRename(paths) => {
@@ -1555,6 +1654,15 @@ impl App {
                 if let Some(keep) = self.choose_extra_key(&mut dialog, &press) {
                     return keep.then_some(Overlay::Choose(dialog));
                 }
+                if key == Some(Key::F(1))
+                    && let Some((title, text)) =
+                        crate::help::choose_help(&dialog.purpose, dialog.cursor)
+                {
+                    let mut help = MessageDialog::new(&title, text);
+                    help.then_choose = Some(Box::new(dialog));
+                    help.back = true;
+                    return Some(Overlay::Message(help));
+                }
                 match key {
                     Some(Key::Up) => dialog.move_cursor(-1),
                     Some(Key::Down) => dialog.move_cursor(1),
@@ -1570,7 +1678,9 @@ impl App {
                         if let Some(cancel) = self.search_cancel.take() {
                             cancel.cancel();
                         }
-                        if let ChoosePurpose::Font { screen, .. } = dialog.purpose {
+                        if let ChoosePurpose::Font { screen, .. }
+                        | ChoosePurpose::Editor { screen, .. } = dialog.purpose
+                        {
                             return Some(Overlay::Settings(*screen));
                         }
                         return None;
@@ -1754,11 +1864,44 @@ impl App {
                 lines,
                 then: back,
                 then_choose: choose,
+                back: false,
                 back_to_settings: None,
                 logo: false,
                 busy: false,
             })))
         });
+    }
+
+    /// The question of Select, Unselect and Keep only: the last mask (or
+    /// `text`) in the field, and a live count of the files that match.
+    /// The multi-rename question, with `text` in the field.
+    fn ask_multi_rename(&mut self, targets: Vec<VfsPath>, text: &str) {
+        let preview = template_preview(&targets, text);
+        let mut dialog = InputDialog::new(
+            "Multi-rename",
+            "Template: [N] name, [E] extension, [C] counter, [P] folder; options after | (F1 explains, Ctrl+O: ready-made):",
+            text,
+            InputPurpose::MultiRename(targets),
+        );
+        dialog.preview = preview;
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
+    fn ask_mask(&mut self, purpose: InputPurpose, text: Option<&str>) {
+        let (title, verb) = match purpose {
+            InputPurpose::UnselectMask => ("Unselect", "Unselect files matching"),
+            InputPurpose::KeepMask => ("Keep only", "Keep selected only the files matching"),
+            _ => ("Select", "Select files matching"),
+        };
+        let initial = match text {
+            Some(text) => text.to_owned(),
+            None if self.last_mask.is_empty() => "*".to_owned(),
+            None => self.last_mask.clone(),
+        };
+        let prompt = format!("{verb} (*.jpg;*.png, has:text, re:REGEX; F1 explains):");
+        let mut dialog = InputDialog::new(title, &prompt, &initial, purpose);
+        dialog.preview = crate::masks::preview(self.workspace.active().entries(), &initial);
+        self.overlay = Some(Overlay::Input(dialog));
     }
 
     fn ask(&mut self, title: &str, prompt: &str, initial: &str, purpose: InputPurpose) {
@@ -1869,18 +2012,7 @@ impl App {
                 self.overlay = Some(Overlay::Input(dialog));
             }
             Action::MultiRename if nothing => self.set_error("Nothing to rename"),
-            Action::MultiRename => {
-                let template = "[N][X]";
-                let preview = template_preview(&targets, template);
-                let mut dialog = InputDialog::new(
-                    "Multi-rename",
-                    "Template ([N] name, [E] extension, [X] .extension, [C] counter, [P] folder):",
-                    template,
-                    InputPurpose::MultiRename(targets),
-                );
-                dialog.preview = preview;
-                self.overlay = Some(Overlay::Input(dialog));
-            }
+            Action::MultiRename => self.ask_multi_rename(targets, "[N][X]"),
             Action::AiRename if nothing => self.set_error("Nothing to rename"),
             Action::AiRename => self.ask_ai_rename(targets),
             Action::GenerateFiles => self.generate_files(),
@@ -1909,20 +2041,7 @@ impl App {
                 self.ask("Pack", &prompt, &output, InputPurpose::PackInto(targets));
             }
             Action::Unpack => self.unpack_current(),
-            Action::Properties => self.show_properties(),
-            Action::Attributes if nothing => self.set_error("Nothing to change"),
-            Action::Attributes => {
-                let prompt = format!(
-                    "Change {} (date 2026-11-17, time 10:30, now, mode=644, -r):",
-                    Self::count_text(&targets)
-                );
-                self.ask(
-                    "Dates and permissions",
-                    &prompt,
-                    "now",
-                    InputPurpose::Attributes(targets),
-                );
-            }
+            Action::Properties => self.open_properties(),
             Action::Undo => self.undo_last(),
             Action::Checksum => self.checksum_current(),
             Action::CopyPath => self.ask_copy_path(),
@@ -1940,24 +2059,18 @@ impl App {
                 self.disk_usage(folder);
             }
             Action::Duplicates => self.find_duplicates(),
+            Action::Git => self.ask_git(),
             Action::Disks => self.show_disks(),
             Action::SavedSearches => self.open_saved_searches(),
             Action::SaveSearch if self.last_search.is_none() => {
-                self.set_error("Search first (Shift+F7), then save that search")
+                self.set_error("Search first (Ctrl+F2), then save that search")
             }
             Action::SaveSearch => {
                 self.ask("Save search", "Name for this search:", "", InputPurpose::NameSearch)
             }
             Action::ToggleSelect => self.workspace.active_mut().toggle_current(),
-            Action::SelectMask => self.ask(
-                "Select",
-                "Select files matching (e.g. *.jpg, or re:REGEX):",
-                "*",
-                InputPurpose::SelectMask,
-            ),
-            Action::UnselectMask => {
-                self.ask("Unselect", "Unselect files matching:", "*", InputPurpose::UnselectMask)
-            }
+            Action::SelectMask => self.ask_mask(InputPurpose::SelectMask, None),
+            Action::UnselectMask => self.ask_mask(InputPurpose::UnselectMask, None),
             Action::InvertSelect => self.workspace.active_mut().invert_selection(),
             Action::SelectAll => self.workspace.active_mut().select_all(),
             Action::Open => {
@@ -2246,10 +2359,11 @@ impl App {
                     undoable(step, done(result.map(|()| String::new()), Some(text)))
                 });
             }
-            InputPurpose::MultiRename(paths) => {
-                let rule = RenameRule { template: text, ..RenameRule::default() };
-                self.confirm_renames(paths, &rule, None);
-            }
+            InputPurpose::GitCommit(dir) => self.git_commit(dir, text),
+            InputPurpose::MultiRename(paths) => match crate::renames::parse_rule(&text) {
+                Ok(rule) => self.confirm_renames(paths, &rule, None),
+                Err(e) => self.set_error(e),
+            },
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
             InputPurpose::AddPluginRepo => self.plugin_repo_typed(&text),
             InputPurpose::NewConnection => match crate::connections::check(&text) {
@@ -2337,10 +2451,20 @@ impl App {
                 }
                 Err(e) => self.set_error(e),
             },
-            InputPurpose::SelectMask | InputPurpose::UnselectMask => {
-                let select = dialog.purpose == InputPurpose::SelectMask;
+            InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => {
                 match Mask::parse(&text) {
-                    Ok(mask) => self.workspace.active_mut().select_mask(&mask, select, false),
+                    Ok(mask) => {
+                        self.last_mask = text.clone();
+                        let panel = self.workspace.active_mut();
+                        match dialog.purpose {
+                            InputPurpose::KeepMask => {
+                                panel.clear_selection();
+                                panel.select_mask(&mask, true, false);
+                            }
+                            InputPurpose::SelectMask => panel.select_mask(&mask, true, false),
+                            _ => panel.select_mask(&mask, false, false),
+                        }
+                    }
                     Err(e) => self.set_error(e.to_string()),
                 }
             }
@@ -2393,6 +2517,7 @@ impl App {
             InputPurpose::ExportTo { format, selection_only } => {
                 self.export_listing(format, selection_only, &text)
             }
+            InputPurpose::PropsEdit { .. } => {}
             InputPurpose::Attributes(paths) => {
                 let change = match nmc_ops::parse_change(&text, std::time::SystemTime::now()) {
                     Ok(change) => change,
@@ -2489,6 +2614,7 @@ impl App {
                     lines,
                     then: None,
                     then_choose: None,
+                    back: false,
                     back_to_settings: None,
                     logo: false,
                     busy: false,
@@ -2557,6 +2683,8 @@ impl App {
                     done(result.map(|()| format!("{verb}: {count} {noun}")), None)
                 });
             }
+            ConfirmPurpose::GitDiscard(dir, files) => self.git_discard(dir, files),
+            ConfirmPurpose::ChecksumOverwrite(job) => self.write_checksum_files(*job, true),
             ConfirmPurpose::Forget(what) => self.forget(what),
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
             ConfirmPurpose::UninstallPlugin(name) => self.uninstall_plugin(&name),
@@ -2646,13 +2774,45 @@ impl App {
                 self.chosen_disk_tool(purpose, cursor);
             }
             // Enter is handled by its own key.
-            ChoosePurpose::DiskUsage { .. } => {}
+            ChoosePurpose::DiskUsage { .. } | ChoosePurpose::Properties(_) => {}
             ChoosePurpose::Font { field, screen, names } => {
                 if let Some(name) = names.get(cursor) {
                     self.setting_typed(field, name);
                 }
                 self.overlay = Some(Overlay::Settings(*screen));
             }
+            ChoosePurpose::Git { dir, files } => self.git_chosen(dir, files, cursor),
+            ChoosePurpose::GitBranches { dir, names } => {
+                self.git_branch_chosen(dir, &names, cursor)
+            }
+            ChoosePurpose::RenamePresets(paths) => {
+                if let Some((_, text)) = crate::renames::PRESETS.get(cursor) {
+                    self.ask_multi_rename(paths, text);
+                }
+            }
+            ChoosePurpose::MaskPresets(purpose) => {
+                if let Some((_, mask)) = crate::masks::PRESETS.get(cursor) {
+                    self.ask_mask(purpose, Some(mask));
+                }
+            }
+            ChoosePurpose::Checksums { base, sources, verify } => {
+                self.checksum_chosen(base, sources, verify, cursor);
+            }
+            ChoosePurpose::Editor { field, screen, commands } => match commands.get(cursor) {
+                Some(command) => {
+                    self.setting_typed(field, command);
+                    self.overlay = Some(Overlay::Settings(*screen));
+                }
+                None => {
+                    let value = field.value(&self.context.config);
+                    self.overlay = Some(Overlay::Input(InputDialog::new(
+                        "Settings",
+                        &format!("{}:", field.label()),
+                        &value,
+                        InputPurpose::SettingValue { field, screen },
+                    )));
+                }
+            },
             ChoosePurpose::ImportMode(bundle) => {
                 let mode = if cursor == 0 { ImportMode::Replace } else { ImportMode::Merge };
                 self.context.config = bundle.apply(&self.context.config, mode);
@@ -2863,6 +3023,7 @@ impl App {
             return;
         }
         match path.to_local_path().filter(|_| path.scheme() == "file") {
+            Some(local) if self.edit_in_terminal(&local) => {}
             Some(local) => {
                 self.external = Some(External {
                     command: self.editor_command(&local),
@@ -2874,26 +3035,60 @@ impl App {
         }
     }
 
-    /// The editor command line for `file`: the configured editor, then
-    /// `$VISUAL`, `$EDITOR` (in a terminal only), and finally a platform
-    /// default.
-    fn editor_command(&self, file: &Path) -> Vec<String> {
-        let configured = self.context.config.general.editor.trim().to_owned();
-        let from_environment = if self.graphical {
-            Vec::new()
-        } else {
-            vec![
-                std::env::var("VISUAL").unwrap_or_default(),
-                std::env::var("EDITOR").unwrap_or_default(),
-            ]
-        };
-        let editor = std::iter::once(configured)
+    /// A window with a terminal editor set: opens it in a terminal window.
+    /// Returns `false` when the editor does not need that.
+    fn edit_in_terminal(&mut self, file: &Path) -> bool {
+        let (editor, needs_terminal) = self.editor_choice();
+        if !needs_terminal {
+            return false;
+        }
+        let program = crate::editors::command_line(&editor, file, 1);
+        let dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
+        let candidates = crate::terminal::run_in(
+            &self.context.config.general.terminal,
+            std::env::var("TERMINAL").ok().as_deref(),
+            &dir,
+            &program,
+            std::env::consts::OS,
+        );
+        match crate::terminal::launch(&candidates, Some(&dir)) {
+            Ok(_) => self.set_status(format!(
+                "{} is open in a terminal; refresh (Ctrl+R) when you are done",
+                program[0]
+            )),
+            Err(e) => self.set_error(e),
+        }
+        true
+    }
+
+    /// The editor for this interface: its own setting; then the shared
+    /// `editor` and `$VISUAL` / `$EDITOR` when they suit the interface (a
+    /// window does not run a terminal editor, a terminal does not wait for a
+    /// window one it cannot see); then the platform's default. The bool says
+    /// that the editor needs a terminal and the interface is a window.
+    fn editor_choice(&self) -> (String, bool) {
+        let general = &self.context.config.general;
+        let own = if self.graphical { &general.gui_editor } else { &general.terminal_editor };
+        if !own.trim().is_empty() {
+            let needs_terminal = self.graphical
+                && crate::editors::kind_of(own) == Some(crate::editors::Kind::Terminal);
+            return (own.trim().to_owned(), needs_terminal);
+        }
+        let from_environment = [
+            std::env::var("VISUAL").unwrap_or_default(),
+            std::env::var("EDITOR").unwrap_or_default(),
+        ];
+        let editor = std::iter::once(general.editor.trim().to_owned())
             .chain(from_environment)
-            .find(|e| !e.trim().is_empty())
+            .filter(|e| !e.trim().is_empty())
+            .find(|e| crate::editors::suits(e, self.graphical))
             .unwrap_or_else(|| default_editor(self.graphical).into());
-        let mut command: Vec<String> = editor.split_whitespace().map(str::to_owned).collect();
-        command.push(file.display().to_string());
-        command
+        (editor, false)
+    }
+
+    /// The editor command line for `file` (see [`Self::editor_choice`]).
+    fn editor_command(&self, file: &Path) -> Vec<String> {
+        crate::editors::command_line(&self.editor_choice().0, file, 1)
     }
 
     /// Called by the main loop after an external program ended.
@@ -2993,101 +3188,6 @@ impl App {
                 message: result.unwrap_or_else(|e: nmc_vfs::VfsError| e.to_string()),
                 reload: false,
                 focus: None,
-            }
-        });
-    }
-
-    fn show_properties(&mut self) {
-        let panel = self.workspace.active();
-        let Some(path) = panel.current_path() else { return };
-        let Some(entry) = panel.current_entry().cloned() else { return };
-        let kind = match entry.kind {
-            EntryKind::File => "file",
-            EntryKind::Directory => "folder",
-            EntryKind::Symlink => "symbolic link",
-            EntryKind::Other => "special file",
-        };
-        let mut lines = vec![
-            format!("Name:        {}", entry.name),
-            format!("Location:    {}", display_location(panel.location())),
-            format!("Type:        {kind}"),
-        ];
-        if !entry.is_dir() {
-            lines.push(format!(
-                "Size:        {} ({} bytes)",
-                nmc_panel::format::human_size(entry.size),
-                entry.size
-            ));
-        }
-        if let Some(modified) = entry.modified {
-            lines.push(format!("Modified:    {}", nmc_panel::format::local_time(modified)));
-        }
-        if let Some(target) = &entry.symlink_target {
-            lines.push(format!("Points to:   {target}"));
-        }
-        let mut suggestion = "now".to_owned();
-        if let Some(mode) = entry.permissions {
-            lines.push(format!(
-                "Permissions: {} ({:o})",
-                nmc_panel::format::permissions(mode),
-                mode & 0o7777
-            ));
-            suggestion = format!("mode={:o}", mode & 0o7777);
-        }
-        if let Some(flags) = entry.os_flags {
-            let names = nmc_vfs::os_flags::describe(flags);
-            let shown = if names.is_empty() { "none".to_owned() } else { names.join(", ") };
-            lines.push(format!("Attributes:  {shown}"));
-        }
-        let then = Some(InputDialog::new(
-            "Dates and permissions",
-            &format!("Change {} (date, time, now, mode=644, -r):", entry.name),
-            &suggestion,
-            InputPurpose::Attributes(vec![path.clone()]),
-        ));
-        self.overlay = Some(Overlay::Message(MessageDialog {
-            title: "Properties".into(),
-            lines,
-            then,
-            then_choose: None,
-            back_to_settings: None,
-            logo: false,
-            busy: false,
-        }));
-    }
-
-    fn checksum_current(&mut self) {
-        let panel = self.workspace.active();
-        let Some(path) = panel.current_path() else { return };
-        if panel.current_entry().is_some_and(|e| e.is_dir()) {
-            return self.set_error("Checksums are computed for files");
-        }
-        let registry = self.context.registry.clone();
-        self.set_status("Computing checksums…");
-        self.spawn_task(async move {
-            let result = async {
-                let provider = registry.provider_for(&path).await?;
-                let mut lines = vec![format!("{}", path.file_name().unwrap_or(""))];
-                for (name, algorithm) in
-                    [("BLAKE3", HashAlgorithm::Blake3), ("SHA-256", HashAlgorithm::Sha256)]
-                {
-                    let digest = nmc_ops::checksum(provider.as_ref(), &path, algorithm).await?;
-                    lines.push(format!("{name:<8} {digest}"));
-                }
-                Ok::<_, nmc_vfs::VfsError>(lines)
-            }
-            .await;
-            match result {
-                Ok(lines) => AppEvent::Show(Box::new(Overlay::Message(MessageDialog {
-                    title: "Checksums".into(),
-                    lines,
-                    then: None,
-                    then_choose: None,
-                    back_to_settings: None,
-                    logo: false,
-                    busy: false,
-                }))),
-                Err(e) => done(Err(e), None),
             }
         });
     }
@@ -3312,11 +3412,20 @@ fn rename_lines(
 /// The live preview of the Ctrl+M dialog: the first new names `template`
 /// gives `paths`, or why it cannot be used.
 fn template_preview(paths: &[VfsPath], template: &str) -> Vec<String> {
-    let rule = RenameRule { template: template.to_owned(), ..RenameRule::default() };
+    let rule = match crate::renames::parse_rule(template) {
+        Ok(rule) => rule,
+        Err(e) => return vec![format!("  {e}")],
+    };
     match preview_renames(paths, &rule) {
         Ok(names) => {
-            let lines = rename_lines(paths, &names, &[], 5);
-            if lines.is_empty() { vec!["  (no name changes)".into()] } else { lines }
+            let changed =
+                paths.iter().zip(&names).filter(|(p, n)| p.file_name() != Some(n.as_str())).count();
+            if changed == 0 {
+                return vec!["  (no name changes)".into()];
+            }
+            let mut lines = vec![format!("{changed} of {} names change:", paths.len())];
+            lines.extend(rename_lines(paths, &names, &[], 5));
+            lines
         }
         Err(e) => vec![format!("  Cannot rename: {e}")],
     }

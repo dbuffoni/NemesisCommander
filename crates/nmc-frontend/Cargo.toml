@@ -24,6 +24,7 @@ nmc-s3.workspace = true
 nmc-preview.workspace = true
 async-trait.workspace = true
 similar.workspace = true
+tempfile.workspace = true
 regex.workspace = true
 bytes.workspace = true
 futures.workspace = true
@@ -43,7 +44,6 @@ scripting = ["dep:nmc-script"]
 script-engine = ["scripting", "nmc-script/engine"]
 
 [dev-dependencies]
-tempfile.workspace = true
 nmc-providers.workspace = true
 tokio = { workspace = true, features = ["full"] }
 

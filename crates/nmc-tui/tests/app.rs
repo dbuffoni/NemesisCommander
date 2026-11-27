@@ -280,6 +280,37 @@ async fn multi_rename_previews_then_renames() {
 }
 
 #[tokio::test]
+async fn multi_rename_has_options_presets_and_help() {
+    let mut h = Harness::new().await;
+    h.key("+");
+    h.type_text("*.txt");
+    h.key("Enter");
+    h.key("Shift+F2");
+    h.type_text("doc-[C][X] | width=3 | upper");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert!(dialog.preview[0].contains("2 of 2 names change"), "{:?}", dialog.preview);
+    assert!(
+        dialog.preview.iter().any(|l| l.contains("a.txt → DOC-001.TXT")),
+        "{:?}",
+        dialog.preview
+    );
+    h.type_text("[N] | bogus");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert!(dialog.preview[0].contains("Unknown option"), "{:?}", dialog.preview);
+    h.key("F1");
+    assert!(h.screen().contains("Rename many files"));
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "help returns to the question");
+    h.key("Ctrl+O");
+    assert!(h.screen().contains("Ready-made rename rules"));
+    h.key("Down");
+    h.key("Down");
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert_eq!(dialog.field.text(), "[C][X] | width=3");
+}
+
+#[tokio::test]
 async fn multi_rename_shows_names_that_exist_and_renames_nothing() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
@@ -317,6 +348,88 @@ async fn selection_by_mask_and_invert() {
     assert_eq!((summary.files, summary.dirs), (1, 1));
     assert!(h.app.workspace().active().is_selected("a.txt"));
     assert!(h.screen().contains("2 selected"));
+}
+
+#[tokio::test]
+async fn the_mask_dialog_shows_matches_cycles_actions_and_remembers() {
+    let mut h = Harness::new().await;
+    h.key("+");
+    h.type_text("*.txt");
+    let screen = h.screen();
+    assert!(screen.contains("2 of 2 files match"), "{screen}");
+    // F2 turns the question into Unselect, then Keep only.
+    h.key("F2");
+    assert!(h.screen().contains("Unselect"));
+    h.key("F2");
+    assert!(h.screen().contains("Keep only"));
+    h.key("F2");
+    assert!(h.screen().contains("Select"));
+    // Presets.
+    h.key("Ctrl+O");
+    assert!(h.screen().contains("Ready-made masks"));
+    h.key("Esc");
+    h.key("Esc");
+    // The last mask is offered again.
+    h.key("+");
+    assert!(h.screen().contains("*.txt") || h.screen().contains("*"));
+    h.key("Enter");
+    assert_eq!(h.app.workspace().active().selection_summary().files, 2);
+}
+
+#[tokio::test]
+async fn f1_in_a_list_explains_the_row_under_the_cursor() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Shift+F4");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    h.type_text("e");
+    for _ in 0..30 {
+        let Some(Overlay::Choose(d)) = h.app.overlay() else { panic!("properties") };
+        let nmc_tui::ChoosePurpose::Properties(state) = &d.purpose else { panic!("properties") };
+        if matches!(state.rows.get(d.cursor), Some(nmc_frontend::properties::PropRow::Bit(_))) {
+            break;
+        }
+        h.key("Down");
+    }
+    h.key("F1");
+    assert!(h.screen().contains("switches this permission"), "{}", h.screen());
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "back to the list");
+}
+
+#[tokio::test]
+async fn git_actions_stage_and_commit() {
+    let mut h = Harness::new().await;
+    let left = h.path("left");
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git").arg("-C").arg(&left).args(args).output();
+        out.map(|o| o.status.success()).unwrap_or(false)
+    };
+    if !git(&["init", "-q"]) {
+        return; // no git here
+    }
+    git(&["config", "user.email", "t@example.com"]);
+    git(&["config", "user.name", "T"]);
+    h.focus("a.txt");
+    h.key("Ctrl+F11");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "{}", h.status());
+    h.key("Enter"); // stage
+    h.settle().await;
+    h.key("Ctrl+F11");
+    h.key("Down");
+    h.key("Down");
+    h.key("Down");
+    h.key("Enter"); // commit
+    h.type_text("first");
+    h.key("Enter");
+    h.settle().await;
+    let log = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&left)
+        .args(["log", "--oneline"])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&log.stdout).contains("first"));
 }
 
 #[tokio::test]
@@ -765,7 +878,7 @@ async fn bookmarks_are_saved_and_opened() {
 /// commands answer to Shift+F too.
 #[tokio::test]
 async fn shift_function_keys_do_what_the_alt_ones_do() {
-    for (key, title) in [("Shift+F5", "Pack"), ("Shift+F7", "Search"), ("Shift+F1", "Drives")] {
+    for (key, title) in [("Shift+F5", "Pack"), ("Ctrl+F2", "Search"), ("Shift+F1", "Drives")] {
         let mut h = Harness::new().await;
         h.focus("docs");
         h.key(key);
@@ -871,7 +984,7 @@ async fn tabs_open_and_close() {
 #[tokio::test]
 async fn search_by_content_and_jump_to_the_hit() {
     let mut h = Harness::new().await;
-    h.key("Shift+F7");
+    h.key("Ctrl+F2");
     h.type_text("*.txt");
     h.key("Enter");
     h.type_text("NEEDLE");
@@ -894,7 +1007,7 @@ async fn compare_selects_differences() {
     filetime_copy(&h.path("left/a.txt"), &h.path("right/a.txt"));
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     let left = h.app.workspace().side(SideId::Left).panel();
     assert!(left.is_selected("notes.txt") && left.is_selected("docs"));
     assert!(!left.is_selected("a.txt"), "identical files are not marked");
@@ -917,7 +1030,7 @@ async fn compare_two_files() {
     h.focus("a.txt");
     h.key("Tab");
     h.focus("a.txt");
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     h.settle().await;
     assert_eq!(h.status(), "Files are identical");
 }
@@ -955,7 +1068,7 @@ async fn unpack_queues_a_copy_of_the_members() {
     h.key("Enter");
     h.settle().await;
     h.focus("docs.zip");
-    h.key("Shift+F9");
+    h.key("Shift+F6");
     h.settle().await;
     assert_eq!(fs::read_to_string(h.path("right/docs/readme.md")).unwrap(), "# readme\n");
 }
@@ -983,7 +1096,7 @@ async fn unpacking_an_encrypted_archive_asks_the_password_first() {
     fs::remove_dir_all(h.path("left/docs")).unwrap();
     h.key("Tab");
     h.focus("locked.zip");
-    h.key("Shift+F9");
+    h.key("Shift+F6");
     h.settle().await;
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("no password asked") };
     assert!(dialog.prompt.contains("locked.zip is encrypted"), "{}", dialog.prompt);
@@ -1031,8 +1144,46 @@ async fn checksums_and_properties() {
     assert!(message.lines.iter().any(|l| l.starts_with("BLAKE3")));
     h.key("Esc");
     h.key("Ctrl+E");
-    let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("properties") };
-    assert!(message.lines.iter().any(|l| l.contains("6 bytes")));
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("properties") };
+    assert!(dialog.items.iter().any(|l| l.contains("6 bytes")));
+    assert!(dialog.footer.contains("e or F2: edit"), "opens read-only: {}", dialog.footer);
+}
+
+#[tokio::test]
+async fn checksum_files_are_written_and_checked() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Ctrl+K");
+    h.settle().await;
+    assert!(matches!(h.app.overlay(), Some(Overlay::Message(_))));
+    h.key("Enter"); // the list of checksum files to write
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert!(dialog.items[0].contains("SHA256SUMS"), "{:?}", dialog.items);
+    h.key("Enter");
+    h.settle().await;
+    let text = fs::read_to_string(h.path("left/SHA256SUMS")).unwrap();
+    assert!(text.ends_with("  a.txt\n"), "{text}");
+    assert!(h.status().contains("Wrote SHA256SUMS"), "{}", h.status());
+    // On the checksum file the first row checks it.
+    h.key("Ctrl+R");
+    h.settle().await;
+    h.focus("SHA256SUMS");
+    h.key("Ctrl+K");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    assert!(dialog.items[0].starts_with("Check the files listed in SHA256SUMS"));
+    h.key("Enter");
+    h.settle().await;
+    let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("the result") };
+    assert!(message.lines[0].contains("1 OK, 0 FAILED"), "{:?}", message.lines);
+    h.key("Esc");
+    // Writing again asks before it replaces the file.
+    h.focus("a.txt");
+    h.key("Ctrl+K");
+    h.settle().await;
+    h.key("Enter");
+    h.key("Enter");
+    h.settle().await;
+    assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))), "asks to replace");
 }
 
 #[cfg(unix)]
@@ -1042,12 +1193,28 @@ async fn permissions_can_be_changed() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
     h.key("Ctrl+E");
+    h.type_text("e"); // edit mode: the cursor is on the date
+    h.key("Down"); // the permissions as an octal number
     h.key("Enter");
-    h.type_text("mode=600");
+    for _ in 0..4 {
+        h.key("Backspace");
+    }
+    h.type_text("600");
     h.key("Enter");
+    h.key("Ctrl+S");
     h.settle().await;
     let mode = fs::metadata(h.path("left/a.txt")).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o600);
+
+    // A check box changes one permission and the octal number follows.
+    h.key("Ctrl+E");
+    h.type_text("e");
+    h.key("Down");
+    h.key("Down"); // owner read
+    h.key("Space");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("properties") };
+    assert!(dialog.items.iter().any(|l| l.contains("[ ] Owner: read")), "{:?}", dialog.items);
+    assert!(dialog.items.iter().any(|l| l.contains("(0200)")), "{:?}", dialog.items);
 }
 
 #[tokio::test]
@@ -1375,7 +1542,7 @@ async fn esc_clears_what_compare_selected() {
     fs::write(h.path("right/only-there.txt"), "x").unwrap();
     h.key("Ctrl+R");
     h.settle().await;
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     assert!(h.status().contains("Esc clears"), "{}", h.status());
     let marked = |h: &Harness| h.app.workspace.active().selection_summary().files;
     assert!(marked(&h) > 0);
@@ -1404,7 +1571,7 @@ async fn the_key_bar_follows_the_modifiers() {
     assert!(h.screen().contains("F5Copy"));
     h.app.set_modifiers(false, false, true);
     let screen = h.screen();
-    assert!(screen.contains("F5Pack") && screen.contains("F9Unpac"), "{screen}");
+    assert!(screen.contains("F5Pack") && screen.contains("F6Unpac"), "{screen}");
     assert!(!screen.contains("F5Copy"), "{screen}");
     // Alt does not change the bar.
     h.app.set_modifiers(false, true, false);
@@ -1717,23 +1884,30 @@ async fn dates_and_permissions_change_on_the_selection() {
     use std::os::unix::fs::PermissionsExt;
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("F9");
-    h.type_text("dates and perm");
-    h.key("Enter");
-    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "asks what to change");
+    h.key("Shift+F4");
+    h.type_text("e");
+    h.key("Enter"); // the date
     for _ in 0..3 {
         h.key("Backspace");
     }
-    h.type_text("2001-02-03 04:05 mode=640");
+    h.type_text("2001-02-03 04:05");
     h.key("Enter");
+    h.key("Down");
+    h.key("Enter"); // the octal number
+    for _ in 0..4 {
+        h.key("Backspace");
+    }
+    h.type_text("640");
+    h.key("Enter");
+    h.key("Ctrl+S");
     h.settle().await;
     let meta = fs::metadata(h.path("left/a.txt")).unwrap();
     assert_eq!(meta.permissions().mode() & 0o7777, 0o640);
     let seconds = meta.modified().unwrap().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
     assert!((981_000_000..982_000_000).contains(&seconds), "February 2001: {seconds}");
-    // A wrong word changes nothing and says why.
-    h.key("F9");
-    h.type_text("dates and perm");
+    // A wrong word is refused where it is typed, and says why.
+    h.key("Shift+F4");
+    h.type_text("e");
     h.key("Enter");
     for _ in 0..3 {
         h.key("Backspace");
@@ -1741,6 +1915,7 @@ async fn dates_and_permissions_change_on_the_selection() {
     h.type_text("yesterday");
     h.key("Enter");
     assert!(h.status().contains("Not understood"), "{}", h.status());
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "back in the dialog");
 }
 
 #[tokio::test]
@@ -1825,7 +2000,7 @@ async fn alt_c_on_two_different_text_files_opens_a_side_by_side_diff() {
     h.focus("a.txt");
     h.key("Tab");
     h.focus("a.txt");
-    h.key("Shift+F3");
+    h.key("Ctrl+F3");
     h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Viewer(_)))).await;
     let screen = h.screen();
     assert!(screen.contains("a.txt ↔ a.txt"), "{screen}");
@@ -1883,7 +2058,7 @@ async fn the_mouse_clicks_scrolls_and_drags_between_panels() {
 
 /// Runs the search dialogs: mask, text, conditions.
 async fn search(h: &mut Harness, mask: &str, content: &str, filters: &str) {
-    h.key("Shift+F7");
+    h.key("Ctrl+F2");
     h.type_text(mask);
     h.key("Enter");
     h.type_text(content);
@@ -1975,7 +2150,7 @@ async fn the_listing_is_exported_to_a_file_or_the_clipboard() {
 async fn links_are_made_in_the_other_panel() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
-    h.key("Shift+F4");
+    h.key("Shift+F7");
     assert_eq!(results(&h).len(), 3);
     h.key("Enter"); // relative symbolic link
     h.settle().await;
@@ -1983,7 +2158,7 @@ async fn links_are_made_in_the_other_panel() {
     assert_eq!(fs::read_link(&link).unwrap(), PathBuf::from("../left/a.txt"));
     assert_eq!(fs::read_to_string(&link).unwrap(), "alpha\n");
 
-    h.key("Shift+F4");
+    h.key("Shift+F7");
     h.key("Down");
     h.key("Down"); // hard link
     h.key("Enter");
@@ -2605,7 +2780,7 @@ async fn choosing_does_nothing_outside_pick_mode() {
 #[tokio::test]
 async fn the_flat_view_lists_files_below_with_their_folder() {
     let mut h = Harness::new().await;
-    h.key("Ctrl+F6");
+    h.key("Ctrl+Shift+F");
     h.settle().await;
     let screen = h.screen();
     // (The title may be cut on long temporary paths; the column says it too.)
@@ -2619,10 +2794,10 @@ async fn the_flat_view_lists_files_below_with_their_folder() {
     let screen = h.screen();
     assert!(!screen.contains("Folder "), "Backspace leaves the flat view: {screen}");
     assert!(h.app.is_running());
-    h.key("Ctrl+F6");
+    h.key("Ctrl+Shift+F");
     h.settle().await;
-    assert!(h.screen().contains("Folder "), "Ctrl+F6 enters it again");
-    h.key("Ctrl+F6");
+    assert!(h.screen().contains("Folder "), "Ctrl+Shift+F enters it again");
+    h.key("Ctrl+Shift+F");
     h.settle().await;
     assert!(!h.screen().contains("Folder "), "and leaves it");
     assert!(screen.contains("docs"), "{screen}");
@@ -3344,7 +3519,7 @@ async fn the_key_bar_follows_the_modifiers_held() {
     assert!(plain.contains("F7Mkdir"), "{plain}");
     h.app.set_modifiers(false, false, true);
     let shifted = h.screen();
-    assert!(shifted.contains("F7Search"), "Shift+F7 is the search: {shifted}");
+    assert!(shifted.contains("F7Link"), "Shift+F7 is the link: {shifted}");
     assert!(!shifted.contains("F7Mkdir"));
     h.app.set_modifiers(true, false, false);
     assert_ne!(h.screen(), plain, "Ctrl changes the bar too");
@@ -3511,16 +3686,16 @@ async fn every_dialog_has_a_key_row_in_one_convention() {
         ("copy", &["F5"]),
         ("move", &["F6"]),
         ("mkdir", &["F7"]),
-        ("rename", &["Shift+F6"]),
+        ("rename", &["F2"]),
         ("delete", &["F8"]),
         ("delete forever", &["Shift+F8"]),
-        ("search", &["Shift+F7"]),
+        ("search", &["Ctrl+F2"]),
         ("drives", &["Shift+F1"]),
         ("bookmarks", &["Ctrl+D"]),
-        ("properties", &["Ctrl+E"]),
+        ("properties", &["Shift+F4"]),
         ("pack", &["Shift+F5"]),
         ("copy path", &["Ctrl+P"]),
-        ("link", &["Shift+F4"]),
+        ("link", &["Shift+F7"]),
         ("disks", &["Ctrl+F8"]),
         ("disk usage", &["Ctrl+F7"]),
         ("viewer", &["F3"]),

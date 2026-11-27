@@ -24,6 +24,9 @@ pub struct MaskError {
 /// matches any run of characters, `?` one character, `[abc]` a class.
 /// An empty mask matches everything.
 ///
+/// A mask that starts with `has:` matches names that contain the text after
+/// it, whatever the case (`has:report`).
+///
 /// A mask that starts with `re:` is a regular expression instead, found
 /// anywhere in the name (use `^` and `$` to anchor it), case-insensitively.
 /// `;` and `,` are then part of the expression.
@@ -45,6 +48,18 @@ impl Mask {
     /// assert!(!m.matches("notes.txt"));
     /// ```
     pub fn parse(source: &str) -> Result<Self, MaskError> {
+        if let Some(text) = source.trim_start().strip_prefix("has:") {
+            let regex = regex::RegexBuilder::new(&regex::escape(text.trim()))
+                .case_insensitive(true)
+                .build()
+                .map_err(|e| MaskError { mask: source.to_owned(), reason: e.to_string() })?;
+            return Ok(Mask {
+                source: source.to_owned(),
+                regex: Some(regex),
+                include: None,
+                exclude: None,
+            });
+        }
         if let Some(pattern) = source.trim_start().strip_prefix(REGEX_PREFIX) {
             let regex = regex::RegexBuilder::new(pattern)
                 .case_insensitive(true)
@@ -133,6 +148,12 @@ impl Default for Mask {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn has_matches_a_part_of_the_name() {
+        let m = Mask::parse("has:Report.").unwrap();
+        assert!(m.matches("my report.pdf") && !m.matches("reportxpdf"));
+    }
 
     #[test]
     fn empty_and_exclusion_only_masks() {

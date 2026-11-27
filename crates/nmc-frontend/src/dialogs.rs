@@ -174,6 +174,10 @@ pub enum InputPurpose {
     SelectMask,
     /// Unselect entries matching the typed mask.
     UnselectMask,
+    /// Keep selected only the entries matching the typed mask.
+    KeepMask,
+    /// The message of a Git commit in this folder.
+    GitCommit(std::path::PathBuf),
     /// Filter the panel while typing.
     QuickFilter,
     /// Pack these items into the typed archive.
@@ -237,6 +241,13 @@ pub enum InputPurpose {
     },
     /// Change the dates and permissions of these items.
     Attributes(Vec<VfsPath>),
+    /// A value typed for a row of the Properties dialog, which opens again.
+    PropsEdit {
+        /// The row.
+        row: crate::properties::PropRow,
+        /// The dialog's state.
+        state: Box<crate::properties::PropsState>,
+    },
     /// Write the settings to the typed file.
     ExportSettings,
     /// Read settings from the typed file.
@@ -290,7 +301,8 @@ impl InputPurpose {
         match self {
             InputPurpose::InstallServe => 10,
             purpose if purpose.is_address() => 8,
-            InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 12,
+            InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 8,
+            InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => 6,
             _ => 1,
         }
     }
@@ -360,6 +372,13 @@ impl InputDialog {
     pub fn hint(&self) -> String {
         match &self.purpose {
             InputPurpose::PackInto(_) => crate::hints::question(&["Ctrl+O: more options"]),
+            InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => {
+                crate::hints::question(&[
+                    "F2: select / unselect / keep only",
+                    "Ctrl+O: presets",
+                    "F1: help",
+                ])
+            }
             InputPurpose::InstallServe => crate::hints::question(&["Ctrl+T: test", "F1: help"]),
             purpose if purpose.testable() => crate::hints::question(&["Ctrl+T: test"]),
             _ => crate::hints::question(&[]),
@@ -404,6 +423,10 @@ pub enum ConfirmPurpose {
     InstallServe(String),
     /// Forget something the user saved (the list it came from opens again).
     Forget(Forget),
+    /// Replace the checksum files that exist and write them all.
+    ChecksumOverwrite(Box<crate::app::ChecksumJob>),
+    /// Discard the changes of these files (names relative to the folder).
+    GitDiscard(std::path::PathBuf, Vec<String>),
     /// A server of a saved `scs://` location does not answer: offer to
     /// install `nmc serve` there (its host).
     OfferInstall(String),
@@ -537,6 +560,48 @@ pub enum ChoosePurpose {
         /// The rows' font families.
         names: Vec<String>,
     },
+    /// Ready-made masks; the choice opens the selection question for
+    /// `purpose` with the mask in it.
+    MaskPresets(InputPurpose),
+    /// The Git actions for the folder `dir` and the files `files` (names
+    /// relative to `dir`).
+    Git {
+        /// The folder of the panel.
+        dir: std::path::PathBuf,
+        /// The selected files.
+        files: Vec<String>,
+    },
+    /// Branches to switch to.
+    GitBranches {
+        /// The folder of the panel.
+        dir: std::path::PathBuf,
+        /// The branch of each row.
+        names: Vec<String>,
+    },
+    /// The ready-made multi-rename rules; the files they are for.
+    RenamePresets(Vec<VfsPath>),
+    /// Checksum files to write for `sources` (relative to `base`), and, when
+    /// the cursor is on a checksum file, to check it (the first row).
+    Checksums {
+        /// The folder the names are relative to.
+        base: VfsPath,
+        /// The files and folders to hash.
+        sources: Vec<VfsPath>,
+        /// A checksum file that can be checked.
+        verify: Option<VfsPath>,
+    },
+    /// The Properties of the items: read-only until `e` or F2.
+    Properties(Box<crate::properties::PropsState>),
+    /// An editor command for a setting; the first row is the default and the
+    /// last lets the user type a command, back to the settings afterwards.
+    Editor {
+        /// The option.
+        field: Field,
+        /// The screen to go back to.
+        screen: Box<SettingsScreen>,
+        /// The command of each row except the last ("" is the default).
+        commands: Vec<String>,
+    },
     /// Groups of similar pictures, after a row that puts the extra copies
     /// in the basket.
     Similar(Vec<Vec<crate::similar::Picture>>),
@@ -607,6 +672,8 @@ pub struct MessageDialog {
     pub then: Option<InputDialog>,
     /// Or Enter goes back to this list.
     pub then_choose: Option<Box<ChooseDialog>>,
+    /// Enter goes back to the dialog it came from (a help window).
+    pub back: bool,
     /// Enter or Esc goes back to the settings screen.
     pub back_to_settings: Option<Box<crate::settings::SettingsScreen>>,
     /// The logo is shown above the text (About).
@@ -623,6 +690,7 @@ impl MessageDialog {
             lines,
             then: None,
             then_choose: None,
+            back: false,
             back_to_settings: None,
             logo: false,
             busy: false,
@@ -640,6 +708,9 @@ impl MessageDialog {
         let copy = if self.can_copy() { "c: copy the log    " } else { "" };
         if self.busy {
             return format!("Working…    {copy}Esc: close");
+        }
+        if self.back {
+            return format!("Enter: back    {copy}Esc: close");
         }
         match (&self.then, &self.then_choose) {
             (Some(next), _) => {

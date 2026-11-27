@@ -102,21 +102,20 @@ actions! {
     Edit          = "files.edit",           Files, true,  "Edit file",                "Edit", ["F4"];
     Copy          = "files.copy",           Files, true,  "Copy",                     "Copy", ["F5"];
     Move          = "files.move",           Files, true,  "Move",                     "Move", ["F6"];
-    Rename        = "files.rename",         Files, true,  "Rename",                   "Rename", ["Shift+F6", "F2"];
+    Rename        = "files.rename",         Files, true,  "Rename",                   "Rename", ["F2"];
     MultiRename   = "files.multi-rename",   Files, false, "Multi-rename…",            "MultiRen", ["Shift+F2"];
     AiRename      = "files.ai-rename",      Files, false, "Multi-rename with AI…",    "AIRen", [];
     MakeDir       = "files.mkdir",          Files, true,  "New folder",               "Mkdir", ["F7"];
     Delete        = "files.delete",         Files, true,  "Delete (to trash)",        "Delete", ["F8", "Delete"];
     DeleteForever = "files.delete-forever", Files, false, "Delete permanently",       "Erase", ["Shift+F8", "Shift+Delete"];
     Pack          = "files.pack",           Files, true,  "Pack into archive…",       "Pack", ["Shift+F5"];
-    Unpack        = "files.unpack",         Files, false, "Unpack archive…",          "Unpack", ["Shift+F9"];
-    Properties    = "files.properties",     Files, false, "Properties and permissions", "Props", ["Ctrl+E"];
+    Unpack        = "files.unpack",         Files, false, "Unpack archive…",          "Unpack", ["Shift+F6"];
+    Properties    = "files.properties",     Files, false, "Properties…", "Props", ["Shift+F4", "Ctrl+E"];
     Undo          = "files.undo",           Files, false, "Undo rename, new folder, move", "Undo", ["Ctrl+Z"];
-    Attributes    = "files.attributes",     Files, false, "Change dates and permissions…", "Attribs", [];
-    Checksum      = "files.checksum",       Files, false, "Checksum",                 "Checksum", ["Ctrl+K"];
+    Checksum      = "files.checksum",       Files, false, "Checksum",                 "Checksum", ["Ctrl+F6", "Ctrl+K"];
     CopyPath      = "files.copy-path",      Files, false, "Copy path to clipboard…",  "CopyPath", ["Ctrl+P"];
     Export        = "files.export",         Files, false, "Export listing…",          "Export", [];
-    Link          = "files.link",           Files, false, "Create symlink or hard link…", "Link", ["Shift+F4"];
+    Link          = "files.link",           Files, false, "Create symlink or hard link…", "Link", ["Shift+F7"];
     BulkRename    = "files.bulk-rename",    Files, false, "Rename in the editor…",    "EdRename", [];
     OpenTerminal  = "files.open-terminal",  Files, false, "Open terminal here",       "Terminal", [];
     BasketAdd     = "files.basket-add",     Files, false, "Add to basket",            "ToBasket", ["Ctrl+G"];
@@ -144,31 +143,32 @@ actions! {
     SamePath      = "nav.same-path",        Navigate, false, "Open this folder in other panel", "SamePath", ["Ctrl+Up"];
     OpenInLeft    = "nav.open-in-left",     Navigate, false, "Open folder in left panel", "ToLeft", ["Ctrl+Left"];
     OpenInRight   = "nav.open-in-right",    Navigate, false, "Open folder in right panel", "ToRight", ["Ctrl+Right"];
-    FlatView      = "nav.flat-view",        Navigate, false, "Flat (branch) view",    "Flat", ["Ctrl+F6"];
+    FlatView      = "nav.flat-view",        Navigate, false, "Flat (branch) view",    "Flat", ["Ctrl+Shift+F"];
     Basket        = "nav.basket",           Navigate, false, "Basket…",               "Basket", ["Ctrl+B"];
     SwapPanels    = "nav.swap-panels",      Navigate, false, "Swap panels",           "Swap", ["Ctrl+Down", "Ctrl+U"];
     // View
     Refresh       = "view.refresh",         View, false, "Refresh",                   "Refresh", ["Ctrl+R"];
-    ToggleHidden  = "view.hidden",          View, false, "Show hidden files",         "Hidden", ["Ctrl+F2"];
+    ToggleHidden  = "view.hidden",          View, false, "Show hidden files",         "Hidden", ["Ctrl+H"];
     QuickFilter   = "view.filter",          View, true,  "Quick filter…",             "Filter", ["Ctrl+S"];
-    SortName      = "view.sort-name",       View, false, "Sort by name",              "SortName", ["Ctrl+F3"];
-    SortExtension = "view.sort-ext",        View, false, "Sort by extension",         "SortExt", ["Ctrl+F4"];
-    SortModified  = "view.sort-date",       View, false, "Sort by date",              "SortDate", ["Ctrl+F5"];
-    QuickView     = "view.quick-view",      View, false, "Quick view in other panel", "QuickVw", ["Ctrl+Q"];
+    SortName      = "view.sort-name",       View, false, "Sort by name",              "SortName", ["Ctrl+1"];
+    SortExtension = "view.sort-ext",        View, false, "Sort by extension",         "SortExt", ["Ctrl+2"];
+    SortModified  = "view.sort-date",       View, false, "Sort by date",              "SortDate", ["Ctrl+3"];
+    QuickView     = "view.quick-view",      View, false, "Quick view in other panel", "QuickVw", ["Shift+F3", "Ctrl+Q"];
     // Tools
-    Search        = "tools.search",         Tools, true,  "Search…",                  "Search", ["Shift+F7"];
-    Compare       = "tools.compare",        Tools, false, "Compare files / folders",  "Compare", ["Shift+F3"];
+    Search        = "tools.search",         Tools, true,  "Search…",                  "Search", ["Ctrl+F2"];
+    Compare       = "tools.compare",        Tools, false, "Compare files / folders",  "Compare", ["Ctrl+F3"];
     CompareHash   = "tools.compare-hash",   Tools, false, "Compare folders by content…", "CmpHash", [];
-    Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     "Sync", [];
+    Sync          = "tools.sync",           Tools, false, "Synchronize folders…",     "Sync", ["Ctrl+F4"];
     GenerateFiles = "tools.generate-files", Tools, false, "Generate random text files…", "Generate", [];
-    Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     "Dupes", [];
+    Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     "Dupes", ["Ctrl+F5"];
     DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", "DiskUse", ["Ctrl+F7"];
+    Git           = "tools.git",            Tools, false, "Git actions…",             "Git", ["Ctrl+F11", "Ctrl+Shift+G"];
     Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    "Disks", ["Ctrl+F8"];
     SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    "Similar", [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          "Searches", [];
     SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    "SaveSrch", [];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           "Queue", ["Ctrl+J"];
-    RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     "Plugins", ["Ctrl+X"];
+    RunScript     = "tools.run-script",     Tools, false, "Plugins and scripts…",     "Plugins", ["Ctrl+F9", "Ctrl+X"];
     AiScript      = "tools.ai-script",      Tools, false, "Write a script with AI…",  "AIScript", [];
     InstallServe  = "tools.install-serve",  Tools, false, "Install nmc serve on a server…", "Install", [];
     // App
@@ -248,13 +248,10 @@ impl Action {
                 "Unpacks the archive under the cursor into the other panel's folder. An encrypted archive asks for its password."
             }
             Action::Properties => {
-                "Shows size, dates, owner and permissions of the item under the cursor, and lets you change the permissions."
+                "Shows size, dates, owner and permissions of the selected items. It opens read-only; e or F2 turns on editing: a check box for each permission with the octal number kept in step, a checked date, and optionally everything inside folders. Ctrl+S applies."
             }
             Action::Undo => {
                 "Undoes the last rename, new folder or move, up to 50 steps in this session."
-            }
-            Action::Attributes => {
-                "Changes dates and permissions of the selected items: a date, a time, `now`, `mode=644`, `-r` for folders inside."
             }
             Action::Checksum => {
                 "Computes the checksum (SHA-256 and others) of the file under the cursor and can copy it or compare it with one you paste."
@@ -349,6 +346,9 @@ impl Action {
             }
             Action::DiskUsage => {
                 "Lists what takes the space in this folder, biggest first, and lets you go into the folders."
+            }
+            Action::Git => {
+                "Basic Git actions on the repository of this folder: stage and unstage, diff, commit, discard changes (asks first), switch branch, log, pull and push. Works on the selected files; needs git installed."
             }
             Action::Disks => "Lists the disks and partitions with size, type, file system and use.",
             Action::SimilarImages => {
@@ -629,7 +629,13 @@ impl Keymap {
             by_action.insert(action, chords.collect());
         }
         let mut by_extra: BTreeMap<String, Vec<KeyChord>> = BTreeMap::new();
-        for (id, keys) in overrides {
+        // "Change dates and permissions" became part of Properties (0.5.0):
+        // a key given to it now opens Properties.
+        let mut overrides = overrides.clone();
+        if let Some(keys) = overrides.remove("files.attributes") {
+            overrides.entry("files.properties".to_owned()).or_insert(keys);
+        }
+        for (id, keys) in &overrides {
             let action = Action::from_id(id);
             if action.is_none() && RETIRED.contains(&id.as_str()) {
                 continue;

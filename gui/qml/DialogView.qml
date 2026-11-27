@@ -736,6 +736,14 @@ Item {
                     }
                 }
             }
+            // The short help of the highlighted option; F1 opens the rest.
+            Label {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                text: dialogs.view.help
+                color: dialogs.theme.dim
+                font.pointSize: dialogs.theme.font.pointSize * dialogs.theme.settingsScale
+            }
         }
     }
 

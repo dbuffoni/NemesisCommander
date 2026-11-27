@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.0
+
+Not published yet.
+
+- Function keys: Shift+F is the advanced variant of the plain key (Shift+F3
+  quick view, Shift+F4 properties, Shift+F6 unpack, Shift+F7 link) and
+  Ctrl+F holds the tools (Ctrl+F2 search, Ctrl+F3 compare, Ctrl+F4
+  synchronize, Ctrl+F5 duplicates, Ctrl+F6 checksum, Ctrl+F9 plugins). The
+  duplicate rename on Shift+F6 is gone. Moved: hidden files Ctrl+H, sorting
+  Ctrl+1/2/3, flat view Ctrl+Shift+F. Letter shortcuts stay as aliases; keys
+  you set yourself are not touched.
+- Open terminal: the system's default terminal is found with
+  `xdg-terminal-exec` first (Ptyxis and GNOME Console on Fedora Atomic), every
+  terminal is told the folder with its own option and starts in it, the
+  environment of the AppImage is not passed on (it broke other AppImages such as
+  Warp), a terminal that fails shows what it said, and the setting accepts
+  quotes and `{dir_url}`.
+- Properties is one dialog (the separate "Change dates and permissions" is
+  gone): it opens read-only, `e` or F2 turns on editing with a check box for
+  each permission, the octal number kept in step and a checked date.
+- Checksums: Enter in the Checksums window, or Ctrl+K on a selection or a
+  folder, writes checksum files (`SHA256SUMS`, `B3SUMS`, `name.sha256`,
+  `name.b3`) that `sha256sum -c` and `b3sum --check` accept, and a checksum
+  file can be checked; `nmc hash --write / --per-file / --check`.
+- Settings: separate editors for the window and the terminal, a list of open
+  source editors (installed ones first), a Git section, the help of the
+  selected setting under the list (F1 for all of it), and Find also matches
+  section titles and help.
+- Select by mask: the question shows how many files match while you type,
+  F2 switches between select, unselect and keep only, Ctrl+O lists ready-made
+  masks, F1 explains the syntax, `has:text` is a new mask, and the last mask
+  is remembered.
+- Multi-rename: options after the template (letter case, replace text or
+  regular expression, counter start/step/width), a count of the names that
+  change, ready-made rules on Ctrl+O and a help on F1.
+- F1 in the lists and questions explains the row under the cursor (Properties
+  rows, link kinds, synchronize modes, import, checksums, ready-made masks and
+  rules, bookmarks, basket, drives...) and goes back to the dialog.
+- Git actions (Ctrl+F11): stage, unstage, diff, commit, discard (asks first),
+  switch branch, log, pull (fast-forward only) and push, with the system's
+  `git`, on the selected files.
+- The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
+  is not installed the system fonts are used.
+
 ## 0.4.1
 
 The first release to be published since 0.2.0; it includes everything in

@@ -95,6 +95,7 @@ pub fn dialog() -> MessageDialog {
         lines: lines(),
         then: None,
         then_choose: None,
+        back: false,
         back_to_settings: None,
         logo: true,
         busy: false,
