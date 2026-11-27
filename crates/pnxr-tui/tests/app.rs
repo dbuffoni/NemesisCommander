@@ -4143,6 +4143,7 @@ async fn plugin_results_are_sorted_marked_and_deleted_after_a_question() {
     // a marks the extra copy; s sorts by Match (the lower first).
     h.press(KeyPress::char('a'));
     assert!(h.screen().contains("(2 files, 1 marked, sorted by Group"), "{}", h.screen());
+    assert!(!h.screen().contains("Shift+Tab: back"), "marking is not a new question");
     h.press(KeyPress::char('s'));
     let screen = h.screen();
     let first = screen.find("best   a.txt").unwrap();

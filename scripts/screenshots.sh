@@ -57,11 +57,15 @@ shot commands-help 1280x800 "F9 s w a p F1" "$left" "$right"
 shot copy 1280x800 "Down Insert Down Insert F5" "$left" "$right"
 shot mkdir 1280x800 "F7" "$left" "$right"
 shot delete 1280x800 "Down F8" "$left" "$right"
-shot search 1280x800 "Shift+F7" "$left" "$right"
+shot search 1280x800 "Ctrl+F2" "$left" "$right"
 shot quick-view 1280x800 "Down Down Down Ctrl+Q" "$left" "$right"
 shot viewer-text 1280x800 "End F3" "$demo/home/Projects/website" "$right"
-shot drives 1280x800 "Shift+F1" "$left" "$right"
-shot drives-new 1280x800 "Shift+F1 $(printf 'Down %.0s' {1..20})Enter" "$left" "$right"
+# These show the real disks and user name of the machine: only with
+# REAL_DISKS=1, never for pictures that are published.
+if [ "${REAL_DISKS:-}" = 1 ]; then
+  shot drives 1280x800 "Shift+F1" "$left" "$right"
+  shot drives-new 1280x800 "Shift+F1 $(printf 'Down %.0s' {1..20})Enter" "$left" "$right"
+fi
 shot pack-advanced 1280x800 "Down Shift+F5 Ctrl+O Enter Enter s e c r e t" "$left" "$right"
 shot bookmarks 1280x800 "Ctrl+Shift+D Ctrl+D" "$left" "$right"
 shot jobs 1280x800 "Ctrl+J" "$left" "$right"
@@ -98,6 +102,6 @@ shot copy-path 1280x800 "Down Ctrl+P" "$left" "$right"
 shot folder-sizes 1280x800 "Alt+S" "$demo/home" "$right"
 shot disk-usage 1280x800 "Ctrl+F7" "$demo/home" "$right"
 # Disks and partitions of the machine the pictures are taken on.
-shot disks 1280x800 "Ctrl+F8" "$left" "$right"
+[ "${REAL_DISKS:-}" = 1 ] && shot disks 1280x800 "Ctrl+F8" "$left" "$right"
 # Bookmarks with the recent folders under them, filtered by typing.
 shot bookmarks-filter 1280x800 "Ctrl+Shift+D Down Enter Backspace Ctrl+D w e b" "$left" "$right"

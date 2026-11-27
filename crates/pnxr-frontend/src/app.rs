@@ -276,6 +276,11 @@ fn step_of(overlay: &Overlay) -> Option<(u8, String, String)> {
         Overlay::Input(d) if d.purpose.settings_screen().is_none() => {
             Some((0, d.title.clone(), d.prompt.clone()))
         }
+        // The title of a results list counts the marked files: marking
+        // is not a new question.
+        Overlay::Choose(d) if matches!(d.purpose, ChoosePurpose::PluginResults { .. }) => {
+            Some((1, String::from("results"), String::new()))
+        }
         Overlay::Choose(d) => Some((1, d.title.clone(), String::new())),
         Overlay::Confirm(d) => {
             Some((2, d.title.clone(), d.lines.first().cloned().unwrap_or_default()))
