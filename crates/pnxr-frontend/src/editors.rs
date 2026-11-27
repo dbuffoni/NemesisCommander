@@ -118,7 +118,7 @@ pub const KNOWN: &[Editor] = &[
         install: "winget install Notepad++.Notepad++",
     },
     Editor {
-        name: "Emacs (window)",
+        name: "Emacs",
         program: "emacs",
         command: "emacs",
         licence: "GPL-3.0",
@@ -166,7 +166,7 @@ pub const KNOWN: &[Editor] = &[
         install: "apt install nano, or brew install nano",
     },
     Editor {
-        name: "Emacs (terminal)",
+        name: "Emacs",
         program: "emacs",
         command: "emacs -nw",
         licence: "GPL-3.0",
@@ -315,16 +315,15 @@ pub struct Suggestion {
 }
 
 /// The suggestions for a setting that wants window editors (`window`) or
-/// terminal editors; `installed` holds indexes into [`KNOWN`].
-pub fn suggestions(window: bool, installed: &[usize]) -> Vec<Suggestion> {
+/// terminal editors; `installed` holds indexes into [`KNOWN`] and `default`
+/// says what the setting does when it is empty.
+pub fn suggestions(window: bool, installed: &[usize], default: &str) -> Vec<Suggestion> {
     let wanted = if window { Kind::Window } else { Kind::Terminal };
     let mut order: Vec<usize> = (0..KNOWN.len()).collect();
     // Wanted kind first, installed first, otherwise the order of the table.
     order.sort_by_key(|&i| (KNOWN[i].kind != wanted, !installed.contains(&i), i));
-    let mut rows = vec![Suggestion {
-        label: "(the default: $VISUAL / $EDITOR, then the system's)".to_owned(),
-        command: String::new(),
-    }];
+    let mut rows =
+        vec![Suggestion { label: format!("(the default: {default})"), command: String::new() }];
     for i in order {
         let e = &KNOWN[i];
         let kind = match e.kind {
@@ -381,13 +380,13 @@ mod tests {
     #[test]
     fn suggestions_list_the_wanted_kind_and_the_installed_first() {
         let nano = KNOWN.iter().position(|e| e.program == "nano").unwrap();
-        let rows = suggestions(false, &[nano]);
+        let rows = suggestions(false, &[nano], "$EDITOR");
         assert_eq!(rows[0].command, "");
         assert_eq!(rows[1].command, "nano", "installed terminal editor first");
         assert!(rows[1].label.contains("installed"));
         assert!(rows[2].label.contains("terminal"));
         assert!(rows.iter().any(|r| r.command == "codium --wait" && r.label.contains("not found")));
-        let window = suggestions(true, &[]);
+        let window = suggestions(true, &[], "$EDITOR");
         assert_eq!(window[1].command, "codium --wait");
     }
 

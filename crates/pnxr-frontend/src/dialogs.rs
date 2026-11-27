@@ -381,6 +381,9 @@ impl InputDialog {
                     "F1: help",
                 ])
             }
+            InputPurpose::MultiRename(_) => {
+                crate::hints::question(&["Ctrl+O: ready-made", "F1: help"])
+            }
             InputPurpose::InstallServe => crate::hints::question(&["Ctrl+T: test", "F1: help"]),
             purpose if purpose.testable() => crate::hints::question(&["Ctrl+T: test"]),
             _ => crate::hints::question(&[]),
@@ -696,6 +699,9 @@ pub struct MessageDialog {
     pub logo: bool,
     /// The work behind it is still going: lines are added as it goes.
     pub busy: bool,
+    /// The text is output with columns (checksums, git): a window shows it
+    /// in the fixed-width font.
+    pub fixed: bool,
 }
 
 impl MessageDialog {
@@ -710,7 +716,14 @@ impl MessageDialog {
             back_to_settings: None,
             logo: false,
             busy: false,
+            fixed: false,
         }
+    }
+
+    /// The same text, in the fixed-width font of a window.
+    pub fn with_fixed_font(mut self) -> Self {
+        self.fixed = true;
+        self
     }
 
     /// A log (the steps of an install, a connection test) is read from its

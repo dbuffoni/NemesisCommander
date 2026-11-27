@@ -484,7 +484,9 @@ fn the_image_duplicates_plugin_groups_pictures_shows_columns_and_moves_the_extra
                 .and(contains("300x200"))
                 .and(contains("60x40"))
                 .and(contains("thumb.png"))
-                .and(contains("other.png").not()),
+                .and(contains("other.png").not())
+                // Paths are shown from the panel's folder.
+                .and(contains(work.to_str().unwrap()).not()),
         );
 
     // The columns: one line per file, in order.

@@ -292,6 +292,7 @@ async fn multi_rename_has_options_presets_and_help() {
     h.key("Shift+F2");
     h.type_text("doc-[C][X] | width=3 | upper");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert!(dialog.hint().contains("Ctrl+O: ready-made    F1: help"), "{}", dialog.hint());
     assert!(dialog.preview[0].contains("2 of 2 names change"), "{:?}", dialog.preview);
     assert!(
         dialog.preview.iter().any(|l| l.contains("a.txt → DOC-001.TXT")),
@@ -1306,11 +1307,16 @@ async fn checksums_and_properties() {
     h.settle().await;
     let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("checksums") };
     assert!(message.lines.iter().any(|l| l.starts_with("BLAKE3")));
+    assert!(message.fixed, "digests in the fixed-width font");
     h.key("Esc");
     h.key("Ctrl+E");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("properties") };
     assert!(dialog.items.iter().any(|l| l.contains("6 bytes")));
     assert!(dialog.footer.contains("e or F2: edit"), "opens read-only: {}", dialog.footer);
+    assert!(!dialog.footer.contains("Enter:"), "nothing to choose: {}", dialog.footer);
+    h.key("F2");
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("properties") };
+    assert_eq!(dialog.footer.matches("Enter:").count(), 1, "{}", dialog.footer);
 }
 
 #[tokio::test]
@@ -1335,6 +1341,7 @@ async fn checksum_files_are_written_and_checked() {
     h.key("Ctrl+K");
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
     assert!(dialog.items[0].starts_with("Check the files listed in SHA256SUMS"));
+    assert_eq!(dialog.title, "Check or write checksums");
     h.key("Enter");
     h.settle().await;
     let Some(Overlay::Message(message)) = h.app.overlay() else { panic!("the result") };

@@ -946,6 +946,7 @@ impl App {
                 back_to_settings: None,
                 logo: false,
                 busy: false,
+                fixed: false,
             })))
         });
     }
@@ -1697,6 +1698,7 @@ impl App {
                     back_to_settings: None,
                     logo: false,
                     busy: false,
+                    fixed: false,
                 })));
             }
             lines.push(format!("Rename {changed} items?"));
