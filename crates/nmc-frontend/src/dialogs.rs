@@ -176,6 +176,8 @@ pub enum InputPurpose {
     UnselectMask,
     /// Keep selected only the entries matching the typed mask.
     KeepMask,
+    /// The message of a Git commit in this folder.
+    GitCommit(std::path::PathBuf),
     /// Filter the panel while typing.
     QuickFilter,
     /// Pack these items into the typed archive.
@@ -423,6 +425,8 @@ pub enum ConfirmPurpose {
     Forget(Forget),
     /// Replace the checksum files that exist and write them all.
     ChecksumOverwrite(Box<crate::app::ChecksumJob>),
+    /// Discard the changes of these files (names relative to the folder).
+    GitDiscard(std::path::PathBuf, Vec<String>),
     /// A server of a saved `scs://` location does not answer: offer to
     /// install `nmc serve` there (its host).
     OfferInstall(String),
@@ -559,6 +563,21 @@ pub enum ChoosePurpose {
     /// Ready-made masks; the choice opens the selection question for
     /// `purpose` with the mask in it.
     MaskPresets(InputPurpose),
+    /// The Git actions for the folder `dir` and the files `files` (names
+    /// relative to `dir`).
+    Git {
+        /// The folder of the panel.
+        dir: std::path::PathBuf,
+        /// The selected files.
+        files: Vec<String>,
+    },
+    /// Branches to switch to.
+    GitBranches {
+        /// The folder of the panel.
+        dir: std::path::PathBuf,
+        /// The branch of each row.
+        names: Vec<String>,
+    },
     /// The ready-made multi-rename rules; the files they are for.
     RenamePresets(Vec<VfsPath>),
     /// Checksum files to write for `sources` (relative to `base`), and, when

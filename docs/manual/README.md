@@ -209,6 +209,17 @@ entry, the line under the panel says what the mark means (for example
 and can be switched off in the settings ("Git marks and branch in
 repositories").
 
+### Git actions
+
+**Ctrl+F11** (or Ctrl+Shift+G, or Tools/Git actions) opens a list of basic
+Git actions for the repository of the active folder, on the selected files
+(or the one under the cursor): stage, unstage, show the changes (diff),
+commit what is staged (asks for the message), discard the changes (asks
+first, cannot be undone), switch branch, show the last 40 commits, pull
+(fast-forward only) and push. A failure shows what git said. F1 explains the
+row under the cursor. The `git` program can be set in Settings > Git; without
+git, or outside a repository, the command says so.
+
 ## Working with files
 
 Commands act on the selected entries, or on the entry under the cursor when
@@ -1153,6 +1164,7 @@ on the settings screen (Ctrl+,).
 | (F9 only) | Compare folders by content, Find similar pictures, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
 | Ctrl+F9, Ctrl+X | Plugins and scripts |
+| Ctrl+F11, Ctrl+Shift+G | Git actions |
 | (F9 only) | Write a script with AI |
 
 | NemesisCommander | |

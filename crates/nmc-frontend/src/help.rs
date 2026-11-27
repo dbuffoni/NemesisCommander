@@ -149,6 +149,51 @@ pub fn choose_help(purpose: &ChoosePurpose, cursor: usize) -> Option<Help> {
                 ),
             }
         }
+        ChoosePurpose::Git { .. } => {
+            let (title, text): (&str, &[&str]) = match cursor {
+                0 => ("Stage", &["git add: puts the selected files in the next commit."]),
+                1 => (
+                    "Unstage",
+                    &[
+                        "git restore --staged: takes the files out of the next commit;",
+                        "the files themselves are not changed.",
+                    ],
+                ),
+                2 => (
+                    "Diff",
+                    &[
+                        "Shows what changed in the selected files since the last commit",
+                        "(all changes when nothing is selected).",
+                    ],
+                ),
+                3 => ("Commit", &["Commits what is staged, with the message you type."]),
+                4 => (
+                    "Discard",
+                    &[
+                        "Throws away the changes of the selected files and goes back to the",
+                        "last commit. It cannot be undone, so it asks first.",
+                    ],
+                ),
+                5 => (
+                    "Switch branch",
+                    &["Lists the local branches; Enter switches to the one chosen."],
+                ),
+                6 => ("Log", &["The last 40 commits, one line each."]),
+                7 => (
+                    "Pull",
+                    &[
+                        "Fetches and fast-forwards the current branch; it never creates a",
+                        "merge commit on its own.",
+                    ],
+                ),
+                _ => ("Push", &["Sends the commits of the current branch to its upstream."]),
+            };
+            one(title, text)
+        }
+        ChoosePurpose::GitBranches { .. } => one(
+            "Switch branch",
+            &["Enter switches to the branch. Git refuses when changes would be lost, and says so."],
+        ),
         ChoosePurpose::Bookmarks(_) => one(
             "Bookmarks and recent folders",
             &[
@@ -211,6 +256,10 @@ pub fn input_help(purpose: &InputPurpose) -> Option<Help> {
                 "The destination is a folder, a path, or an address such as sftp://host/dir.",
                 "Tab completes the path. A name that does not exist is created as a folder.",
             ],
+        ),
+        InputPurpose::GitCommit(_) => one(
+            "Git commit",
+            &["A short message that says what changed. Only what is staged is committed."],
         ),
         InputPurpose::Attributes(_) => one(
             "Dates and permissions",

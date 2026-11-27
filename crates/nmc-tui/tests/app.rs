@@ -398,6 +398,41 @@ async fn f1_in_a_list_explains_the_row_under_the_cursor() {
 }
 
 #[tokio::test]
+async fn git_actions_stage_and_commit() {
+    let mut h = Harness::new().await;
+    let left = h.path("left");
+    let git = |args: &[&str]| {
+        let out = std::process::Command::new("git").arg("-C").arg(&left).args(args).output();
+        out.map(|o| o.status.success()).unwrap_or(false)
+    };
+    if !git(&["init", "-q"]) {
+        return; // no git here
+    }
+    git(&["config", "user.email", "t@example.com"]);
+    git(&["config", "user.name", "T"]);
+    h.focus("a.txt");
+    h.key("Ctrl+F11");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "{}", h.status());
+    h.key("Enter"); // stage
+    h.settle().await;
+    h.key("Ctrl+F11");
+    h.key("Down");
+    h.key("Down");
+    h.key("Down");
+    h.key("Enter"); // commit
+    h.type_text("first");
+    h.key("Enter");
+    h.settle().await;
+    let log = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&left)
+        .args(["log", "--oneline"])
+        .output()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&log.stdout).contains("first"));
+}
+
+#[tokio::test]
 async fn quick_filter_narrows_while_typing() {
     let mut h = Harness::new().await;
     h.key("Ctrl+S");

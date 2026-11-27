@@ -162,6 +162,7 @@ actions! {
     GenerateFiles = "tools.generate-files", Tools, false, "Generate random text files…", "Generate", [];
     Duplicates    = "tools.duplicates",     Tools, false, "Find duplicate files",     "Dupes", ["Ctrl+F5"];
     DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", "DiskUse", ["Ctrl+F7"];
+    Git           = "tools.git",            Tools, false, "Git actions…",             "Git", ["Ctrl+F11", "Ctrl+Shift+G"];
     Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    "Disks", ["Ctrl+F8"];
     SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    "Similar", [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          "Searches", [];
@@ -345,6 +346,9 @@ impl Action {
             }
             Action::DiskUsage => {
                 "Lists what takes the space in this folder, biggest first, and lets you go into the folders."
+            }
+            Action::Git => {
+                "Basic Git actions on the repository of this folder: stage and unstage, diff, commit, discard changes (asks first), switch branch, log, pull and push. Works on the selected files; needs git installed."
             }
             Action::Disks => "Lists the disks and partitions with size, type, file system and use.",
             Action::SimilarImages => {

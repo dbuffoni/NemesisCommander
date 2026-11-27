@@ -39,6 +39,7 @@ mod checksums;
 mod diskwork;
 mod features;
 mod generate;
+mod git_actions;
 mod logins;
 mod palette;
 mod plugin_store;
@@ -2053,6 +2054,7 @@ impl App {
                 self.disk_usage(folder);
             }
             Action::Duplicates => self.find_duplicates(),
+            Action::Git => self.ask_git(),
             Action::Disks => self.show_disks(),
             Action::SavedSearches => self.open_saved_searches(),
             Action::SaveSearch if self.last_search.is_none() => {
@@ -2352,6 +2354,7 @@ impl App {
                     undoable(step, done(result.map(|()| String::new()), Some(text)))
                 });
             }
+            InputPurpose::GitCommit(dir) => self.git_commit(dir, text),
             InputPurpose::MultiRename(paths) => match crate::renames::parse_rule(&text) {
                 Ok(rule) => self.confirm_renames(paths, &rule, None),
                 Err(e) => self.set_error(e),
@@ -2674,6 +2677,7 @@ impl App {
                     done(result.map(|()| format!("{verb}: {count} {noun}")), None)
                 });
             }
+            ConfirmPurpose::GitDiscard(dir, files) => self.git_discard(dir, files),
             ConfirmPurpose::ChecksumOverwrite(job) => self.write_checksum_files(*job, true),
             ConfirmPurpose::Forget(what) => self.forget(what),
             ConfirmPurpose::RunPlugin(choice) => self.run_plugin_choice(choice),
@@ -2770,6 +2774,10 @@ impl App {
                     self.setting_typed(field, name);
                 }
                 self.overlay = Some(Overlay::Settings(*screen));
+            }
+            ChoosePurpose::Git { dir, files } => self.git_chosen(dir, files, cursor),
+            ChoosePurpose::GitBranches { dir, names } => {
+                self.git_branch_chosen(dir, &names, cursor)
             }
             ChoosePurpose::RenamePresets(paths) => {
                 if let Some((_, text)) = crate::renames::PRESETS.get(cursor) {

@@ -38,6 +38,9 @@ Not published yet.
 - F1 in the lists and questions explains the row under the cursor (Properties
   rows, link kinds, synchronize modes, import, checksums, ready-made masks and
   rules, bookmarks, basket, drives...) and goes back to the dialog.
+- Git actions (Ctrl+F11): stage, unstage, diff, commit, discard (asks first),
+  switch branch, log, pull (fast-forward only) and push, with the system's
+  `git`, on the selected files.
 - The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
   is not installed the system fonts are used.
 
