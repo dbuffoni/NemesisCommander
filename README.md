@@ -11,8 +11,52 @@ _Formerly NemesisCommander (`nmc`)._
 
 A fast dual-pane file manager for local and remote files, written in Rust.
 
-- A desktop window (Qt 6) and a terminal interface that work the same way,
-  driven by the keyboard: no toolbars; F9 finds any command, F1 shows the shortcuts.
+## One tool, two front ends
+
+Pairnox is a desktop window (Qt 6) and a terminal interface that share the same
+code: the same panels, the same commands and the same keys. Use the window on
+your desktop and `pnxr` in a terminal or over SSH; nothing has to be learned
+twice. No toolbars: F9 finds any command, F1 shows the shortcuts.
+
+| The window (`pnxr-gui`) | The terminal (`pnxr`) |
+|---|---|
+| ![Pairnox window](docs/manual/images/panels-1280x800.png) | ![Pairnox in a terminal](docs/manual/images/panels-tui.png) |
+
+- **Same settings.** Both read one settings file: bookmarks, saved connections,
+  shortcuts, function keys and every option of the settings screen
+  (Ctrl+,). A shortcut changed in the window works in the terminal.
+- **Settings follow you to your servers.** `pnxr config push` writes your
+  settings to another machine, and `pnxr config pull` fetches theirs. Nothing
+  is synchronized in the background: settings move only when you ask.
+- **Your servers, as fast as your own disk.** A small static program for Linux
+  servers (`pnxr-agent`, x86_64 and aarch64, in the releases) runs listings,
+  searches, checksums and copies on the server, and the window or the terminal
+  works on its files like on local ones. `pnxr serve install` puts it there for
+  you. The interface itself runs where you are; to run the terminal interface on
+  a server too, put a full `pnxr` build there (a Linux release, or build it
+  from source) and send it your settings, so the keys and bookmarks are the same.
+
+```sh
+# Set a server up (copies the agent, starts `pnxr serve` as a systemd user service):
+pnxr serve install me@server
+
+# Send your settings there; the agent knows where its settings live:
+pnxr config push scs://server:7443
+
+# Then work on its files, from the window or the terminal:
+pnxr ~/Documents scs://server:7443/srv/data
+
+# With a full pnxr on the server, the same interface runs there too:
+ssh -t me@server pnxr
+```
+
+If you prefer no service on the server, copy the agent there and open
+`agent://me@server/path`: Pairnox starts it through your SSH connection. See
+[Servers](docs/manual/README.md#servers-the-agent-and-pnxr-serve) and
+[Sharing settings with other machines](docs/manual/README.md#sharing-settings-with-other-machines).
+
+## What it does
+
 - Local folders, SFTP, SMB, WebDAV, S3 and archives (ZIP, 7-Zip, tar, RAR)
   with the same commands.
 - A built-in viewer for text, hex, Markdown, Word, spreadsheets, slides, PDF,
@@ -25,8 +69,6 @@ A fast dual-pane file manager for local and remote files, written in Rust.
 - Plugins and scripts in TypeScript, in a sandbox, tested with `pnxr test`
   and, with your Anthropic API key, written by Claude (`pnxr ai new`).
 - `pnxr`, a command line for all of it.
-
-![Pairnox](docs/manual/images/panels-1280x800.png)
 
 Read the **[manual](docs/manual/README.md)** for everything it does. Design
 decisions are in [docs/adr](docs/adr), scripting in
