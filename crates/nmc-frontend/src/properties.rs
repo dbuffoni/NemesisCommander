@@ -243,14 +243,11 @@ impl PropsState {
         // Owner and group, when known.
         if one {
             let e = &self.entries[0];
-            match (e.uid, e.gid) {
-                (Some(uid), Some(gid)) => {
-                    add(
-                        PropRow::Info,
-                        format!("Owner:        user {uid}, group {gid} (not changed here)"),
-                    );
-                }
-                _ => {}
+            if let (Some(uid), Some(gid)) = (e.uid, e.gid) {
+                add(
+                    PropRow::Info,
+                    format!("Owner:        user {uid}, group {gid} (not changed here)"),
+                );
             }
             if let Some(flags) = e.os_flags {
                 let names = nmc_vfs::os_flags::describe(flags);

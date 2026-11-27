@@ -1650,14 +1650,13 @@ impl App {
                 if let Some(keep) = self.choose_extra_key(&mut dialog, &press) {
                     return keep.then_some(Overlay::Choose(dialog));
                 }
-                if key == Some(Key::F(1)) {
-                    if let Some((title, text)) =
+                if key == Some(Key::F(1))
+                    && let Some((title, text)) =
                         crate::help::choose_help(&dialog.purpose, dialog.cursor)
-                    {
-                        let mut help = MessageDialog::new(&title, text);
-                        help.then_choose = Some(Box::new(dialog));
-                        return Some(Overlay::Message(help));
-                    }
+                {
+                    let mut help = MessageDialog::new(&title, text);
+                    help.then_choose = Some(Box::new(dialog));
+                    return Some(Overlay::Message(help));
                 }
                 match key {
                     Some(Key::Up) => dialog.move_cursor(-1),
