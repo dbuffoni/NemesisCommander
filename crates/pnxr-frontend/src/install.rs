@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use pnxr_agent::provision::{self, InstallOptions};
+use pnxr_app::{InstallOptions, Remotes};
 
 use crate::dialogs::{InputDialog, InputPurpose, MessageDialog, Secret};
 
@@ -25,7 +25,11 @@ const OPTIONS: &[(&str, &str)] = &[
 
 /// Reads what was typed: the server, then the options of `pnxr serve
 /// install`.
-pub fn parse(text: &str, tls_dir: PathBuf) -> Result<InstallOptions, String> {
+pub fn parse(
+    text: &str,
+    tls_dir: PathBuf,
+    remotes: &dyn Remotes,
+) -> Result<InstallOptions, String> {
     let mut words = text.split_whitespace();
     let host = words.next().ok_or("type the server, for example me@nas.lan")?;
     if host.starts_with('-') {
@@ -34,7 +38,7 @@ pub fn parse(text: &str, tls_dir: PathBuf) -> Result<InstallOptions, String> {
     if host.contains('/') || host.contains("://") {
         return Err("write the server as [user@]host[:ssh-port], not as an address".into());
     }
-    pnxr_ssh::Target::parse(host)?;
+    remotes.ssh_target(host)?;
     let mut options = InstallOptions::new(host, tls_dir);
     while let Some(word) = words.next() {
         match word {
@@ -72,7 +76,7 @@ fn examples() -> Vec<String> {
 /// The lines under the field while it is typed: samples while it is
 /// empty, then what was understood or what is wrong, plus the options that
 /// fit the word being typed.
-pub fn hints(text: &str) -> Vec<String> {
+pub fn hints(text: &str, remotes: &dyn Remotes) -> Vec<String> {
     if text.trim().is_empty() {
         return examples();
     }
@@ -88,7 +92,7 @@ pub fn hints(text: &str) -> Vec<String> {
     } else {
         text
     };
-    let mut lines = match parse(understood, PathBuf::new()) {
+    let mut lines = match parse(understood, PathBuf::new(), remotes) {
         Ok(options) => vec![format!("✓ {}", summary(&options))],
         Err(e) if e.contains("needs") => vec![format!("… {e}")],
         Err(e) => vec![format!("✗ {e}")],
@@ -195,17 +199,22 @@ pub fn plan(options: &InstallOptions) -> Vec<String> {
 
 /// The log of a test that changes nothing; the last line is the verdict.
 /// Every line is also given to `emit` as it happens.
-pub async fn run_check(options: InstallOptions, emit: impl Fn(&str) + Send + Sync) -> Vec<String> {
+pub async fn run_check(
+    remotes: &dyn Remotes,
+    options: InstallOptions,
+    emit: impl Fn(&str) + Send + Sync,
+) -> Vec<String> {
     let started = Instant::now();
     let first = stamp(started, &summary(&options));
     emit(&first);
     let mut log = vec![first];
-    let result = provision::check_serve(&options, |step| {
-        let line = stamp(started, step);
-        emit(&line);
-        log.push(line);
-    })
-    .await;
+    let result = remotes
+        .check_serve(&options, &mut |step| {
+            let line = stamp(started, step);
+            emit(&line);
+            log.push(line);
+        })
+        .await;
     match result {
         Ok(()) => log.push(format!(
             "Result: it can be installed ({:.2} s). Enter in the question installs it.",
@@ -224,6 +233,7 @@ pub async fn run_check(options: InstallOptions, emit: impl Fn(&str) + Send + Syn
 /// run on the server included) and the location when it worked. Every line
 /// is also given to `emit` as it happens.
 pub async fn run_install(
+    remotes: &dyn Remotes,
     options: InstallOptions,
     emit: impl Fn(&str) + Send + Sync,
 ) -> (Vec<String>, Result<String, String>) {
@@ -235,7 +245,7 @@ pub async fn run_install(
         log.lock().unwrap_or_else(|e| e.into_inner()).push(line);
     };
     say(&summary(&options));
-    let result = provision::install_serve(&options, |step| say(step)).await;
+    let result = remotes.install_serve(&options, &mut |step| say(step)).await;
     match &result {
         Ok(location) => {
             say(&format!("pnxr serve is running at {location}"));
@@ -262,6 +272,7 @@ pub fn finished(
     lines: Vec<String>,
     result: Result<String, String>,
     install_text: &str,
+    linger_off: &str,
 ) -> MessageDialog {
     match result {
         Ok(location) => {
@@ -295,7 +306,7 @@ pub fn finished(
             // Lingering off: the service stops with the last login. Offer to
             // turn it on with the sudo password of the server (asked, used
             // once, never kept) and to run the install again.
-            if error.contains(provision::LINGER_OFF) {
+            if error.contains(linger_off) {
                 let who = install_text.split_whitespace().next().unwrap_or("the server");
                 let mut ask = InputDialog::new(
                     "Turn lingering on",
@@ -317,6 +328,7 @@ pub fn finished(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pnxr_app::FakeRemotes;
 
     /// A dialog 80 columns wide holds 68: table rows are not wrapped between
     /// words, so they must fit.
@@ -331,33 +343,30 @@ mod tests {
 
     #[test]
     fn the_server_and_options_are_read() {
-        let options = parse(
-            "me@nas.lan:2222 --root /data --root /srv --read-only --port 9000 --name nas",
-            "/tls".into(),
-        )
+        let options = parse("me@nas.lan:2222 --root /data --root /srv --read-only --port 9000 --name nas", "/tls".into(), &FakeRemotes::new())
         .unwrap();
         assert_eq!(options.authority, "me@nas.lan:2222");
         assert_eq!(options.roots, ["/data", "/srv"]);
         assert!(options.read_only && !options.renew);
         assert_eq!((options.port, options.name.as_deref()), (9000, Some("nas")));
-        assert!(parse("", "/tls".into()).is_err());
-        assert!(parse("--read-only", "/tls".into()).is_err());
-        assert!(parse("sftp://me@nas/x", "/tls".into()).is_err());
-        assert!(parse("h --bogus", "/tls".into()).is_err());
-        assert!(parse("h --port x", "/tls".into()).is_err());
-        assert!(parse("h --port 0", "/tls".into()).is_err());
+        assert!(parse("", "/tls".into(), &FakeRemotes::new()).is_err());
+        assert!(parse("--read-only", "/tls".into(), &FakeRemotes::new()).is_err());
+        assert!(parse("sftp://me@nas/x", "/tls".into(), &FakeRemotes::new()).is_err());
+        assert!(parse("h --bogus", "/tls".into(), &FakeRemotes::new()).is_err());
+        assert!(parse("h --port x", "/tls".into(), &FakeRemotes::new()).is_err());
+        assert!(parse("h --port 0", "/tls".into(), &FakeRemotes::new()).is_err());
     }
 
     #[test]
     fn hints_show_samples_then_what_was_understood() {
-        assert!(hints("")[0].starts_with("Examples"));
-        assert!(hints("me@nas.lan")[0].starts_with("✓ install on me@nas.lan"));
-        assert!(hints("me@nas.lan --bogus")[0].starts_with('✗'));
-        assert!(hints("me@nas.lan --root")[0].starts_with('…'), "not typed yet is not an error");
-        let completing = hints("me@nas.lan --re");
+        assert!(hints("", &FakeRemotes::new())[0].starts_with("Examples"));
+        assert!(hints("me@nas.lan", &FakeRemotes::new())[0].starts_with("✓ install on me@nas.lan"));
+        assert!(hints("me@nas.lan --bogus", &FakeRemotes::new())[0].starts_with('✗'));
+        assert!(hints("me@nas.lan --root", &FakeRemotes::new())[0].starts_with('…'), "not typed yet is not an error");
+        let completing = hints("me@nas.lan --re", &FakeRemotes::new());
         assert!(completing.iter().any(|l| l.contains("--read-only")), "{completing:?}");
         assert!(completing.iter().any(|l| l.contains("--renew")), "{completing:?}");
-        assert!(hints("me@nas.lan ").iter().any(|l| l.contains("--read-only")));
+        assert!(hints("me@nas.lan ", &FakeRemotes::new()).iter().any(|l| l.contains("--read-only")));
     }
 
     #[test]

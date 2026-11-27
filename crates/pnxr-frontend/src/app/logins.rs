@@ -251,7 +251,7 @@ impl App {
         match next {
             S3Next::Open { uri, test } => {
                 let Ok(path) = VfsPath::parse(&uri) else { return };
-                pnxr_s3::settings::set_session(profile_of(&path).as_deref(), access, secret);
+                self.context.remotes.s3_set_session(profile_of(&path).as_deref(), access, secret);
                 self.context.registry.forget(&path);
                 if test {
                     self.test_connection(uri, None);
@@ -263,9 +263,9 @@ impl App {
             S3Next::Save { name, uri, replace } => {
                 let Ok(path) = VfsPath::parse(&uri) else { return };
                 let profile = profile_of(&path);
-                match pnxr_s3::settings::save(profile.as_deref(), access, secret) {
+                match self.context.remotes.s3_save(profile.as_deref(), access, secret) {
                     Ok(file) => {
-                        pnxr_s3::settings::set_session(profile.as_deref(), access, secret);
+                        self.context.remotes.s3_set_session(profile.as_deref(), access, secret);
                         self.store_connection(name, uri, replace, false);
                         self.set_status(format!("S3 keys saved in {}", file.display()));
                     }
@@ -369,7 +369,7 @@ impl App {
     pub(super) fn open_connection(&mut self, uri: &str, path: VfsPath, test: bool) {
         if self.connection_asks(uri)
             && uses_keys(&path)
-            && !pnxr_s3::settings::has_session(profile_of(&path).as_deref())
+            && !self.context.remotes.s3_has_session(profile_of(&path).as_deref())
         {
             return self.ask_s3_keys(S3Next::Open { uri: uri.to_owned(), test });
         }
@@ -422,7 +422,7 @@ impl App {
                 if !typed.is_empty()
                     && let Ok(path) = VfsPath::parse(uri)
                 {
-                    pnxr_s3::settings::set_session(profile_of(&path).as_deref(), access, &typed);
+                    self.context.remotes.s3_set_session(profile_of(&path).as_deref(), access, &typed);
                     self.context.registry.forget(&path);
                 }
                 (uri.clone(), String::new())

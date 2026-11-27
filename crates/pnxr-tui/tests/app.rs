@@ -3516,6 +3516,34 @@ async fn install_asks_before_it_starts_and_shift_tab_goes_back() {
     assert!(h.app.overlay().is_none(), "nothing to go back to");
 }
 
+/// The install runs through the `Remotes` of the context: with a fake, no SSH
+/// is started and the whole flow (question, yes, log, save) can be driven
+/// (ADR 0061).
+#[tokio::test]
+async fn the_install_runs_through_the_remotes_of_the_context() {
+    use std::sync::Arc;
+    let fake = Arc::new(pnxr_app::FakeRemotes::new());
+    let shared = Arc::clone(&fake);
+    let mut h = Harness::with_context(move |context| context.remotes = shared).await;
+    h.app.perform(Action::InstallServe);
+    h.type_text("me@nas.lan --port 9000");
+    h.key("Enter");
+    let Some(Overlay::Confirm(_)) = h.app.overlay() else { panic!("confirm dialog") };
+    h.key("Enter");
+    h.settle_until(|app| matches!(app.overlay(), Some(Overlay::Message(m)) if !m.busy)).await;
+    let Some(Overlay::Message(done)) = h.app.overlay() else { panic!("the install log") };
+    let text = done.lines.join("\n");
+    assert!(text.contains("scs://me@nas.lan:9000"), "{text}");
+    assert_eq!(*fake.installs.lock().unwrap(), ["me@nas.lan"]);
+    // A bad server is refused by the port, before anything runs.
+    h.key("Esc");
+    h.key("Esc");
+    h.app.perform(Action::InstallServe);
+    h.type_text("me@nas.lan:x");
+    h.key("Enter");
+    assert!(!matches!(h.app.overlay(), Some(Overlay::Confirm(_))));
+}
+
 #[tokio::test]
 async fn binary_files_show_their_properties_and_hex_on_request() {
     let mut h = Harness::new().await;

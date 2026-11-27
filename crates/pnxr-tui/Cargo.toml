@@ -12,8 +12,6 @@ authors.workspace = true
 pnxr-frontend.workspace = true
 pnxr-preview.workspace = true
 pnxr-vfs.workspace = true
-pnxr-secrets.workspace = true
-pnxr-s3.workspace = true
 pnxr-config.workspace = true
 pnxr-panel.workspace = true
 pnxr-transfer.workspace = true
@@ -31,6 +29,8 @@ scripting = ["pnxr-frontend/script-engine"]
 [dev-dependencies]
 async-trait.workspace = true
 pnxr-agent.workspace = true
+pnxr-s3.workspace = true
+pnxr-secrets.workspace = true
 pnxr-proto.workspace = true
 serde_json.workspace = true
 pnxr-ops.workspace = true

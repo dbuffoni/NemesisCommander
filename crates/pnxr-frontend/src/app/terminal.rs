@@ -69,7 +69,7 @@ impl App {
     }
 
     fn open_remote_terminal(&mut self, location: &pnxr_vfs::VfsPath) {
-        let target = match pnxr_ssh::Target::parse(location.authority()) {
+        let target = match self.context.remotes.ssh_target(location.authority()) {
             Ok(target) => target,
             Err(e) => return self.set_error(e),
         };

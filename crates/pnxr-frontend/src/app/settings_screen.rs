@@ -3,6 +3,8 @@
 //! Every change is saved at once and applied: the key map, the transfer
 //! manager (jobs at once, bandwidth) and what the panels show.
 
+use std::sync::Arc;
+
 use pnxr_app::sync::{self, SyncMode};
 use pnxr_config::{ExportBundle, Key};
 
@@ -377,7 +379,7 @@ impl App {
     /// Installs `pnxr serve` on the server typed in the dialog (the same as
     /// `pnxr serve install` on the command line), then shows the log.
     pub(super) fn install_serve(&mut self, text: &str) {
-        let options = match crate::install::parse(text, self.context.paths.tls_dir()) {
+        let options = match crate::install::parse(text, self.context.paths.tls_dir(), &*self.context.remotes) {
             Ok(options) => options,
             Err(e) => return self.set_error(e),
         };
@@ -399,26 +401,30 @@ impl App {
     /// [`start_install`](Self::start_install), with the `sudo` password of
     /// the server to turn lingering on if the install finds it off.
     pub(super) fn start_install_with(&mut self, text: &str, sudo: Option<String>) {
-        let mut options = match crate::install::parse(text, self.context.paths.tls_dir()) {
+        let mut options = match crate::install::parse(text, self.context.paths.tls_dir(), &*self.context.remotes) {
             Ok(options) => options,
             Err(e) => return self.set_error(e),
         };
-        options.sudo_password = sudo.map(pnxr_agent::provision::SudoPassword);
+        options.sudo_password = sudo.map(pnxr_app::SudoPassword);
         let text = text.to_owned();
         let title = "Install pnxr serve";
         let mut window = MessageDialog::new(title, vec![crate::install::summary(&options)]);
         window.busy = true;
         self.overlay = Some(Overlay::Message(window));
         let events = self.events.clone();
+        let remotes = Arc::clone(&self.context.remotes);
         self.spawn_task(async move {
             let live = events.clone();
-            let (lines, result) = crate::install::run_install(options, move |line| {
+            let (lines, result) = crate::install::run_install(&*remotes, options, move |line| {
                 let _ =
                     live.send(AppEvent::Progress { title: title.into(), line: line.to_owned() });
             })
             .await;
             AppEvent::Show(Box::new(Overlay::Message(crate::install::finished(
-                lines, result, &text,
+                lines,
+                result,
+                &text,
+                remotes.linger_off(),
             ))))
         });
     }
@@ -442,7 +448,11 @@ impl App {
     /// Ctrl+T in the install question: tests the server without installing,
     /// then comes back to the question.
     pub(super) fn test_install(&mut self, dialog: InputDialog) {
-        let options = match crate::install::parse(dialog.field.text(), self.context.paths.tls_dir())
+        let options = match crate::install::parse(
+            dialog.field.text(),
+            self.context.paths.tls_dir(),
+            &*self.context.remotes,
+        )
         {
             Ok(options) => options,
             Err(e) => return self.ask_again(dialog, e),
@@ -453,8 +463,9 @@ impl App {
         window.then = Some(dialog.clone());
         self.overlay = Some(Overlay::Message(window));
         let events = self.events.clone();
+        let remotes = Arc::clone(&self.context.remotes);
         self.spawn_task(async move {
-            let lines = crate::install::run_check(options, move |line| {
+            let lines = crate::install::run_check(&*remotes, options, move |line| {
                 let _ =
                     events.send(AppEvent::Progress { title: title.into(), line: line.to_owned() });
             })

@@ -915,7 +915,7 @@ impl App {
             ["refused", "no answer", "timed out", "no certificates", "handshake", "certificate"]
                 .iter()
                 .any(|word| lower.contains(word));
-        let Ok((host, _)) = pnxr_agent::serve::host_and_port(location.authority()) else { return };
+        let Ok(host) = self.context.remotes.serve_host(location.authority()) else { return };
         if !missing || !self.install_offered.insert(host.clone()) {
             return;
         }
@@ -1628,7 +1628,7 @@ impl App {
                             dialog.preview = crate::connections::hints(dialog.field.text())
                         }
                         InputPurpose::InstallServe => {
-                            dialog.preview = crate::install::hints(dialog.field.text())
+                            dialog.preview = crate::install::hints(dialog.field.text(), &*self.context.remotes)
                         }
                         InputPurpose::QuickFilter => {
                             self.workspace.active_mut().set_filter(dialog.field.text())
@@ -2210,7 +2210,7 @@ impl App {
                     "",
                     InputPurpose::InstallServe,
                 );
-                dialog.preview = crate::install::hints("");
+                dialog.preview = crate::install::hints("", &*self.context.remotes);
                 self.overlay = Some(Overlay::Input(dialog));
             }
             Action::Help => self.overlay = Some(Overlay::Help),
@@ -2719,7 +2719,7 @@ impl App {
                     &host,
                     InputPurpose::InstallServe,
                 );
-                dialog.preview = crate::install::hints(&host);
+                dialog.preview = crate::install::hints(&host, &*self.context.remotes);
                 self.overlay = Some(Overlay::Input(dialog));
             }
             ConfirmPurpose::MultiRename { paths, names } => {

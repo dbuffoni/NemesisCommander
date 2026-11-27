@@ -111,7 +111,8 @@ mod tests {
     fn the_logo_is_a_square_picture() {
         let logo = logo();
         assert_eq!(logo.width(), logo.height());
-        assert!(logo.width() >= 128);
+        // The thick-ring icon (32 px) is what a terminal can draw.
+        assert!(logo.width() >= 32);
     }
 
     #[test]
