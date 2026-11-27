@@ -8,7 +8,8 @@ and draws it with Pillow, so the picture shows what the program really draws.
                               [--pnxr target/debug/pnxr] -- LEFT RIGHT
 
 Needs `pip install pyte pillow`. Keys are comma separated names (Enter, Tab,
-Esc, Up, Down, Left, Right, F1..F10, Ctrl+X) or plain text prefixed with `text:`.
+Esc, Up, Down, Left, Right, F1..F10, Ctrl+X), `wait:SECONDS`, or plain text prefixed
+with `text:`.
 Set HOME, PNXR_CONFIG_DIR and PNXR_DATA_DIR yourself to get the same demo every time.
 """
 import argparse, fcntl, os, pty, select, struct, sys, termios, time
@@ -75,6 +76,9 @@ def run(args):
 
     pump(2.0)
     for name in filter(None, args.keys.split(",")):
+        if name.startswith("wait:"):
+            pump(float(name[5:]))
+            continue
         os.write(fd, key_bytes(name).encode())
         pump(0.6)
     pump(0.5)

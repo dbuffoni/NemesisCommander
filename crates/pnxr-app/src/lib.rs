@@ -60,8 +60,7 @@ impl AppContext {
             let kept = backup.exists() || std::fs::copy(&file, &backup).is_ok();
             if kept && config.save(&file).is_ok() {
                 notes.push(
-                    "Your shortcut settings were converted to the new model (function keys are \
-                     now set apart from shortcuts); the old file is kept as \
+                    "Shortcut settings converted; the old file is kept as \
                      config.toml.before-shortcut-model-2"
                         .to_owned(),
                 );

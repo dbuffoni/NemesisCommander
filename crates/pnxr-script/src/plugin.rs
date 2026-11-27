@@ -482,12 +482,16 @@ impl Plugin {
             output,
             heap_limit: limits.memory.max(16) * 1024 * 1024,
             time_limit: Some(std::time::Duration::from_secs(limits.timeout.max(1))),
-            invocation: Some(crate::Invocation::new(
-                command,
-                context.panel.as_ref(),
-                context.other.as_ref(),
-                &context.selection,
-            )),
+            invocation: Some({
+                let mut invocation = crate::Invocation::new(
+                    command,
+                    context.panel.as_ref(),
+                    context.other.as_ref(),
+                    &context.selection,
+                );
+                invocation.results |= context.results;
+                invocation
+            }),
         };
         crate::run(&main.display().to_string(), &source, options).await.map_err(failed)
     }
@@ -504,6 +508,8 @@ pub struct Context {
     pub selection: Vec<VfsPath>,
     /// The user's home folder.
     pub home: Option<PathBuf>,
+    /// The front end can show a list of results (`pnxr.showResults`).
+    pub results: bool,
 }
 
 fn validate(manifest: &Manifest) -> Result<(), String> {
@@ -760,6 +766,7 @@ mod tests {
             other: Some(path("/backup")),
             selection: vec![path("/home/me/a.txt")],
             home: None,
+            results: false,
         };
         let permissions = plugin.permissions(&context).unwrap();
         use crate::Access::{Read, Write};

@@ -573,6 +573,7 @@ pub(super) async fn run_choice(
                 other: Some(other),
                 selection,
                 home: home.map(PathBuf::from),
+                results: true,
             };
             let result = plugin.run(&command, &context, registry, output).await;
             (title, result.map_err(|e| e.to_string()))
