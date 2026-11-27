@@ -575,6 +575,7 @@ mod tests {
         assert_eq!(started, Ok(vec!["true".to_owned()]));
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_terminal_starts_in_the_folder_and_without_the_bundle_environment() {
         let dir = tempfile::tempdir().unwrap();
