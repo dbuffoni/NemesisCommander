@@ -906,7 +906,7 @@ fn overlay_view(app: &App, viewer_rows: usize) -> Option<OverlayView> {
         },
         // The window's title and hint lines take some of the rows.
         Overlay::Settings(screen) => {
-            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(5)))
+            OverlayView::Settings(settings_view(app, screen, viewer_rows.saturating_sub(7)))
         }
     })
 }

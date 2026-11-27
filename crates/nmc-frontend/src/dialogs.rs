@@ -301,7 +301,7 @@ impl InputPurpose {
         match self {
             InputPurpose::InstallServe => 10,
             purpose if purpose.is_address() => 8,
-            InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 12,
+            InputPurpose::MultiRename(_) | InputPurpose::AiRename(_) => 8,
             InputPurpose::SelectMask | InputPurpose::UnselectMask | InputPurpose::KeepMask => 6,
             _ => 1,
         }

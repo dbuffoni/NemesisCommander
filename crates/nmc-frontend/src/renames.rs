@@ -8,7 +8,7 @@ use nmc_ops::{CaseChange, RenameRule};
 /// Ready-made rules: what they do, and the text for the field.
 pub const PRESETS: [(&str, &str); 8] = [
     ("Keep the names", "[N][X]"),
-    ("Number the files", "[N]-[C] | width=3"),
+    ("Number the files", "[N]-[C][X] | width=3"),
     ("Only numbers", "[C][X] | width=3"),
     ("Lowercase", "[N][X] | lower"),
     ("Uppercase", "[N][X] | upper"),
@@ -19,9 +19,9 @@ pub const PRESETS: [(&str, &str); 8] = [
 
 /// Reads the text of the field.
 pub fn parse_rule(text: &str) -> Result<RenameRule, String> {
-    let mut parts = text.split(" | ");
+    let mut parts = text.split('|');
     let mut rule = RenameRule {
-        template: parts.next().unwrap_or_default().to_owned(),
+        template: parts.next().unwrap_or_default().trim_end().to_owned(),
         ..RenameRule::default()
     };
     for part in parts {
@@ -69,14 +69,14 @@ pub fn help_lines() -> Vec<String> {
         "  [C]       counter (1, 2, 3...)        [P]     name of the folder",
         "  [[ ]]     a literal [ or ]",
         "",
-        "Options, after the template, each one after ' | '",
+        "Options, after the template, each one after a |",
         "  lower  upper  title      change the letter case",
         "  s/old/new/               replace text (literal)",
         "  re/old/new/              replace with a regular expression ($1 groups)",
         "  start=10  step=5  width=3  how [C] counts and how many digits it has",
         "",
         "Examples",
-        "  holiday-[C] | width=3                   holiday-001.jpg, holiday-002.jpg",
+        "  holiday-[C][X] | width=3                holiday-001.jpg, holiday-002.jpg",
         "  [N][X] | lower | s/ /_/                 My File.TXT -> my_file.txt",
         "  [P]-[N][X]                              adds the folder's name in front",
         "",

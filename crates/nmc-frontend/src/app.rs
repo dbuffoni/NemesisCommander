@@ -1873,7 +1873,7 @@ impl App {
         let preview = template_preview(&targets, text);
         let mut dialog = InputDialog::new(
             "Multi-rename",
-            "Template: [N] name, [E] extension, [C] counter, [P] folder; options after ' | ' (F1 explains, Ctrl+O: ready-made):",
+            "Template: [N] name, [E] extension, [C] counter, [P] folder; options after | (F1 explains, Ctrl+O: ready-made):",
             text,
             InputPurpose::MultiRename(targets),
         );
