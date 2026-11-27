@@ -1,53 +1,61 @@
-"""Draws the Pairnox icon: assets/branding/pairnox.svg (the
-tile), pairnox-logo.svg and .png (the logo alone), the PNG sizes and
-the two marks for the About window, from one description of the shapes.
+"""Makes every Pairnox logo and icon file from the three SVG masters in
+`branding/`. Nothing is drawn or exported by hand: running this script
+again reproduces `assets/branding` byte for byte (given the same renderer).
 
-    scripts/make-icons.py            (needs node with Playwright's Chromium)
+    scripts/make-icons.py            (needs node with Playwright's Chromium, and Pillow)
+    scripts/make-icons.py --check    (CI: the generated files match the masters)
 
-The N is two white pills with a black outline, a black diagonal band and a
-blue bar (#1F6BFF) crossing the black band, inside a black frame, under
-the pills. Coordinates are in a 343 x 320 box; the N is
-centred on (170, 160).
+Masters (approved 2026-11-27, never edited):
+    branding/pairnox-logo-icon.svg               the round icon
+    branding/pairnox-logo-wordmark-on-light.svg  icon + wordmark, "Pair" dark
+    branding/pairnox-logo-wordmark-on-dark.svg   icon + wordmark, "Pair" white
+
+Made into assets/branding:
+    pairnox.svg, pairnox-wordmark-on-{light,dark}.svg   masters without the provenance metadata
+    pairnox-symbolic.svg                                one colour (currentColor), for panels and the terminal
+    pairnox-{16,24,32,48,64,128,256,512,1024}.png       icon with real alpha; 16-32 use the small variant
+    pairnox-wordmark-on-{light,dark}-1100.png
+    pairnox.ico (16-256, Windows) and pairnox.icns (macOS)
 """
 import json
 import os
+import re
 import subprocess
 import tempfile
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "branding")
-BLUE = "#1F6BFF"
-TILE = "#ffffff"
-
-BODY = f"""<defs><clipPath id="inner"><rect x="58" y="55" width="60" height="210" rx="30"/><rect x="222" y="55" width="60" height="210" rx="30"/><circle cx="88" cy="85" r="30"/><circle cx="252" cy="235" r="30"/><polygon points="108.2,62.9 272.2,212.9 231.8,257.1 67.8,107.1"/></clipPath></defs>
-  <g fill="#000" stroke="#000" stroke-width="2" stroke-linejoin="round"><rect x="48" y="45" width="80" height="230" rx="40"/><rect x="212" y="45" width="80" height="230" rx="40"/><circle cx="88" cy="85" r="40"/><circle cx="252" cy="235" r="40"/><polygon points="115.0,55.5 279.0,205.5 225.0,264.5 61.0,114.5"/></g>
-  <polygon clip-path="url(#inner)" points="-112.3,-124.0 478.0,415.9 452.3,444.0 -138.0,-95.9" fill="{BLUE}"/>
-  <g fill="#fff" stroke="#000" stroke-width="2">
-    <rect x="48" y="125" width="80" height="150" rx="40"/>
-    <rect x="212" y="45" width="80" height="150" rx="40"/>
-  </g>"""
-CENTRE = (170, 160)
-SIDE = 280  # the box around the N used by the logo and the marks
+HERE = os.path.dirname(os.path.abspath(__file__))
+SRC = os.path.join(HERE, "..", "branding")
+OUT = os.path.join(HERE, "..", "assets", "branding")
+SIZES = (16, 24, 32, 48, 64, 128, 256, 512, 1024)
+SMALL = 32  # up to this size the thick variant is used
 
 
-def logo_svg(plate=None, size=256):
-    """The logo alone; `plate` is an optional rounded background colour."""
-    x, y = CENTRE[0] - SIDE / 2, CENTRE[1] - SIDE / 2
-    back = f'<rect x="{x}" y="{y}" width="{SIDE}" height="{SIDE}" rx="56" fill="{plate}"/>\n  ' if plate else ""
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="{x} {y} {SIDE} {SIDE}">
+def read(name):
+    return open(os.path.join(SRC, name), encoding="utf-8").read()
+
+
+def clean(svg):
+    """Drops the provenance metadata block: it is large and not needed to draw."""
+    return re.sub(r"\s*<metadata>.*?</metadata>", "", svg, flags=re.S)
+
+
+def small_variant(svg):
+    """Thicker ring and chevrons, so the icon holds up at 16-32 pixels."""
+    svg = svg.replace('r="226"', 'r="206"')
+    svg = svg.replace("M256 40 A216 216", "M256 60 A196 196").replace("M256 472 Z", "M256 452 Z")
+    svg = svg.replace('stroke-width="28"', 'stroke-width="48"')
+    return svg
+
+
+def symbolic(svg):
+    """One colour: the ring, the right half filled, the chevrons knocked out of it."""
+    return """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>Pairnox</title>
-  {back}{BODY}
-</svg>
-"""
-
-
-def tile_svg():
-    s = 1.3
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <title>Pairnox</title>
-  <rect width="512" height="512" rx="112" fill="{TILE}"/>
-  <g transform="translate(256 256) scale({s}) translate(-{CENTRE[0]} -{CENTRE[1]})">
-  {BODY}
-  </g>
+  <defs><mask id="m"><rect width="512" height="512" fill="#fff"/>
+    <path d="M290 190 L366 256 L290 322" fill="none" stroke="#000" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></mask></defs>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="currentColor" stroke-width="20"/>
+  <path d="M256 40 A216 216 0 0 1 256 472 Z" fill="currentColor" mask="url(#m)"/>
+  <path d="M222 190 L146 256 L222 322" fill="none" stroke="currentColor" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
 """
 
@@ -57,37 +65,71 @@ const {chromium} = require('playwright');
 (async () => {
   const jobs = JSON.parse(process.argv[2]);
   const browser = await chromium.launch();
-  for (const [svg, png, size, transparent] of jobs) {
-    const page = await browser.newPage({viewport: {width: size, height: size}});
+  for (const [svg, png, w, h] of jobs) {
+    const page = await browser.newPage({viewport: {width: w, height: h}});
     await page.setContent('<style>html,body{margin:0;background:transparent}svg{display:block;width:100vw;height:100vh}</style>'
       + require('fs').readFileSync(svg, 'utf8'));
-    await page.screenshot({path: png, omitBackground: transparent});
+    await page.screenshot({path: png, omitBackground: true});
   }
   await browser.close();
 })();
 """
 
 
-if __name__ == "__main__":
+def check():
+    """CI: the SVGs in assets/branding are the masters (no hand edits), every
+    size exists and is a square PNG with an alpha channel."""
+    from PIL import Image
+    icon = clean(read("pairnox-logo-icon.svg"))
+    want = {"pairnox.svg": icon, "pairnox-symbolic.svg": symbolic(icon),
+            "pairnox-wordmark-on-light.svg": clean(read("pairnox-logo-wordmark-on-light.svg")),
+            "pairnox-wordmark-on-dark.svg": clean(read("pairnox-logo-wordmark-on-dark.svg"))}
+    bad = [n for n, t in want.items() if open(os.path.join(OUT, n), encoding="utf-8").read() != t]
+    for n in SIZES:
+        im = Image.open(os.path.join(OUT, f"pairnox-{n}.png"))
+        if im.size != (n, n) or im.mode != "RGBA":
+            bad.append(f"pairnox-{n}.png")
+    for n in ("pairnox.ico", "pairnox.icns", "pairnox-wordmark-on-light-1100.png", "pairnox-wordmark-on-dark-1100.png"):
+        if not os.path.exists(os.path.join(OUT, n)):
+            bad.append(n)
+    if bad:
+        raise SystemExit("assets/branding is not what scripts/make-icons.py makes: " + ", ".join(bad))
+
+
+def main():
+    if "--check" in __import__("sys").argv:
+        return check()
     os.makedirs(OUT, exist_ok=True)
     out = lambda name: os.path.join(OUT, name)
     work = tempfile.mkdtemp()
-    open(out("pairnox.svg"), "w").write(tile_svg())
-    open(out("pairnox-logo.svg"), "w").write(logo_svg())
-    jobs = [(out("pairnox.svg"), out(f"pairnox-{n}.png"), n, True)
-            for n in (16, 24, 32, 48, 64, 128, 256, 512)]
-    # The logo for the README: on white, 1024 pixels.
-    path = os.path.join(work, "logo-white.svg")
-    open(path, "w").write(logo_svg(plate="#ffffff", size=1024))
-    jobs.append((path, out("pairnox-logo.png"), 1024, False))
-    # The marks: on a light theme the logo alone, on a dark one on a white plate
-    # (the outline and the band are dark).
-    for name, plate in {"light": None, "dark": "#ffffff"}.items():
-        path = os.path.join(work, f"mark-{name}.svg")
-        open(path, "w").write(logo_svg(plate=plate))
-        jobs.append((path, out(f"pairnox-mark-{name}.png"), 256, True))
+    icon = clean(read("pairnox-logo-icon.svg"))
+    files = {
+        "pairnox.svg": icon,
+        "pairnox-wordmark-on-light.svg": clean(read("pairnox-logo-wordmark-on-light.svg")),
+        "pairnox-wordmark-on-dark.svg": clean(read("pairnox-logo-wordmark-on-dark.svg")),
+        "pairnox-symbolic.svg": symbolic(icon),
+    }
+    for name, text in files.items():
+        open(out(name), "w", encoding="utf-8").write(text)
+    small = os.path.join(work, "small.svg")
+    open(small, "w", encoding="utf-8").write(small_variant(icon))
+    jobs = []
+    for n in SIZES:
+        jobs.append((small if n <= SMALL else out("pairnox.svg"), out(f"pairnox-{n}.png"), n, n))
+    for theme in ("light", "dark"):
+        jobs.append((out(f"pairnox-wordmark-on-{theme}.svg"), out(f"pairnox-wordmark-on-{theme}-1100.png"), 1100, 1000))
     script = os.path.join(work, "render.js")
     open(script, "w").write(RENDER)
-    subprocess.run(["node", script, json.dumps(jobs)], check=True,
-                   env={**os.environ, "NODE_PATH": subprocess.run(
-                       ["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()})
+    root = subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()
+    subprocess.run(["node", script, json.dumps(jobs)], check=True, env={**os.environ, "NODE_PATH": root})
+
+    from PIL import Image
+    pics = {n: Image.open(out(f"pairnox-{n}.png")).convert("RGBA") for n in SIZES}
+    ico = [16, 24, 32, 48, 64, 128, 256]
+    pics[256].save(out("pairnox.ico"), sizes=[(n, n) for n in ico],
+                   append_images=[pics[n] for n in ico if n != 256])
+    pics[1024].save(out("pairnox.icns"), append_images=[pics[n] for n in (16, 32, 64, 128, 256, 512)])
+
+
+if __name__ == "__main__":
+    main()

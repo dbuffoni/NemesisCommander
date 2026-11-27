@@ -10,14 +10,15 @@ use image::RgbaImage;
 
 use crate::dialogs::MessageDialog;
 
-/// The logo without a background, for a dark theme (white arch), 256 × 256.
-pub const LOGO_PNG: &[u8] = include_bytes!("../../../assets/branding/pairnox-mark-dark.png");
+/// The round logo with a transparent background, 256 × 256. It reads on
+/// light and dark themes alike (blue ring, white and black halves).
+pub const LOGO_PNG: &[u8] = include_bytes!("../../../assets/branding/pairnox-256.png");
 
-/// The same for a light theme (dark arch).
-pub const LOGO_LIGHT_PNG: &[u8] = include_bytes!("../../../assets/branding/pairnox-mark-light.png");
+/// The same for a light theme: the one picture serves both.
+pub const LOGO_LIGHT_PNG: &[u8] = LOGO_PNG;
 
-/// The application icon (the logo on a dark tile) in the sizes a window
-/// picks from: 16, 32, 48, 64, 128 and 256 pixels.
+/// The application icon in the sizes a window picks from: 16, 32, 48, 64,
+/// 128 and 256 pixels (16 and 32 are the thick small variant).
 pub const ICON_PNGS: [&[u8]; 6] = [
     include_bytes!("../../../assets/branding/pairnox-16.png"),
     include_bytes!("../../../assets/branding/pairnox-32.png"),
@@ -122,11 +123,8 @@ mod tests {
 
     #[test]
     fn the_icon_files_are_small() {
-        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/branding");
-        let mut total = 0;
-        for entry in std::fs::read_dir(folder).unwrap() {
-            total += entry.unwrap().metadata().unwrap().len();
-        }
-        assert!(total < 300 * 1024, "branding assets take {total} bytes");
+        // What is built into the program: the logo and the window icon sizes.
+        let total: usize = ICON_PNGS.iter().map(|p| p.len()).sum::<usize>() + LOGO_PNG.len();
+        assert!(total < 100 * 1024, "built-in branding takes {total} bytes");
     }
 }

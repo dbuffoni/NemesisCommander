@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 (in progress)
+
+- **New Pairnox logo** (ADR 0058): the round icon and the wordmark replace the old
+  picture everywhere (window and taskbar icon, About, AppImage, macOS bundle,
+  Windows `.ico`, README). All pictures are made from three SVG masters by
+  `scripts/make-icons.py`.
+
 ## 0.5.0
 
 Released 2026-11-27.

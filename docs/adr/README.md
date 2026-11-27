@@ -50,6 +50,8 @@ that still names it.
 | 0047 | [Dialogs: one row of keys, one order, one text for both interfaces](0047-dialogs.md) | Accepted |
 | 0048 | [Default keys: no Alt, no key shared by two commands](0048-default-keys.md) | Accepted |
 | 0049 | [Dialog sizing and the window at large fonts](0049-dialog-sizing.md) | Accepted |
+| 0057 | [The product is renamed Pairnox, the program `pnxr`](0057-rename-to-pairnox.md) (formerly NemesisCommander / SuperCommander) | Accepted |
+| 0058 | [The Pairnox logo: three SVG masters, every raster made by a script](0058-pairnox-logo-and-icons.md) | Accepted |
 
 Template:
 

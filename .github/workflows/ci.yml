@@ -86,9 +86,11 @@ jobs:
       - run: python3 scripts/third_party.py --check
       - name: No trace of the old name
         run: |
-          if git grep -nIiE 'nemesis|\bnmc\b|nmc[-_]|NMC_' -- . ':!docs/adr' ':!CHANGELOG.md' ':!README.md' ':!.github/workflows/ci.yml'; then
+          if git grep -nIiE 'nemesis|supercommander|\bnmc\b|nmc[-_]|NMC_' -- . ':!docs/adr' ':!CHANGELOG.md' ':!README.md' ':!.github/workflows/ci.yml'; then
             echo "The old name NemesisCommander / nmc is still used (see above)"; exit 1
           fi
+      - name: Logos and icons come from the SVG masters
+        run: pip install --quiet pillow && python3 scripts/make-icons.py --check
       # The desktop interface needs Qt: it is checked in the `gui` job.
       - run: cargo clippy --workspace --exclude pnxr-gui --all-targets
 

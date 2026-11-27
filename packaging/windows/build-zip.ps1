@@ -19,6 +19,7 @@ New-Item -ItemType Directory -Force $app | Out-Null
 
 Copy-Item (Join-Path $BinDir "pnxr.exe") $app
 Copy-Item (Join-Path $BinDir "pnxr-gui.exe") $app
+Copy-Item (Join-Path $root "assets/branding/pairnox.ico") $app
 windeployqt --release --qmldir (Join-Path $root "gui/qml") --compiler-runtime (Join-Path $app "pnxr-gui.exe")
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
 

@@ -1,4 +1,9 @@
-<p align="center"><img src="assets/branding/pairnox-logo.png" alt="Pairnox" width="360"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/branding/pairnox-wordmark-on-dark-1100.png">
+    <img src="assets/branding/pairnox-wordmark-on-light-1100.png" alt="Pairnox" width="300">
+  </picture>
+</p>
 
 # Pairnox
 

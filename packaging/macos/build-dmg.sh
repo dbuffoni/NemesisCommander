@@ -26,20 +26,8 @@ install -m755 "$bin_dir/pnxr-gui" "$app/Contents/MacOS/pnxr-gui"
 install -m755 "$bin_dir/pnxr" "$app/Contents/MacOS/pnxr"
 sed "s/@VERSION@/$version/g" "$here/Info.plist" > "$app/Contents/Info.plist"
 
-# The icon, from assets/branding.
-if command -v iconutil >/dev/null; then
-    icons="$work/Pairnox.iconset"
-    mkdir -p "$icons"
-    brand="$root/assets/branding"
-    for size in 16 32 128 256 512; do
-        cp "$brand/pairnox-$size.png" "$icons/icon_${size}x${size}.png"
-    done
-    cp "$brand/pairnox-32.png" "$icons/icon_16x16@2x.png"
-    cp "$brand/pairnox-64.png" "$icons/icon_32x32@2x.png"
-    cp "$brand/pairnox-256.png" "$icons/icon_128x128@2x.png"
-    cp "$brand/pairnox-512.png" "$icons/icon_256x256@2x.png"
-    iconutil -c icns "$icons" -o "$app/Contents/Resources/Pairnox.icns"
-fi
+# The icon, from assets/branding (made from the SVG master by scripts/make-icons.py).
+install -m644 "$root/assets/branding/pairnox.icns" "$app/Contents/Resources/Pairnox.icns"
 
 # macdeployqt reports what it could not do and still succeeds: its errors
 # stop the build here.

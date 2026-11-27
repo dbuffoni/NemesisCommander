@@ -27,6 +27,8 @@ install -Dm644 "$here/pairnox.desktop" "$appdir/usr/share/applications/pairnox.d
 # The icon, from assets/branding: the SVG and every PNG size.
 brand="$here/../../assets/branding"
 install -Dm644 "$brand/pairnox.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/pairnox.svg"
+install -Dm644 "$brand/pairnox-symbolic.svg" \
+    "$appdir/usr/share/icons/hicolor/symbolic/apps/pairnox-symbolic.svg"
 for size in 16 24 32 48 64 128 256 512; do
     install -Dm644 "$brand/pairnox-$size.png" \
         "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/pairnox.png"
