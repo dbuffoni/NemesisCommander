@@ -31,6 +31,7 @@ pub mod export;
 pub mod frecency;
 pub mod fuzzy;
 pub mod git;
+pub mod help;
 pub mod hints;
 pub mod icons;
 mod input;

@@ -1577,6 +1577,13 @@ impl App {
                         return Some(Overlay::Message(help));
                     }
                 }
+                if key == Some(Key::F(1))
+                    && let Some((title, text)) = crate::help::input_help(&dialog.purpose)
+                {
+                    let mut help = MessageDialog::new(&title, text);
+                    help.then = Some(dialog);
+                    return Some(Overlay::Message(help));
+                }
                 if dialog.purpose.testable()
                     && press.chord.ctrl
                     && press.chord.key == Key::Char('t')
@@ -1641,6 +1648,15 @@ impl App {
                 let page = self.page.max(1) as isize;
                 if let Some(keep) = self.choose_extra_key(&mut dialog, &press) {
                     return keep.then_some(Overlay::Choose(dialog));
+                }
+                if key == Some(Key::F(1)) {
+                    if let Some((title, text)) =
+                        crate::help::choose_help(&dialog.purpose, dialog.cursor)
+                    {
+                        let mut help = MessageDialog::new(&title, text);
+                        help.then_choose = Some(Box::new(dialog));
+                        return Some(Overlay::Message(help));
+                    }
                 }
                 match key {
                     Some(Key::Up) => dialog.move_cursor(-1),

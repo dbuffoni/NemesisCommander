@@ -35,6 +35,9 @@ Not published yet.
 - Multi-rename: options after the template (letter case, replace text or
   regular expression, counter start/step/width), a count of the names that
   change, ready-made rules on Ctrl+O and a help on F1.
+- F1 in the lists and questions explains the row under the cursor (Properties
+  rows, link kinds, synchronize modes, import, checksums, ready-made masks and
+  rules, bookmarks, basket, drives...) and goes back to the dialog.
 - The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
   is not installed the system fonts are used.
 

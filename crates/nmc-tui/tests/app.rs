@@ -377,6 +377,27 @@ async fn the_mask_dialog_shows_matches_cycles_actions_and_remembers() {
 }
 
 #[tokio::test]
+async fn f1_in_a_list_explains_the_row_under_the_cursor() {
+    let mut h = Harness::new().await;
+    h.focus("a.txt");
+    h.key("Shift+F4");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    h.type_text("e");
+    for _ in 0..30 {
+        let Some(Overlay::Choose(d)) = h.app.overlay() else { panic!("properties") };
+        let nmc_tui::ChoosePurpose::Properties(state) = &d.purpose else { panic!("properties") };
+        if matches!(state.rows.get(d.cursor), Some(nmc_frontend::properties::PropRow::Bit(_))) {
+            break;
+        }
+        h.key("Down");
+    }
+    h.key("F1");
+    assert!(h.screen().contains("Permission"), "{}", h.screen());
+    h.key("Esc");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "back to the list");
+}
+
+#[tokio::test]
 async fn quick_filter_narrows_while_typing() {
     let mut h = Harness::new().await;
     h.key("Ctrl+S");
