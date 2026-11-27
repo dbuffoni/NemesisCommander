@@ -52,6 +52,7 @@ that still names it.
 | 0049 | [Dialog sizing and the window at large fonts](0049-dialog-sizing.md) | Accepted |
 | 0057 | [The product is renamed Pairnox, the program `pnxr`](0057-rename-to-pairnox.md) (formerly NemesisCommander / SuperCommander) | Accepted |
 | 0058 | [The Pairnox logo: three SVG masters, every raster made by a script](0058-pairnox-logo-and-icons.md) | Accepted |
+| 0059 | [Shortcut model: standard shortcuts and function keys with names](0059-shortcut-model.md) | Accepted |
 
 Template:
 

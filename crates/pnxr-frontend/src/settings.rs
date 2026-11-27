@@ -578,18 +578,24 @@ pub enum Command {
     Import,
     /// Forget what is remembered about servers.
     ResetStats,
+    /// Give every command its built-in standard shortcuts again.
+    ResetShortcuts,
+    /// Give every command its built-in function key and button name again.
+    ResetFunctionKeys,
     /// Open the settings file in the editor.
     EditFile,
 }
 
 impl Command {
     /// Every command, in screen order.
-    pub const ALL: [Command; 6] = [
+    pub const ALL: [Command; 8] = [
         Command::SendTo,
         Command::FetchFrom,
         Command::Export,
         Command::Import,
         Command::ResetStats,
+        Command::ResetShortcuts,
+        Command::ResetFunctionKeys,
         Command::EditFile,
     ];
 
@@ -601,6 +607,8 @@ impl Command {
             Command::Export => "Export settings to a file…",
             Command::Import => "Import settings from a file…",
             Command::ResetStats => "Forget what is remembered about servers",
+            Command::ResetShortcuts => "Reset all shortcuts to the built-in ones",
+            Command::ResetFunctionKeys => "Reset all function keys and button names",
             Command::EditFile => "Edit the settings file",
         }
     }
@@ -725,14 +733,20 @@ impl SettingsScreen {
     }
 }
 
-/// The keys of `action` under `config`'s overrides.
-pub fn keys_of(config: &Config, action: Action) -> Vec<KeyChord> {
-    let (keymap, _) = Keymap::with_overrides(&config.keys);
-    keymap.chords_for(action).to_vec()
+/// The effective keymap of `config`.
+fn keymap_of(config: &Config) -> Keymap {
+    Keymap::from_config(config).0
 }
 
-/// Gives `chord` to `action` (replacing its keys, or added with `add`).
-/// Another command that had the chord loses it; its id is returned.
+/// The keys of `action` under `config`'s overrides: its function key first,
+/// then its standard shortcuts.
+pub fn keys_of(config: &Config, action: Action) -> Vec<KeyChord> {
+    keymap_of(config).chords_for(action).to_vec()
+}
+
+/// Gives `chord` to `action` (replacing its keys, or added with `add`). A
+/// function key goes to the function-key slot, any other chord to the
+/// shortcuts. Another command that had the chord loses it; its id is returned.
 pub fn assign_key(
     config: &mut Config,
     action: Action,
@@ -745,13 +759,8 @@ pub fn assign_key(
 /// Like [`assign_key`] for any command id: a built-in action, or a plugin
 /// or script command (`plugin.NAME.COMMAND`, `script.NAME`).
 pub fn assign_key_to(config: &mut Config, id: &str, chord: KeyChord, add: bool) -> Option<String> {
-    let (keymap, _) = Keymap::with_overrides(&config.keys);
-    let previous = keymap.command_for(&chord).filter(|other| other != id);
-    if let Some(other) = &previous {
-        let remaining: Vec<KeyChord> =
-            keymap.chords_for_id(other).iter().copied().filter(|c| *c != chord).collect();
-        set_keys(config, other, &remaining);
-    }
+    let keymap = keymap_of(config);
+    let previous = take_chord(config, &keymap, id, chord);
     let mut keys = if add { keymap.chords_for_id(id).to_vec() } else { Vec::new() };
     if !keys.contains(&chord) {
         keys.push(chord);
@@ -760,48 +769,140 @@ pub fn assign_key_to(config: &mut Config, id: &str, chord: KeyChord, add: bool) 
     previous
 }
 
+/// Gives `chord`, which is no function key, to the command `id` as its only
+/// standard shortcut; its function key stays. Another command that had the
+/// chord loses it; its id is returned.
+pub fn assign_shortcut_to(config: &mut Config, id: &str, chord: KeyChord) -> Option<String> {
+    let keymap = keymap_of(config);
+    let previous = take_chord(config, &keymap, id, chord);
+    let mut keys: Vec<KeyChord> = keymap.fkey_for_id(id).into_iter().collect();
+    keys.push(chord);
+    set_keys(config, id, &keys);
+    previous
+}
+
+/// Gives the function key `chord` (F1 to F10, bare, with Shift or Ctrl) to
+/// the command `id`; its standard shortcuts stay. Returns the id of the
+/// command that had it, which loses it.
+pub fn assign_fkey_to(config: &mut Config, id: &str, chord: KeyChord) -> Option<String> {
+    let keymap = keymap_of(config);
+    let previous = take_chord(config, &keymap, id, chord);
+    let mut keys = vec![chord];
+    keys.extend(keymap.shortcuts_for_id(id));
+    set_keys(config, id, &keys);
+    previous
+}
+
+/// Removes the function key of the command `id`; the shortcuts stay.
+pub fn clear_fkey_of(config: &mut Config, id: &str) {
+    let shortcuts = keymap_of(config).shortcuts_for_id(id);
+    set_keys(config, id, &shortcuts);
+}
+
+/// Removes the standard shortcuts of the command `id`; the function key stays.
+pub fn clear_shortcuts_of(config: &mut Config, id: &str) {
+    let keys: Vec<KeyChord> = keymap_of(config).fkey_for_id(id).into_iter().collect();
+    set_keys(config, id, &keys);
+}
+
+/// Gives the command `id` the short name `name` for its bottom bar button;
+/// empty text (or the built-in name) restores the built-in one. Returns
+/// `false` when the name is longer than [`pnxr_config::LABEL_MAX`].
+pub fn set_label_of(config: &mut Config, id: &str, name: &str) -> bool {
+    let name = name.trim();
+    if name.chars().count() > pnxr_config::LABEL_MAX {
+        return false;
+    }
+    let built_in = Action::from_id(id).map(|a| a.short());
+    if name.is_empty() || Some(name) == built_in {
+        config.labels.remove(id);
+    } else {
+        config.labels.insert(id.to_owned(), name.to_owned());
+    }
+    config.shortcut_model = Some(pnxr_config::keymap::SHORTCUT_MODEL);
+    true
+}
+
+/// Removes the key `chord` from the command that has it (not `id`); returns
+/// that command's id.
+fn take_chord(config: &mut Config, keymap: &Keymap, id: &str, chord: KeyChord) -> Option<String> {
+    let previous = keymap.command_for(&chord).filter(|other| other != id);
+    if let Some(other) = &previous {
+        let remaining: Vec<KeyChord> =
+            keymap.chords_for_id(other).iter().copied().filter(|c| *c != chord).collect();
+        set_keys(config, other, &remaining);
+    }
+    previous
+}
+
 /// Removes every key of `action`.
 pub fn clear_keys(config: &mut Config, action: Action) {
     clear_keys_of(config, action.id());
 }
 
-/// Removes every key of the command `id`.
+/// Removes every key of the command `id`: shortcuts and function key.
 pub fn clear_keys_of(config: &mut Config, id: &str) {
     set_keys(config, id, &[]);
 }
 
-/// Gives `action` its built-in keys again, taking them from commands that
-/// have them now; returns the ids of those commands.
+/// Gives `action` its built-in keys and short name again, taking the keys from
+/// commands that have them now; returns the ids of those commands.
 pub fn reset_keys(config: &mut Config, action: Action) -> Vec<String> {
     config.keys.remove(action.id());
+    config.fkeys.remove(action.id());
+    config.labels.remove(action.id());
     let mut losers = Vec::new();
     for chord in default_keys(action.id()) {
-        let (keymap, _) = Keymap::with_overrides(&config.keys);
-        if let Some(other) = keymap.command_for(&chord).filter(|o| o != action.id()) {
-            let remaining: Vec<KeyChord> =
-                keymap.chords_for_id(&other).iter().copied().filter(|c| *c != chord).collect();
-            set_keys(config, &other, &remaining);
+        let keymap = keymap_of(config);
+        if let Some(other) = take_chord(config, &keymap, action.id(), chord) {
             losers.push(other);
         }
     }
     losers
 }
 
-/// The built-in keys of command `id` (none for plugins and scripts).
+/// Gives every command its built-in keys and names again (`functions`: the
+/// function keys and short names; otherwise the standard shortcuts).
+pub fn reset_all_keys(config: &mut Config, functions: bool) {
+    if functions {
+        config.fkeys.clear();
+        config.labels.clear();
+    } else {
+        config.keys.clear();
+    }
+}
+
+/// The built-in keys of command `id` (none for plugins and scripts): its
+/// function key first, then its shortcuts.
 fn default_keys(id: &str) -> Vec<KeyChord> {
     Action::from_id(id)
-        .map(|action| action.default_keys().iter().filter_map(|k| k.parse().ok()).collect())
+        .map(|action| {
+            action.default_fkey().into_iter().chain(action.default_shortcuts()).collect()
+        })
         .unwrap_or_default()
 }
 
-/// Stores `keys` for command `id` as an override, or no override when they
-/// are the built-in ones.
+/// Stores `keys` for command `id`: the first function key as its `fkeys`
+/// entry and the other chords as its shortcuts, each as an override only when
+/// it differs from the built-in one.
 fn set_keys(config: &mut Config, id: &str, keys: &[KeyChord]) {
-    if keys == default_keys(id).as_slice() {
+    let fkey = keys.iter().copied().find(pnxr_config::is_function_key);
+    let shortcuts: Vec<KeyChord> =
+        keys.iter().copied().filter(|c| !pnxr_config::is_function_key(c)).collect();
+    let action = Action::from_id(id);
+    let default_shortcuts = action.map(Action::default_shortcuts).unwrap_or_default();
+    let default_fkey = action.and_then(Action::default_fkey);
+    if shortcuts == default_shortcuts {
         config.keys.remove(id);
     } else {
-        config.keys.insert(id.to_owned(), keys.iter().map(ToString::to_string).collect());
+        config.keys.insert(id.to_owned(), shortcuts.iter().map(ToString::to_string).collect());
     }
+    if fkey == default_fkey {
+        config.fkeys.remove(id);
+    } else {
+        config.fkeys.insert(id.to_owned(), fkey.map(|c| c.to_string()).unwrap_or_default());
+    }
+    config.shortcut_model = Some(pnxr_config::keymap::SHORTCUT_MODEL);
 }
 
 #[cfg(test)]
@@ -844,15 +945,18 @@ mod tests {
         // F5 goes from Copy to Refresh; Copy is left without keys.
         let previous = assign_key(&mut config, Action::Refresh, chord("F5"), true);
         assert_eq!(previous.as_deref(), Some("files.copy"));
-        assert_eq!(keys_of(&config, Action::Refresh), [chord("Ctrl+R"), chord("F5")]);
+        assert_eq!(keys_of(&config, Action::Refresh), [chord("F5"), chord("Ctrl+R")]);
         assert!(keys_of(&config, Action::Copy).is_empty());
         // Resetting Copy takes F5 back.
         assert_eq!(reset_keys(&mut config, Action::Copy), [Action::Refresh.id()]);
         assert_eq!(keys_of(&config, Action::Copy), [chord("F5")]);
         assert_eq!(keys_of(&config, Action::Refresh), [chord("Ctrl+R")]);
         assert!(config.keys.is_empty(), "back to the built-in keys: no overrides");
+        assert!(config.fkeys.is_empty(), "and no function-key overrides");
+        // Clearing Quit removes its function key (F10): it has no shortcut.
         clear_keys(&mut config, Action::Quit);
-        assert_eq!(config.keys["app.quit"], Vec::<String>::new());
+        assert_eq!(config.fkeys["app.quit"], "");
+        assert!(keys_of(&config, Action::Quit).is_empty());
     }
 
     #[test]

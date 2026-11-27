@@ -76,10 +76,24 @@ shortcuts on the right.
   window you can also click them.
 - **Up/Down**, Page Up/Down, Home/End move; **Enter** (or a click in the
   window) runs the command.
+- Every command has two independent keys: **standard shortcuts** (Ctrl+letter,
+  Delete... any number, never a function key) and **one function key** (F1 to
+  F10, with Shift or with Ctrl: 30 slots) whose button on the bottom bar has a
+  **short name**. The list shows both: the function key and its name in the
+  first column, the shortcuts in the second.
 - **Ctrl+K** gives the highlighted command a shortcut: press the new key
-  (Esc cancels). If another command had that key, it loses it and the status
-  line says which one. **Delete** removes the command's shortcuts. The
-  change is saved at once, as on the settings screen.
+  (Esc cancels; a function key is refused, use Ctrl+F). If another command had
+  that key, it loses it and the status line says which one. **Delete** removes
+  the command's shortcuts (its function key stays). The change is saved at once.
+- **Ctrl+F** gives the command a function key: a list of the 30 slots shows who
+  has each one. **Enter** assigns the highlighted slot (the command keeps its
+  built-in button name; if another command has the slot you are asked first),
+  **Ctrl+N** changes the button name (at most 12 characters, empty restores the
+  built-in one), **Delete** removes the function key, **Ctrl+R** restores the
+  built-in key and name.
+- The bottom bar shows the names of F1 to F10. Hold **Shift** or **Ctrl** (the
+  window), or press **Ctrl+F** in the main window (the terminal, which cannot
+  see a held key), to show the Shift+F or Ctrl+F row.
 - **F1** explains the highlighted command in a sentence or two; F1 or Esc
   hides the explanation.
 

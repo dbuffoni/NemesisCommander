@@ -44,7 +44,9 @@ pub const LOGO_ROWS: u16 = 10;
 pub fn logo() -> &'static RgbaImage {
     static LOGO: OnceLock<RgbaImage> = OnceLock::new();
     LOGO.get_or_init(|| {
-        image::load_from_memory(LOGO_PNG).map_or_else(|_| RgbaImage::new(1, 1), |i| i.to_rgba8())
+        // The 32 pixel icon has the thick ring, which survives being drawn
+        // in 20 half-block cells.
+        image::load_from_memory(ICON_PNGS[1]).map_or_else(|_| RgbaImage::new(1, 1), |i| i.to_rgba8())
     })
 }
 

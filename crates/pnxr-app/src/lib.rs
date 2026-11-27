@@ -42,7 +42,7 @@ impl AppContext {
     /// Loads settings from `paths`. A missing settings file means defaults.
     pub fn load_from(paths: AppPaths) -> Result<Self, ConfigError> {
         let config = Config::load(&paths.config_file())?;
-        let (keymap, warnings) = Keymap::with_overrides(&config.keys);
+        let (keymap, warnings) = Keymap::from_config(&config);
         let registry = Arc::new(build_registry_for(&paths));
         Ok(AppContext { paths, config, keymap, warnings, registry })
     }

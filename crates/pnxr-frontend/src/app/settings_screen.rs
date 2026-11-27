@@ -128,6 +128,19 @@ impl App {
                 ));
                 return Some(Overlay::Settings(*screen));
             }
+            Command::ResetShortcuts | Command::ResetFunctionKeys => {
+                let functions = command == Command::ResetFunctionKeys;
+                crate::settings::reset_all_keys(&mut self.context.config, functions);
+                self.settings_changed(
+                    if functions {
+                        "Function keys and button names are the built-in ones again"
+                    } else {
+                        "Shortcuts are the built-in ones again"
+                    }
+                    .to_owned(),
+                );
+                return Some(Overlay::Settings(*screen));
+            }
             Command::EditFile => {
                 self.edit_settings_file();
                 return None;

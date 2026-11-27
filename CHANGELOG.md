@@ -2,6 +2,12 @@
 
 ## 0.6.0 (in progress)
 
+- **Shortcut model** (ADR 0059): every command has standard shortcuts and,
+  independently, one function key (F, Shift+F or Ctrl+F) with a short name
+  shown on the bottom bar. The command list has Ctrl+K (shortcut) and Ctrl+F
+  (function key, name behind Ctrl+N); Ctrl+F in the main window switches the bar
+  row in a terminal. Settings of earlier versions are converted when read.
+
 - **New Pairnox logo** (ADR 0058): the round icon and the wordmark replace the old
   picture everywhere (window and taskbar icon, About, AppImage, macOS bundle,
   Windows `.ico`, README). All pictures are made from three SVG masters by

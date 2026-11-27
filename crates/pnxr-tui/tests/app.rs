@@ -536,6 +536,160 @@ async fn typing_in_the_command_list_finds_commands() {
 }
 
 #[tokio::test]
+async fn a_function_key_is_refused_as_a_shortcut_and_the_function_key_stays() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+K");
+    h.key("Shift+F8");
+    assert!(
+        h.screen().contains("function key"),
+        "a hint to use the other action: {}",
+        h.screen()
+    );
+    assert!(h.app.context().config.keys.is_empty());
+    assert!(h.app.context().config.fkeys.is_empty());
+    // A shortcut given to a command with a function key keeps it.
+    h.key("Esc");
+    h.key("Esc");
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+K");
+    h.key("Ctrl+C");
+    let keymap = &h.app.context().keymap;
+    assert_eq!(keymap.fkey_for_id("files.copy"), Some("F5".parse().unwrap()));
+    assert_eq!(keymap.shortcuts_for_id("files.copy"), ["Ctrl+C".parse().unwrap()]);
+    assert!(h.app.context().config.fkeys.is_empty(), "the function key is still the built-in one");
+}
+
+#[tokio::test]
+async fn a_command_gets_a_free_function_key_with_its_own_name_and_the_bar_shows_it() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+F");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))));
+    let screen = h.screen();
+    assert!(screen.contains("Function key for View/Refresh"), "{screen}");
+    assert!(screen.contains("Ctrl+N: short name"), "{screen}");
+    // The list starts on the first free slot: Ctrl+F10 is taken (Choose), so go and look.
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!() };
+    assert_eq!(dialog.items.len(), 30);
+    assert!(dialog.items[4].contains("Copy"), "{:?}", dialog.items[4]);
+    h.key("Enter");
+    assert!(h.app.overlay().is_none());
+    let keymap = &h.app.context().keymap;
+    let chord = keymap.fkey_for_id("view.refresh").expect("it has a function key now");
+    assert_eq!(h.app.context().config.fkeys["view.refresh"], chord.to_string());
+    assert_eq!(keymap.shortcuts_for_id("view.refresh"), ["Ctrl+R".parse().unwrap()]);
+    assert_eq!(keymap.bar_label(&chord).as_deref(), Some("Refresh"));
+}
+
+#[tokio::test]
+async fn taking_a_function_key_from_another_command_asks_first() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+F");
+    // Go to F5 (Copy's).
+    h.key("Home");
+    for _ in 0..4 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))));
+    assert!(h.screen().contains("F5 belongs to"), "{}", h.screen());
+    // No: nothing changes.
+    h.key("n");
+    assert!(h.app.context().config.fkeys.is_empty());
+    assert_eq!(h.app.context().keymap.fkey_for_id("files.copy"), Some("F5".parse().unwrap()));
+    // Yes: Copy loses it, Refresh has it, and Copy keeps its other keys.
+    h.key("F9");
+    h.type_text("refresh");
+    h.key("Ctrl+F");
+    h.key("Home");
+    for _ in 0..4 {
+        h.key("Down");
+    }
+    h.key("Enter");
+    h.key("y");
+    let keymap = &h.app.context().keymap;
+    assert_eq!(keymap.fkey_for_id("view.refresh"), Some("F5".parse().unwrap()));
+    assert_eq!(keymap.fkey_for_id("files.copy"), None);
+    assert_eq!(h.app.context().config.fkeys["files.copy"], "");
+}
+
+#[tokio::test]
+async fn the_short_name_of_a_button_is_changed_behind_ctrl_n_and_can_be_restored() {
+    let mut h = Harness::new().await;
+    assert!(h.screen().contains("F5Copy"));
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+F");
+    h.key("Ctrl+N");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))));
+    // The built-in name is in the field: nothing has to be typed to assign a key.
+    h.key("Ctrl+U");
+    h.type_text("Dup");
+    h.key("Enter");
+    assert_eq!(h.app.context().config.labels["files.copy"], "Dup");
+    let screen = h.screen();
+    assert!(screen.contains("F5Dup") && !screen.contains("F5Copy"), "{screen}");
+    // Empty text brings the built-in name back.
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+F");
+    h.key("Ctrl+N");
+    h.key("Ctrl+U");
+    h.key("Enter");
+    assert!(h.app.context().config.labels.is_empty());
+    assert!(h.screen().contains("F5Copy"), "{}", h.screen());
+    // Too long: refused.
+    h.key("F9");
+    h.type_text("files/copy");
+    h.key("Ctrl+F");
+    h.key("Ctrl+N");
+    h.key("Ctrl+U");
+    h.type_text("A name that is far too long");
+    h.key("Enter");
+    assert!(h.app.context().config.labels.is_empty());
+    assert!(h.screen().contains("at most 12"), "{}", h.screen());
+}
+
+#[tokio::test]
+async fn delete_in_the_slot_list_removes_the_function_key_only() {
+    let mut h = Harness::new().await;
+    h.key("F9");
+    h.type_text("files/delete");
+    h.key("Ctrl+F");
+    h.key("Delete");
+    let keymap = &h.app.context().keymap;
+    assert_eq!(keymap.fkey_for_id("files.delete"), None);
+    assert_eq!(keymap.shortcuts_for_id("files.delete"), ["Delete".parse().unwrap()]);
+    // Ctrl+R in the list brings the built-in key and name back.
+    h.key("F9");
+    h.type_text("files/delete");
+    h.key("Ctrl+F");
+    h.key("Ctrl+R");
+    assert_eq!(h.app.context().keymap.fkey_for_id("files.delete"), Some("F8".parse().unwrap()));
+    assert!(h.app.context().config.fkeys.is_empty());
+}
+
+#[tokio::test]
+async fn the_bar_row_key_stands_in_for_a_held_shift_or_ctrl() {
+    let mut h = Harness::new().await;
+    assert!(h.screen().contains("F5Copy"));
+    h.key("Ctrl+F");
+    let shifted = h.screen();
+    assert!(shifted.contains("F5Pack"), "{shifted}");
+    h.key("Ctrl+F");
+    let ctrl = h.screen();
+    assert!(!ctrl.contains("F5Pack") && !ctrl.contains("F5Copy"), "{ctrl}");
+    h.key("Ctrl+F");
+    assert!(h.screen().contains("F5Copy"));
+}
+
+#[tokio::test]
 async fn shortcuts_are_given_from_the_command_list() {
     let mut h = Harness::new().await;
     h.key("F9");
@@ -1388,7 +1542,10 @@ async fn without_plugins_ctrl_x_offers_the_plugin_list() {
     let mut h = Harness::new().await;
     h.focus("a.txt");
     h.key("Ctrl+X");
-    let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!("a list") };
+    let status = h.status();
+    let Some(Overlay::Choose(dialog)) = h.app.overlay() else {
+        panic!("a list; status: {status}; {:?}", h.app.overlay().is_some())
+    };
     assert_eq!(dialog.items, ["Browse and install plugins…"]);
 }
 

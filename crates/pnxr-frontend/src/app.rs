@@ -38,6 +38,7 @@ mod archives;
 mod checksums;
 mod diskwork;
 mod features;
+mod fkeys;
 mod generate;
 mod git_actions;
 mod logins;
@@ -411,6 +412,9 @@ pub struct App {
     /// Ctrl, Alt and Shift as held right now (the function key bar shows
     /// what those keys do).
     held: (bool, bool, bool),
+    /// The row of the function key bar chosen with its key: 0 plain, 1 Shift,
+    /// 2 Ctrl (terminals do not report a held modifier).
+    bar_row: u8,
     /// Git status of what each side shows, with the folder it is for.
     pub git: [Option<(VfsPath, Arc<crate::git::GitStatus>)>; 2],
     /// The plugin columns of the folder of each panel.
@@ -726,6 +730,7 @@ impl App {
             target_override: None,
             compare_marks: false,
             held: (false, false, false),
+            bar_row: 0,
             context,
             workspace,
             manager,
@@ -1393,7 +1398,18 @@ impl App {
 
     /// The modifiers held, as set by [`set_modifiers`](Self::set_modifiers).
     pub fn modifiers(&self) -> (bool, bool, bool) {
-        self.held
+        let (ctrl, alt, shift) = self.held;
+        (ctrl || self.bar_row == 2, alt, shift || self.bar_row == 1)
+    }
+
+    /// The function key bar shows its next row: plain, Shift, Ctrl, plain...
+    pub fn next_bar_row(&mut self) {
+        self.bar_row = (self.bar_row + 1) % 3;
+    }
+
+    /// The row of the function key bar chosen with its key (0, 1 or 2).
+    pub fn bar_row(&self) -> u8 {
+        self.bar_row
     }
 
     fn normal_key(&mut self, press: KeyPress) {
@@ -2144,6 +2160,7 @@ impl App {
                     self.workspace.side_mut(side).panel_mut().set_show_hidden(show);
                 }
             }
+            Action::BarRow => self.next_bar_row(),
             Action::QuickFilter => {
                 let current = self.workspace.active().filter().to_owned();
                 self.ask(
@@ -2366,6 +2383,7 @@ impl App {
             },
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
             InputPurpose::AddPluginRepo => self.plugin_repo_typed(&text),
+            InputPurpose::FunctionKeyName(id) => self.function_key_name_typed(&id, &text),
             InputPurpose::NewConnection => match crate::connections::check(&text) {
                 Ok(checked) => self.ask_name(
                     "New connection",
@@ -2663,6 +2681,11 @@ impl App {
     fn confirmed(&mut self, purpose: ConfirmPurpose) {
         let registry = self.context.registry.clone();
         match purpose {
+            ConfirmPurpose::ReplaceFunctionKey { id, name, chord } => {
+                if let Ok(chord) = chord.parse() {
+                    self.give_function_key(&id, &name, chord);
+                }
+            }
             ConfirmPurpose::Delete { paths, trash } => {
                 self.workspace.active_mut().clear_selection();
                 self.basket_forget(&paths);
@@ -2722,6 +2745,7 @@ impl App {
         let here = self.workspace.active().location().clone();
         let cursor = dialog.cursor;
         match dialog.purpose {
+            ChoosePurpose::FunctionKey { id, name } => self.function_key_chosen(id, name, cursor),
             ChoosePurpose::Bookmarks(rows) => match rows.get(cursor) {
                 Some(JumpRow::Bookmark(index)) => {
                     if let Some(bookmark) = self.context.config.bookmarks.get(*index).cloned() {
@@ -3122,7 +3146,7 @@ impl App {
     }
 
     fn apply_key_overrides(&mut self) {
-        let (keymap, warnings) = Keymap::with_overrides(&self.context.config.keys);
+        let (keymap, warnings) = Keymap::from_config(&self.context.config);
         self.context.keymap = keymap;
         if !warnings.is_empty() {
             self.set_error(warnings.join("; "));

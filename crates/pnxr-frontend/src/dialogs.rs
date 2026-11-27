@@ -74,6 +74,8 @@ pub enum S3Next {
 pub enum InputPurpose {
     /// The address of a plugin repository to add.
     AddPluginRepo,
+    /// The short name of the bottom bar button of the command with this id.
+    FunctionKeyName(String),
     /// Copy these items to the typed location.
     CopyTo(Vec<VfsPath>),
     /// Move these items to the typed location.
@@ -419,6 +421,15 @@ pub enum ConfirmPurpose {
     UninstallPlugin(String),
     /// Add this plugin repository.
     AddPluginRepo(pnxr_config::PluginRepository),
+    /// Give a function key that another command has to this one.
+    ReplaceFunctionKey {
+        /// The command's id.
+        id: String,
+        /// Its name for the user.
+        name: String,
+        /// The key, as text (`Shift+F5`).
+        chord: String,
+    },
     /// Install `pnxr serve` as typed in the question (server and options).
     InstallServe(String),
     /// Forget something the user saved (the list it came from opens again).
@@ -495,6 +506,14 @@ pub enum ChoosePurpose {
         replace: Option<(String, String)>,
         /// A password found in the typed address.
         secret: Secret,
+    },
+    /// The slots of the function key bar for a command (Ctrl+F in the
+    /// command list); Enter gives it the highlighted slot.
+    FunctionKey {
+        /// The command's id.
+        id: String,
+        /// The command's name for the user.
+        name: String,
     },
     /// Open a drive or saved connection, one per row (the last row asks
     /// for a new connection; Delete removes a saved one).
