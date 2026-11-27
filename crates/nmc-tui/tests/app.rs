@@ -392,8 +392,8 @@ async fn f1_in_a_list_explains_the_row_under_the_cursor() {
         h.key("Down");
     }
     h.key("F1");
-    assert!(h.screen().contains("Permission"), "{}", h.screen());
-    h.key("Esc");
+    assert!(h.screen().contains("switches this permission"), "{}", h.screen());
+    h.key("Enter");
     assert!(matches!(h.app.overlay(), Some(Overlay::Choose(_))), "back to the list");
 }
 

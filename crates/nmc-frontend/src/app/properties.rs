@@ -113,6 +113,8 @@ impl App {
                 )));
                 return Some(false);
             }
+            // F1 is for the general help of the row.
+            (Some(Key::F(1)), _) => return None,
             (Some(Key::Up), _) => dialog.move_cursor(-1),
             (Some(Key::Down), _) => dialog.move_cursor(1),
             (Some(Key::PageUp), _) => dialog.move_cursor(-10),
