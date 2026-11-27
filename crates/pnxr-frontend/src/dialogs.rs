@@ -567,6 +567,14 @@ pub enum ChoosePurpose {
         /// The rows' names, and whether each is a folder.
         names: Vec<(String, bool)>,
     },
+    /// What a plugin command found (`pnxr.showResults`): rows to sort and
+    /// mark, then trash, or give to one of the plugin's commands.
+    PluginResults {
+        /// The rows, marks and sort.
+        results: Box<crate::results::Results>,
+        /// The plugin whose commands the actions run.
+        plugin: Option<std::path::PathBuf>,
+    },
     /// Groups of identical files (the first of each is the one kept), after
     /// a row that puts the extra copies in the basket.
     Duplicates(Vec<Vec<VfsPath>>),
@@ -670,7 +678,11 @@ impl ChooseDialog {
     /// Whether the rows change while the list is open (filtered while typing,
     /// search results arriving): the window then keeps one size.
     pub fn keeps_size(&self) -> bool {
-        self.query.is_some() || matches!(self.purpose, ChoosePurpose::SearchResults(_))
+        self.query.is_some()
+            || matches!(
+                self.purpose,
+                ChoosePurpose::SearchResults(_) | ChoosePurpose::PluginResults { .. }
+            )
     }
 
     /// Moves the cursor by `delta`, clamped to the list.

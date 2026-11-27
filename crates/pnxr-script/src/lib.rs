@@ -22,6 +22,7 @@ pub mod catalog;
 #[cfg(feature = "engine")]
 mod engine;
 #[cfg(feature = "engine")]
+mod hashcache;
 mod imagehash;
 #[cfg(feature = "engine")]
 mod ops;

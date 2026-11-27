@@ -3,10 +3,20 @@
 //
 //   Find similar pictures          groups the pictures of the folder and of the
 //                                  folders below it (or of the selection), says
-//                                  how alike they are and which copy to keep.
+//                                  how alike they are and which copy to keep. In
+//                                  the window and the terminal the groups come as
+//                                  a list: sort it by any column, mark the extra
+//                                  copies with `a` (all but the best), then move
+//                                  them to the trash (Delete, after a question
+//                                  that lists them) or aside (`m`).
 //   Move the extra copies aside    moves all but the best copy of each group to
 //                                  the folder `_similar-extras` (nothing is
 //                                  deleted; move them back to undo).
+//   Move the marked pictures aside moves the files marked in the list (the
+//                                  list's `m` key runs it).
+//
+// Hashes are remembered between runs (by file, size and date), so a second
+// look at a big folder is quick.
 //   Columns "Similar" and "Picture" in the panels: the group, the likeness to
 //                                  the best copy of the folder, and the pixels.
 //
@@ -24,6 +34,7 @@ interface Picture {
   width: number;
   height: number;
   bytes: number;
+  modified: number | null;
 }
 
 const isPicture = (name: string): boolean => {
@@ -58,7 +69,7 @@ const human = (bytes: number): string => {
 const pixels = (p: Picture): number => p.width * p.height;
 
 /** Hashes `paths`; files that are not pictures are left out. */
-async function hashAll(paths: string[]): Promise<Picture[]> {
+async function hashAll(paths: string[], dates: Map<string, number | null> = new Map()): Promise<Picture[]> {
   const pictures: Picture[] = [];
   for (const path of paths) {
     const info = await pnxr.imageHash(path);
@@ -70,18 +81,22 @@ async function hashAll(paths: string[]): Promise<Picture[]> {
       width: info.width,
       height: info.height,
       bytes: info.bytes,
+      modified: dates.get(path) ?? null,
     });
   }
   return pictures;
 }
 
-/** The pictures in `roots` and, for folders, below them. */
-async function collect(roots: string[]): Promise<string[]> {
+/** The pictures in `roots` and, for folders, below them, with their dates. */
+async function collect(roots: string[], dates: Map<string, number | null>): Promise<string[]> {
   const found: string[] = [];
   const visit = async (path: string, depth: number): Promise<void> => {
     const entry = await pnxr.stat(path);
     if (entry.kind === "file") {
-      if (isPicture(entry.name)) found.push(entry.path);
+      if (isPicture(entry.name)) {
+        found.push(entry.path);
+        dates.set(entry.path, entry.modified);
+      }
     } else if (entry.kind === "dir" && depth < 32) {
       for (const child of await pnxr.list(path)) {
         if (child.name === EXTRAS_FOLDER) continue;
@@ -143,6 +158,58 @@ const shown = (path: string): string => {
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 };
 
+const day = (millis: number | null): string => (millis === null ? "" : new Date(millis).toISOString().slice(0, 10));
+
+/** Moves `pictures` to the folder `_similar-extras` of the panel. */
+async function moveAside(pictures: string[], what: [string, string]): Promise<void> {
+  const panel = context.panel;
+  if (panel === null) throw new Error("run this from a panel");
+  const folder = pnxr.join(panel, EXTRAS_FOLDER);
+  if (!(await pnxr.exists(folder))) await pnxr.mkdir(folder);
+  let moved = 0;
+  for (const path of pictures) {
+    const name = pnxr.basename(path);
+    let target = pnxr.join(folder, name);
+    for (let n = 2; await pnxr.exists(target); n++) {
+      const dot = name.lastIndexOf(".");
+      target = pnxr.join(folder, `${name.slice(0, dot)} (${n})${name.slice(dot)}`);
+    }
+    await pnxr.rename(path, target);
+    pnxr.print(`${shown(path)} -> ${shown(target)}`);
+    moved += 1;
+  }
+  pnxr.print(`moved ${moved} ${what[moved === 1 ? 0 : 1]} to ${EXTRAS_FOLDER}`);
+}
+
+/** The groups as a list the window or the terminal can sort and mark. */
+function showList(groups: Picture[][], total: number): void {
+  const rows: pnxr.ResultRow[] = [];
+  groups.forEach((g, index) => {
+    g.forEach((p, position) => {
+      const like = position === 0 ? 100 : likeness(p.hash, g[0].hash);
+      rows.push({
+        path: p.path,
+        cells: [
+          `#${index + 1}`,
+          position === 0 ? "best" : `${like}%`,
+          `${p.width}x${p.height}`,
+          human(p.bytes),
+          day(p.modified),
+          shown(p.path),
+        ],
+        values: [index + 1, position === 0 ? 101 : like, pixels(p), p.bytes, p.modified ?? 0],
+        keep: position === 0,
+      });
+    });
+  });
+  pnxr.showResults({
+    title: `Similar pictures: ${groups.length} group${groups.length === 1 ? "" : "s"} among ${total}`,
+    columns: ["Group", "Match", "Pixels", "Size", "Date", "File"],
+    rows,
+    actions: [{ key: "m", title: "move aside", command: "move-marked" }],
+  });
+}
+
 const command = context.command;
 if (command === "column:similar") {
   // One line per file of the folder, in order: the group of the file and how
@@ -162,11 +229,17 @@ if (command === "column:similar") {
     const p = known.get(path);
     pnxr.print(p ? `${p.width}x${p.height}` : "");
   }
+} else if (command === "move-marked") {
+  if (context.selection.length === 0) throw new Error("nothing is marked");
+  await moveAside(context.selection, ["marked picture", "marked pictures"]);
 } else if (command === "find" || command === "move-extras") {
-  const pictures = await hashAll(await collect(roots()));
+  const dates = new Map<string, number | null>();
+  const pictures = await hashAll(await collect(roots(), dates), dates);
   const groups = group(pictures);
   if (groups.length === 0) {
     pnxr.print(`No similar pictures among ${pictures.length} pictures`);
+  } else if (command === "find" && context.results) {
+    showList(groups, pictures.length);
   } else if (command === "find") {
     const extras = groups.reduce((n, g) => n + g.length - 1, 0);
     pnxr.print(`${groups.length} group${groups.length === 1 ? "" : "s"} of similar pictures among ${pictures.length} (${extras} extra copies)`);
@@ -180,24 +253,7 @@ if (command === "column:similar") {
       });
     });
   } else {
-    const panel = context.panel;
-    if (panel === null) throw new Error("run this from a panel");
-    const folder = pnxr.join(panel, EXTRAS_FOLDER);
-    if (!(await pnxr.exists(folder))) await pnxr.mkdir(folder);
-    let moved = 0;
-    for (const g of groups) {
-      for (const p of g.slice(1)) {
-        let target = pnxr.join(folder, p.name);
-        for (let n = 2; await pnxr.exists(target); n++) {
-          const dot = p.name.lastIndexOf(".");
-          target = pnxr.join(folder, `${p.name.slice(0, dot)} (${n})${p.name.slice(dot)}`);
-        }
-        await pnxr.rename(p.path, target);
-        pnxr.print(`${shown(p.path)} -> ${shown(target)}`);
-        moved += 1;
-      }
-    }
-    pnxr.print(`moved ${moved} extra cop${moved === 1 ? "y" : "ies"} to ${EXTRAS_FOLDER}`);
+    await moveAside(groups.flatMap((g) => g.slice(1).map((p) => p.path)), ["extra copy", "extra copies"]);
   }
 } else {
   throw new Error(`unknown command ${command}`);

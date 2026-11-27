@@ -42,6 +42,45 @@ declare namespace pnxr {
     other: string | null;
     /** The selected entries, or the entry under the cursor. */
     selection: string[];
+    /** Whether the program that started the command shows a list of results
+     * (`showResults`); `false` in `pnxr run` and in other programs. */
+    results: boolean;
+  }
+
+  /** A row of `showResults`: one file. */
+  interface ResultRow {
+    /** The file; Enter in the list shows it in the panel. */
+    path: string;
+    /** The text of each column, as many as `columns`. */
+    cells: string[];
+    /** What each column sorts by (numbers); a column without one sorts by its text. */
+    values?: number[];
+    /** The copy to keep: "all but the best" (key `a`) marks every other row. */
+    keep?: boolean;
+  }
+
+  /** A command of the plugin that works on the files marked in the list. */
+  interface ResultAction {
+    /** The key that runs it (one character). */
+    key: string;
+    /** What it does, for the hint line. */
+    title: string;
+    /** The plugin command that runs, with the marked files as its selection. */
+    command: string;
+  }
+
+  /** A list of files to sort, mark and act on, shown by the window or the
+   * terminal. Space marks, `a` marks all but the best, `s` sorts by the next
+   * column, `r` reverses, Delete moves the marked files to the trash after a
+   * question that lists them. */
+  interface Results {
+    title: string;
+    columns: string[];
+    rows: ResultRow[];
+    actions?: ResultAction[];
+    /** The column the list starts sorted by (0 is the first). */
+    sort?: number;
+    descending?: boolean;
   }
 
   /** What `copy` does when a destination exists. */
@@ -71,6 +110,9 @@ declare namespace pnxr {
   function exists(path: string): Promise<boolean>;
   /** A whole file as UTF-8 text. */
   function readText(path: string): Promise<string>;
+  /** Shows a list of results (only when `context.results` is true; otherwise
+   * print a text report). The script goes on; a list is shown when it ends. */
+  function showResults(results: Results): void;
   /** What `imageHash` says about a picture. */
   interface ImageHash {
     /** A perceptual hash: 16 hexadecimal digits. Copies of a picture that were

@@ -40,6 +40,11 @@
     stat: (path) => ops.op_pnxr_stat(stringArgument("path", path)),
     exists: (path) => ops.op_pnxr_exists(stringArgument("path", path)),
     readText: (path) => ops.op_pnxr_read_text(stringArgument("path", path)),
+    showResults: (results) => {
+      if (typeof results !== "object" || results === null) throw new TypeError("results must be an object");
+      // One line the window or the terminal turns into a list (ADR 0062).
+      ops.op_pnxr_print("\u001epnxr-results " + JSON.stringify(results));
+    },
     imageHash: (path) => ops.op_pnxr_image_hash(stringArgument("path", path)),
     writeText: (path, content) =>
       ops.op_pnxr_write_text(stringArgument("path", path), stringArgument("text", content)),

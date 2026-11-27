@@ -8,6 +8,7 @@
   "main": "main.ts",
   "commands": [
     { "id": "find", "title": "Find similar pictures", "short": "Similar", "fkey": "Shift+F9", "shortcut": "Ctrl+Shift+I", "category": "Tools" },
+    { "id": "move-marked", "title": "Move the marked pictures aside", "short": "MoveSel", "category": "Tools" },
     { "id": "move-extras", "title": "Move the extra copies of similar pictures aside", "short": "MoveDups", "category": "Tools" }
   ],
   "columns": [

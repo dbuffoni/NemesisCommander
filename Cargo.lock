@@ -4647,6 +4647,7 @@ dependencies = [
  "deno_core",
  "deno_error",
  "image",
+ "pnxr-config",
  "pnxr-ops",
  "pnxr-providers",
  "pnxr-vfs",

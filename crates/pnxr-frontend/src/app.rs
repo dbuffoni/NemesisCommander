@@ -179,6 +179,9 @@ pub enum AppEvent {
         lines: Vec<String>,
         /// Why it failed, if it did.
         error: Option<String>,
+        /// The plugin's folder, when a plugin command ran: its results'
+        /// actions run its commands.
+        plugin: Option<std::path::PathBuf>,
     },
 }
 
@@ -1840,6 +1843,12 @@ impl App {
                 },
                 None => self.ask_address("New connection", "", InputPurpose::NewConnection),
             },
+            ChoosePurpose::PluginResults { results, .. } => {
+                if let Some(row) = results.rows.get(cursor) {
+                    let request = self.workspace.active_mut().reveal(&row.path);
+                    self.load_opt(request);
+                }
+            }
             ChoosePurpose::SearchResults(paths) => {
                 if let Some(cancel) = self.search_cancel.take() {
                     cancel.cancel();

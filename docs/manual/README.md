@@ -580,8 +580,18 @@ or `pnxr plugin install image-duplicates`). It adds, under Tools:
 
 - **Find similar pictures** groups the pictures of the folder and below it (or of
   the selection) by a perceptual hash, so different formats and sizes match, and
-  prints each group with the copy to keep first, the likeness to it in percent,
-  the pixels and the size.
+  shows the groups as a list with the columns Group, Match (the likeness to the
+  best copy in percent), Pixels, Size, Date and File. **s** sorts by the next
+  column and **r** reverses the order; **Space** marks a picture, **a** marks
+  all but the best of each group (again: takes the marks away) and **u** clears
+  them. **Delete** moves the marked pictures to the trash after a question that
+  lists them; **m** moves them to `_similar-extras` instead; **Enter** shows the
+  picture in the panel. Pictures are hashed once: a second look at a big folder
+  only decodes new or changed ones (`image-hashes.tsv` in the data folder holds
+  what is remembered; deleting it is safe).
+  Its default keys are Shift+F9 (function key, button "Similar") and
+  Ctrl+Shift+I; the plugin declares them in `plugin.json` and your own settings
+  win (see [Plugins](#plugins-and-scripts) for `fkey`, `shortcut` and `short`).
 - **Move the extra copies of similar pictures aside** moves all but the best copy
   of each group to the folder `_similar-extras` (nothing is deleted).
 - Two panel columns, **Similar** (the group and the likeness to its best copy:

@@ -20,6 +20,8 @@ use pnxr_vfs::VfsPath;
 use pnxr_config::{Action, Category};
 
 use super::{App, AppEvent};
+use crate::input::KeyPress;
+use pnxr_config::Key;
 use crate::commands::{CommandEntry, SCRIPTS, Target, plugin_category};
 use crate::dialogs::{
     ChooseDialog, ChoosePurpose, ConfirmDialog, ConfirmPurpose, InputPurpose, Overlay,
@@ -237,6 +239,10 @@ impl App {
         let selection = self.targets();
         let registry = self.context.registry.clone();
         let paths = self.context.paths.clone();
+        let plugin = match &choice {
+            PluginChoice::Command { dir, .. } => Some(dir.clone()),
+            _ => None,
+        };
         self.spawn_task(async move {
             let printed = Arc::new(Mutex::new(Vec::<String>::new()));
             let sink = printed.clone();
@@ -246,12 +252,99 @@ impl App {
             let (title, result) =
                 run_choice(choice, panel, other, selection, registry, output, &paths).await;
             let lines = printed.lock().unwrap_or_else(|e| e.into_inner()).clone();
-            AppEvent::ScriptDone { title, lines, error: result.err() }
+            AppEvent::ScriptDone { title, lines, error: result.err(), plugin }
         });
     }
 }
 
 impl App {
+    /// Shows what a plugin command found as a list to sort and mark.
+    pub(super) fn show_results(&mut self, results: crate::results::Results, plugin: Option<PathBuf>) {
+        let dialog = Self::results_dialog(results, plugin, 0);
+        self.overlay = Some(Overlay::Choose(dialog));
+    }
+
+    /// The list for `results`, the cursor on row `cursor`.
+    pub(super) fn results_dialog(
+        results: crate::results::Results,
+        plugin: Option<PathBuf>,
+        cursor: usize,
+    ) -> ChooseDialog {
+        let mut dialog = ChooseDialog::new(
+            &results.heading(),
+            results.lines(),
+            ChoosePurpose::PluginResults { results: Box::new(results), plugin },
+        );
+        if let ChoosePurpose::PluginResults { results, .. } = &dialog.purpose {
+            dialog.footer = results.hint();
+        }
+        dialog.cursor = cursor.min(dialog.items.len().saturating_sub(1));
+        dialog
+    }
+
+    /// Keys of a plugin's results list: marks, sort, trash and the plugin's
+    /// own actions. `None` when the key is not one of them.
+    pub(super) fn results_key(&mut self, dialog: &mut ChooseDialog, press: &KeyPress) -> Option<bool> {
+        let ChoosePurpose::PluginResults { results, plugin } = &mut dialog.purpose else {
+            return None;
+        };
+        let key = press.plain();
+        let delete = key == Some(Key::Delete)
+            || self.context.keymap.action_for(&press.chord) == Some(Action::Delete);
+        let cursor = dialog.cursor;
+        let current = results.rows.get(cursor).map(|r| r.path.clone());
+        let mut changed = true;
+        match key {
+            Some(Key::Space) => {
+                if let Some(row) = results.rows.get_mut(cursor) {
+                    row.marked = !row.marked;
+                }
+                dialog.cursor = (cursor + 1).min(results.rows.len().saturating_sub(1));
+            }
+            Some(Key::Char('a')) => results.toggle_all_but_best(),
+            Some(Key::Char('u')) => results.unmark_all(),
+            Some(Key::Char('s')) => results.next_sort(),
+            Some(Key::Char('r')) => results.reverse(),
+            _ if delete => {
+                let marked = results.marked();
+                if marked.is_empty() {
+                    self.set_error("Nothing is marked: Space marks a file, a marks the extras");
+                    return Some(true);
+                }
+                // The same question and trash as in a panel, for the marked files.
+                self.target_override = Some(marked);
+                self.perform(Action::Delete);
+                self.target_override = None;
+                return Some(false);
+            }
+            Some(Key::Char(c)) if results.action_for(c).is_some() => {
+                let marked = results.marked();
+                let command = results.action_for(c).map(|a| a.command.clone()).unwrap_or_default();
+                let (Some(dir), false) = (plugin.clone(), marked.is_empty()) else {
+                    self.set_error("Nothing is marked: Space marks a file, a marks the extras");
+                    return Some(true);
+                };
+                self.target_override = Some(marked);
+                self.plugin_chosen(PluginChoice::Command { dir, command });
+                self.target_override = None;
+                return Some(false);
+            }
+            _ => changed = false,
+        }
+        if !changed {
+            return None;
+        }
+        // Rebuild the rows, the cursor staying on the same file after a sort.
+        let keep_cursor = if matches!(key, Some(Key::Char('s' | 'r'))) {
+            current.and_then(|p| results.rows.iter().position(|r| r.path == p)).unwrap_or(0)
+        } else {
+            dialog.cursor
+        };
+        let (results, plugin) = (results.clone(), plugin.clone());
+        *dialog = Self::results_dialog(*results, plugin, keep_cursor);
+        Some(true)
+    }
+
     /// Tools, "Write a script with AI…": asks what the script should do.
     pub(super) fn ask_ai_script(&mut self) {
         if !cfg!(feature = "scripting") {
@@ -287,6 +380,7 @@ impl App {
                 title: "Write a script with AI".into(),
                 lines,
                 error: result.err(),
+                plugin: None,
             }
         });
     }
@@ -562,6 +656,8 @@ async fn run_pnxr(
         .args(args)
         .env("PNXR_CONFIG_DIR", &paths.config_dir)
         .env("PNXR_DATA_DIR", &paths.data_dir)
+        // This front end can show a list of results (`pnxr.showResults`).
+        .env("PNXR_RESULTS", "1")
         .stdin(std::process::Stdio::null());
     if let Some(folder) = folder {
         command.current_dir(folder);
