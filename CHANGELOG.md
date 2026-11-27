@@ -32,6 +32,9 @@ Not published yet.
   F2 switches between select, unselect and keep only, Ctrl+O lists ready-made
   masks, F1 explains the syntax, `has:text` is a new mask, and the last mask
   is remembered.
+- Multi-rename: options after the template (letter case, replace text or
+  regular expression, counter start/step/width), a count of the names that
+  change, ready-made rules on Ctrl+O and a help on F1.
 - The window starts with JetBrainsMono Nerd Font Mono at 11 pt; where the font
   is not installed the system fonts are used.
 

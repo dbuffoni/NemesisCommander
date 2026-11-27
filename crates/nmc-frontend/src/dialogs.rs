@@ -559,6 +559,8 @@ pub enum ChoosePurpose {
     /// Ready-made masks; the choice opens the selection question for
     /// `purpose` with the mask in it.
     MaskPresets(InputPurpose),
+    /// The ready-made multi-rename rules; the files they are for.
+    RenamePresets(Vec<VfsPath>),
     /// Checksum files to write for `sources` (relative to `base`), and, when
     /// the cursor is on a checksum file, to check it (the first row).
     Checksums {

@@ -294,6 +294,14 @@ copied for each file, with these placeholders:
 So `photo_[C][X]` turns `a.jpg`, `b.jpg` into `photo_1.jpg`, `photo_2.jpg`,
 and `[P] - [N][X]` puts the folder name in front.
 
+After the template you can add options, each one after ` | `: `lower`,
+`upper` or `title` (letter case), `s/old/new/` (replace text),
+`re/old/new/` (replace with a regular expression, `$1` groups), and
+`start=10`, `step=5`, `width=3` (how `[C]` counts and how many digits it
+has). For example `holiday-[C][X] | width=3 | lower` gives `holiday-001.jpg`.
+The dialog says how many names change, **Ctrl+O** lists ready-made rules and
+**F1** explains all of this.
+
 Enter shows the full preview: every name that changes (the first 12, and
 how many more) and asks for confirmation; nothing is renamed before that.
 If a new name belongs to a file that is not part of the rename, the preview

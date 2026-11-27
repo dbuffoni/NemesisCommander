@@ -280,6 +280,37 @@ async fn multi_rename_previews_then_renames() {
 }
 
 #[tokio::test]
+async fn multi_rename_has_options_presets_and_help() {
+    let mut h = Harness::new().await;
+    h.key("+");
+    h.type_text("*.txt");
+    h.key("Enter");
+    h.key("Shift+F2");
+    h.type_text("doc-[C][X] | width=3 | upper");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert!(dialog.preview[0].contains("2 of 2 names change"), "{:?}", dialog.preview);
+    assert!(
+        dialog.preview.iter().any(|l| l.contains("a.txt → DOC-001.TXT")),
+        "{:?}",
+        dialog.preview
+    );
+    h.type_text("[N] | bogus");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert!(dialog.preview[0].contains("Unknown option"), "{:?}", dialog.preview);
+    h.key("F1");
+    assert!(h.screen().contains("Rename many files"));
+    h.key("Enter");
+    assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))), "help returns to the question");
+    h.key("Ctrl+O");
+    assert!(h.screen().contains("Ready-made rename rules"));
+    h.key("Down");
+    h.key("Down");
+    h.key("Enter");
+    let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("dialog") };
+    assert_eq!(dialog.field.text(), "[C][X] | width=3");
+}
+
+#[tokio::test]
 async fn multi_rename_shows_names_that_exist_and_renames_nothing() {
     let mut h = Harness::new().await;
     h.focus("a.txt");

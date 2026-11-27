@@ -1558,6 +1558,25 @@ impl App {
                         return Some(Overlay::Message(help));
                     }
                 }
+                if let InputPurpose::MultiRename(paths) = &dialog.purpose {
+                    if press.chord.ctrl && press.chord.key == Key::Char('o') {
+                        let rows = crate::renames::PRESETS
+                            .iter()
+                            .map(|(name, rule)| format!("{name:<36} {rule}"))
+                            .collect();
+                        return Some(Overlay::Choose(ChooseDialog::new(
+                            "Ready-made rename rules",
+                            rows,
+                            ChoosePurpose::RenamePresets(paths.clone()),
+                        )));
+                    }
+                    if key == Some(Key::F(1)) {
+                        let mut help =
+                            MessageDialog::new("Multi-rename", crate::renames::help_lines());
+                        help.then = Some(dialog);
+                        return Some(Overlay::Message(help));
+                    }
+                }
                 if dialog.purpose.testable()
                     && press.chord.ctrl
                     && press.chord.key == Key::Char('t')
@@ -1833,6 +1852,19 @@ impl App {
 
     /// The question of Select, Unselect and Keep only: the last mask (or
     /// `text`) in the field, and a live count of the files that match.
+    /// The multi-rename question, with `text` in the field.
+    fn ask_multi_rename(&mut self, targets: Vec<VfsPath>, text: &str) {
+        let preview = template_preview(&targets, text);
+        let mut dialog = InputDialog::new(
+            "Multi-rename",
+            "Template: [N] name, [E] extension, [C] counter, [P] folder; options after ' | ' (F1 explains, Ctrl+O: ready-made):",
+            text,
+            InputPurpose::MultiRename(targets),
+        );
+        dialog.preview = preview;
+        self.overlay = Some(Overlay::Input(dialog));
+    }
+
     fn ask_mask(&mut self, purpose: InputPurpose, text: Option<&str>) {
         let (title, verb) = match purpose {
             InputPurpose::UnselectMask => ("Unselect", "Unselect files matching"),
@@ -1958,18 +1990,7 @@ impl App {
                 self.overlay = Some(Overlay::Input(dialog));
             }
             Action::MultiRename if nothing => self.set_error("Nothing to rename"),
-            Action::MultiRename => {
-                let template = "[N][X]";
-                let preview = template_preview(&targets, template);
-                let mut dialog = InputDialog::new(
-                    "Multi-rename",
-                    "Template ([N] name, [E] extension, [X] .extension, [C] counter, [P] folder):",
-                    template,
-                    InputPurpose::MultiRename(targets),
-                );
-                dialog.preview = preview;
-                self.overlay = Some(Overlay::Input(dialog));
-            }
+            Action::MultiRename => self.ask_multi_rename(targets, "[N][X]"),
             Action::AiRename if nothing => self.set_error("Nothing to rename"),
             Action::AiRename => self.ask_ai_rename(targets),
             Action::GenerateFiles => self.generate_files(),
@@ -2315,10 +2336,10 @@ impl App {
                     undoable(step, done(result.map(|()| String::new()), Some(text)))
                 });
             }
-            InputPurpose::MultiRename(paths) => {
-                let rule = RenameRule { template: text, ..RenameRule::default() };
-                self.confirm_renames(paths, &rule, None);
-            }
+            InputPurpose::MultiRename(paths) => match crate::renames::parse_rule(&text) {
+                Ok(rule) => self.confirm_renames(paths, &rule, None),
+                Err(e) => self.set_error(e),
+            },
             InputPurpose::AiRename(paths) => self.write_rename_with_ai(paths, text),
             InputPurpose::AddPluginRepo => self.plugin_repo_typed(&text),
             InputPurpose::NewConnection => match crate::connections::check(&text) {
@@ -2733,6 +2754,11 @@ impl App {
                     self.setting_typed(field, name);
                 }
                 self.overlay = Some(Overlay::Settings(*screen));
+            }
+            ChoosePurpose::RenamePresets(paths) => {
+                if let Some((_, text)) = crate::renames::PRESETS.get(cursor) {
+                    self.ask_multi_rename(paths, text);
+                }
             }
             ChoosePurpose::MaskPresets(purpose) => {
                 if let Some((_, mask)) = crate::masks::PRESETS.get(cursor) {
@@ -3356,11 +3382,20 @@ fn rename_lines(
 /// The live preview of the Ctrl+M dialog: the first new names `template`
 /// gives `paths`, or why it cannot be used.
 fn template_preview(paths: &[VfsPath], template: &str) -> Vec<String> {
-    let rule = RenameRule { template: template.to_owned(), ..RenameRule::default() };
+    let rule = match crate::renames::parse_rule(template) {
+        Ok(rule) => rule,
+        Err(e) => return vec![format!("  {e}")],
+    };
     match preview_renames(paths, &rule) {
         Ok(names) => {
-            let lines = rename_lines(paths, &names, &[], 5);
-            if lines.is_empty() { vec!["  (no name changes)".into()] } else { lines }
+            let changed =
+                paths.iter().zip(&names).filter(|(p, n)| p.file_name() != Some(n.as_str())).count();
+            if changed == 0 {
+                return vec!["  (no name changes)".into()];
+            }
+            let mut lines = vec![format!("{changed} of {} names change:", paths.len())];
+            lines.extend(rename_lines(paths, &names, &[], 5));
+            lines
         }
         Err(e) => vec![format!("  Cannot rename: {e}")],
     }

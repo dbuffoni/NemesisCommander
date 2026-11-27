@@ -38,6 +38,7 @@ pub mod install;
 pub mod masks;
 pub mod preview;
 pub mod properties;
+pub mod renames;
 pub mod searches;
 pub mod settings;
 pub mod similar;
