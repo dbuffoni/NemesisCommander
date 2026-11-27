@@ -539,6 +539,7 @@ async fn typing_in_the_command_list_finds_commands() {
 async fn a_function_key_is_refused_as_a_shortcut_and_the_function_key_stays() {
     let mut h = Harness::new().await;
     h.key("F9");
+    save_screen("commands-two-columns", &h.screen());
     h.type_text("refresh");
     h.key("Ctrl+K");
     h.key("Shift+F8");
@@ -572,6 +573,7 @@ async fn a_command_gets_a_free_function_key_with_its_own_name_and_the_bar_shows_
     let screen = h.screen();
     assert!(screen.contains("Function key for View/Refresh"), "{screen}");
     assert!(screen.contains("Ctrl+N: short name"), "{screen}");
+    save_screen("function-key-list", &screen);
     // The list starts on the first free slot: Ctrl+F10 is taken (Choose), so go and look.
     let Some(Overlay::Choose(dialog)) = h.app.overlay() else { panic!() };
     assert_eq!(dialog.items.len(), 30);
@@ -599,6 +601,7 @@ async fn taking_a_function_key_from_another_command_asks_first() {
     h.key("Enter");
     assert!(matches!(h.app.overlay(), Some(Overlay::Confirm(_))));
     assert!(h.screen().contains("F5 belongs to"), "{}", h.screen());
+    save_screen("function-key-replace", &h.screen());
     // No: nothing changes.
     h.key("n");
     assert!(h.app.context().config.fkeys.is_empty());
@@ -628,6 +631,7 @@ async fn the_short_name_of_a_button_is_changed_behind_ctrl_n_and_can_be_restored
     h.key("Ctrl+F");
     h.key("Ctrl+N");
     assert!(matches!(h.app.overlay(), Some(Overlay::Input(_))));
+    save_screen("function-key-name", &h.screen());
     // The built-in name is in the field: nothing has to be typed to assign a key.
     h.key("Ctrl+U");
     h.type_text("Dup");
@@ -635,6 +639,7 @@ async fn the_short_name_of_a_button_is_changed_behind_ctrl_n_and_can_be_restored
     assert_eq!(h.app.context().config.labels["files.copy"], "Dup");
     let screen = h.screen();
     assert!(screen.contains("F5Dup") && !screen.contains("F5Copy"), "{screen}");
+    save_screen("bar-custom-name", &screen);
     // Empty text brings the built-in name back.
     h.key("F9");
     h.type_text("files/copy");
@@ -682,9 +687,11 @@ async fn the_bar_row_key_stands_in_for_a_held_shift_or_ctrl() {
     h.key("Ctrl+F");
     let shifted = h.screen();
     assert!(shifted.contains("F5Pack"), "{shifted}");
+    save_screen("bar-shift-row", &shifted);
     h.key("Ctrl+F");
     let ctrl = h.screen();
     assert!(!ctrl.contains("F5Pack") && !ctrl.contains("F5Copy"), "{ctrl}");
+    save_screen("bar-ctrl-row", &ctrl);
     h.key("Ctrl+F");
     assert!(h.screen().contains("F5Copy"));
 }
@@ -825,6 +832,7 @@ async fn about_shows_the_logo_and_the_version() {
     assert!(text.contains(&title), "version");
     assert!(text.contains("MIT"), "license");
     assert!(text.contains("github.com/dbuffoni/Pairnox"), "source");
+    save_screen("about-new-logo", &text_of(buffer));
     // The logo is drawn with half blocks, some of them the blue band.
     let blue = buffer
         .content()
@@ -2552,35 +2560,12 @@ async fn the_basket_can_be_emptied_and_shows_an_item() {
 }
 
 #[tokio::test]
-async fn similar_pictures_are_grouped_and_the_extra_copies_go_to_the_basket() {
-    use image::{DynamicImage, ImageBuffer, Rgb};
-    let scene = |width: u32, height: u32, cx: f32| {
-        DynamicImage::ImageRgb8(ImageBuffer::from_fn(width, height, |x, y| {
-            let (u, v) = (x as f32 / width as f32, y as f32 / height as f32);
-            let blob = (-(((u - cx).powi(2) + (v - 0.4).powi(2)) * 40.0)).exp();
-            let value = (u * 120.0 + v * 60.0 + blob * 120.0).min(255.0) as u8;
-            Rgb([value, value / 2, 255 - value])
-        }))
-    };
+async fn finding_similar_pictures_is_no_built_in_command_any_more() {
     let mut h = Harness::new().await;
-    let big = scene(300, 200, 0.3);
-    big.save(h.path("left/photo.png")).unwrap();
-    big.resize_exact(60, 40, image::imageops::FilterType::Lanczos3)
-        .save(h.path("left/docs/thumb.png"))
-        .unwrap();
-    scene(300, 200, 0.85).save(h.path("left/other.png")).unwrap();
-    h.key("Ctrl+R");
-    h.settle().await;
     h.key("F9");
     h.type_text("similar");
-    h.key("Enter");
-    h.settle().await;
-    let rows = results(&h);
-    assert_eq!(rows.len(), 2, "the basket row and one group: {rows:?}");
-    assert!(rows[1].contains("keep photo.png") && rows[1].contains("thumb.png"), "{rows:?}");
-    h.key("Enter"); // the extra copies
-    assert_eq!(h.app.basket.len(), 1);
-    assert!(h.app.basket[0].to_string().ends_with("docs/thumb.png"));
+    assert!(h.screen().contains("Nothing matches"), "{}", h.screen());
+    assert!(pnxr_config::keymap::Action::from_id("tools.similar-images").is_none());
 }
 
 #[tokio::test]
@@ -3536,6 +3521,17 @@ async fn the_transfer_queue_lists_the_newest_first() {
 }
 
 // ---- parallelism, help and generated files (ADR 0044)
+
+/// The characters of a test buffer as lines of text.
+fn text_of(buffer: &ratatui::buffer::Buffer) -> String {
+    let width = buffer.area.width as usize;
+    buffer
+        .content()
+        .chunks(width)
+        .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim_end().to_owned())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Where the screens of these tests are written when `PNXR_SCREENS` is set
 /// (the text "screenshots" of the transfer indicators).

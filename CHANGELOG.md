@@ -2,6 +2,12 @@
 
 ## 0.6.0 (in progress)
 
+- **Find similar pictures is now a plugin**, `image-duplicates` (ADR 0060): it
+  groups pictures by a perceptual hash, adds the panel columns Similar and
+  Picture and a command that moves the extra copies aside. The built-in command,
+  its dialog and its code are gone; a key you had given to it follows the
+  plugin. New script function `pnxr.imageHash(path)`.
+
 - **Shortcut model** (ADR 0059): every command has standard shortcuts and,
   independently, one function key (F, Shift+F or Ctrl+F) with a short name
   shown on the bottom bar. The command list has Ctrl+K (shortcut) and Ctrl+F

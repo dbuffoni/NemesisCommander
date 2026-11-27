@@ -2069,7 +2069,6 @@ impl App {
             Action::Basket => self.open_basket(),
             Action::CompareHash => self.compare_by_hash(),
             Action::Sync => self.ask_sync(),
-            Action::SimilarImages => self.find_similar(),
             Action::DiskUsage => {
                 let folder = self.workspace.active().location().clone();
                 self.disk_usage(folder);
@@ -2792,8 +2791,7 @@ impl App {
             | ChoosePurpose::LinkKind(_)
             | ChoosePurpose::SavedSearches
             | ChoosePurpose::Basket(_)
-            | ChoosePurpose::SyncMode
-            | ChoosePurpose::Similar(_)) => self.chosen_feature(purpose, cursor),
+            | ChoosePurpose::SyncMode) => self.chosen_feature(purpose, cursor),
             purpose @ (ChoosePurpose::Duplicates(_) | ChoosePurpose::Disks(_)) => {
                 self.chosen_disk_tool(purpose, cursor);
             }

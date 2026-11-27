@@ -42,7 +42,6 @@ pub mod properties;
 pub mod renames;
 pub mod searches;
 pub mod settings;
-pub mod similar;
 pub mod speed;
 pub mod syncplan;
 pub mod terminal;

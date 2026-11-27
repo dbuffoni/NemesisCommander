@@ -165,7 +165,6 @@ actions! {
     DiskUsage     = "tools.disk-usage",     Tools, false, "Disk usage of this folder", "DiskUse", ["Ctrl+F7"];
     Git           = "tools.git",            Tools, false, "Git actions…",             "Git", ["Ctrl+F11", "Ctrl+Shift+G"];
     Disks         = "tools.disks",          Tools, false, "Disks and partitions…",    "Disks", ["Ctrl+F8"];
-    SimilarImages = "tools.similar-images", Tools, false, "Find similar pictures",    "Similar", [];
     SavedSearches = "tools.saved-searches", Tools, false, "Saved searches…",          "Searches", [];
     SaveSearch    = "tools.save-search",    Tools, false, "Save the last search…",    "SaveSrch", [];
     Jobs          = "tools.jobs",           Tools, true,  "Transfer queue",           "Queue", ["Ctrl+J"];
@@ -355,9 +354,6 @@ impl Action {
                 "Basic Git actions on the repository of this folder: stage and unstage, diff, commit, discard changes (asks first), switch branch, log, pull and push. Works on the selected files; needs git installed."
             }
             Action::Disks => "Lists the disks and partitions with size, type, file system and use.",
-            Action::SimilarImages => {
-                "Finds pictures that look alike, even when resized or saved in another format."
-            }
             Action::SavedSearches => "Lists the searches you saved and runs the one you choose.",
             Action::SaveSearch => "Saves the last search under a name so you can run it again.",
             Action::Jobs => {
@@ -641,6 +637,16 @@ impl Default for Keymap {
 /// one is not a mistake, so no warning is made.
 const RETIRED: &[&str] = &["view.folder-sizes"];
 
+/// Commands that moved to a plugin: a key given to the old id is given to the
+/// plugin's command, and works once the plugin is installed (ADR 0060).
+pub const MOVED_TO_PLUGIN: &[(&str, &str)] =
+    &[("tools.similar-images", "plugin.image-duplicates.find")];
+
+/// The id a command has now (`id` itself unless it moved to a plugin).
+pub fn current_id(id: &str) -> &str {
+    MOVED_TO_PLUGIN.iter().find(|(old, _)| *old == id).map_or(id, |(_, new)| new)
+}
+
 /// A command's two slots while the keymap is built.
 #[derive(Debug, Clone, Default)]
 struct Slots {
@@ -710,6 +716,26 @@ impl Keymap {
         if let Some(list) = keys.remove("files.attributes") {
             keys.entry("files.properties".to_owned()).or_insert(list);
         }
+        // Keys of a command that moved to a plugin follow it.
+        let rename = |map: &mut BTreeMap<String, Vec<String>>| {
+            for (old, new) in MOVED_TO_PLUGIN {
+                if let Some(list) = map.remove(*old) {
+                    map.entry((*new).to_owned()).or_insert(list);
+                }
+            }
+        };
+        rename(&mut keys);
+        let mut fkeys = fkeys.clone();
+        let mut labels = labels.clone();
+        for (old, new) in MOVED_TO_PLUGIN {
+            if let Some(v) = fkeys.remove(*old) {
+                fkeys.entry((*new).to_owned()).or_insert(v);
+            }
+            if let Some(v) = labels.remove(*old) {
+                labels.entry((*new).to_owned()).or_insert(v);
+            }
+        }
+        let (fkeys, labels) = (&fkeys, &labels);
         let known = |id: &str, warnings: &mut Vec<String>| {
             let action = Action::from_id(id);
             if action.is_none() && RETIRED.contains(&id) {
@@ -1208,6 +1234,22 @@ mod tests {
         assert_eq!(keymap.extra_for(&chord("Ctrl+F10")), Some("plugin.tidy.run"));
         assert_eq!(keymap.bar_label(&chord("Ctrl+F10")).as_deref(), Some("Tidy"));
         assert_eq!(keymap.shortcuts_for_id("plugin.tidy.run"), [chord("Ctrl+K")]);
+    }
+
+    #[test]
+    fn keys_of_a_command_that_moved_to_a_plugin_follow_it() {
+        let (keymap, warnings) = built(
+            &[("tools.similar-images", &["Ctrl+Alt+S"])],
+            &[("tools.similar-images", "Ctrl+F10")],
+            &[("tools.similar-images", "Pics")],
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(keymap.extra_for(&chord("Ctrl+Alt+S")), Some("plugin.image-duplicates.find"));
+        assert_eq!(keymap.extra_for(&chord("Ctrl+F10")), Some("plugin.image-duplicates.find"));
+        assert_eq!(keymap.bar_label(&chord("Ctrl+F10")).as_deref(), Some("Pics"));
+        assert_eq!(current_id("tools.similar-images"), "plugin.image-duplicates.find");
+        assert_eq!(current_id("files.copy"), "files.copy");
+        assert!(Action::from_id("tools.similar-images").is_none());
     }
 
     #[test]

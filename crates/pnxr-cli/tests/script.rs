@@ -441,3 +441,76 @@ fn plugin_repositories_are_added_listed_and_installed_by_name() {
     // Installed plugins stay.
     pnxr(&dir).args(["plugin", "list"]).assert().success().stdout(contains("hello 1.0.0"));
 }
+
+/// A picture with a diagonal gradient and a bright blob at `cx` (0 to 1).
+fn scene(width: u32, height: u32, cx: f32) -> image::DynamicImage {
+    image::DynamicImage::ImageRgb8(image::ImageBuffer::from_fn(width, height, |x, y| {
+        let (u, v) = (x as f32 / width as f32, y as f32 / height as f32);
+        let blob = (-(((u - cx).powi(2) + (v - 0.4).powi(2)) * 40.0)).exp();
+        let value = (u * 120.0 + v * 60.0 + blob * 120.0).min(255.0) as u8;
+        image::Rgb([value, value / 2, 255 - value])
+    }))
+}
+
+#[test]
+fn the_image_duplicates_plugin_groups_pictures_shows_columns_and_moves_the_extras() {
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = TempDir::new().unwrap();
+    let work = dir.path().join("work");
+    fs::create_dir_all(work.join("sub")).unwrap();
+    let big = scene(300, 200, 0.3);
+    big.save(work.join("photo.png")).unwrap();
+    big.resize_exact(60, 40, image::imageops::FilterType::Lanczos3)
+        .save(work.join("sub/thumb.png"))
+        .unwrap();
+    scene(300, 200, 0.85).save(work.join("other.png")).unwrap();
+    fs::write(work.join("notes.txt"), "not a picture").unwrap();
+
+    pnxr(&dir)
+        .args(["plugin", "install"])
+        .arg(repository.join("plugins/image-duplicates"))
+        .assert()
+        .success();
+    pnxr(&dir).args(["plugin", "allow", "image-duplicates"]).assert().success();
+
+    // The report: one group, the big picture is kept.
+    pnxr(&dir)
+        .args(["plugin", "run", "image-duplicates", "find", "--panel", "work"])
+        .assert()
+        .success()
+        .stdout(
+            contains("1 group of similar pictures among 3")
+                .and(contains("keep"))
+                .and(contains("300x200"))
+                .and(contains("60x40"))
+                .and(contains("thumb.png"))
+                .and(contains("other.png").not()),
+        );
+
+    // The columns: one line per file, in order.
+    let column = |name: &str| {
+        let out = pnxr(&dir)
+            .args(["plugin", "run", "image-duplicates", name, "--panel", "work"])
+            .args(["work/other.png", "work/photo.png", "work/sub/thumb.png"])
+            .output()
+            .unwrap();
+        String::from_utf8(out.stdout).unwrap()
+    };
+    let similar = column("column:similar");
+    let lines: Vec<&str> = similar.lines().collect();
+    assert_eq!(lines.len(), 3, "{similar:?}");
+    assert_eq!(lines[0], "", "the other scene is alone");
+    assert_eq!(lines[1], "#1 best");
+    assert!(lines[2].starts_with("#1 ") && lines[2].ends_with('%'), "{similar:?}");
+    assert_eq!(column("column:picture"), "300x200\n300x200\n60x40\n");
+
+    // The extra copy is moved aside, never deleted.
+    pnxr(&dir)
+        .args(["plugin", "run", "image-duplicates", "move-extras", "--panel", "work"])
+        .assert()
+        .success()
+        .stdout(contains("moved 1 extra copy"));
+    assert!(work.join("_similar-extras/thumb.png").exists());
+    assert!(!work.join("sub/thumb.png").exists());
+    assert!(work.join("photo.png").exists() && work.join("other.png").exists());
+}

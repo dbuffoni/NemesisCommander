@@ -621,9 +621,6 @@ pub enum ChoosePurpose {
         /// The command of each row except the last ("" is the default).
         commands: Vec<String>,
     },
-    /// Groups of similar pictures, after a row that puts the extra copies
-    /// in the basket.
-    Similar(Vec<Vec<crate::similar::Picture>>),
 }
 
 /// What a row of the bookmarks list stands for.

@@ -571,14 +571,24 @@ shows the copy that is kept; the first row puts every extra copy in the basket
 (Ctrl+B), ready to delete or move. Nothing is deleted by the command itself,
 and empty files are ignored.
 
-### Similar pictures
+### Similar pictures (a plugin)
 
-**Find similar pictures** (F9) looks at the pictures in this folder and below
-and groups those that are resized or re-saved copies of each other (a
-perceptual hash of each picture, so different formats and sizes match). Each
-group names the best copy (most pixels, then the largest file); Enter on a
-group shows it, and the first row puts every other copy in the basket, ready to
-delete.
+Finding pictures that are resized or re-saved copies of each other is the
+plugin **image-duplicates**, not a built-in command (it keeps the program
+light). Install it from the plugin list (Ctrl+X, "Browse and install plugins…",
+or `pnxr plugin install image-duplicates`). It adds, under Tools:
+
+- **Find similar pictures** groups the pictures of the folder and below it (or of
+  the selection) by a perceptual hash, so different formats and sizes match, and
+  prints each group with the copy to keep first, the likeness to it in percent,
+  the pixels and the size.
+- **Move the extra copies of similar pictures aside** moves all but the best copy
+  of each group to the folder `_similar-extras` (nothing is deleted).
+- Two panel columns, **Similar** (the group and the likeness to its best copy:
+  `#1 best`, `#1 97%`) and **Picture** (the pixels).
+
+A key you had given to the old built-in command is kept and works once the
+plugin is installed.
 
 ## Synchronizing folders
 
@@ -1175,7 +1185,7 @@ on the settings screen (Ctrl+,).
 | Ctrl+Shift+F | Flat (branch) view |
 | Ctrl+F7 | Disk usage of this folder |
 | Ctrl+F8 | Disks and partitions |
-| (F9 only) | Compare folders by content, Find similar pictures, Saved searches, Save the last search |
+| (F9 only) | Compare folders by content, Saved searches, Save the last search |
 | Ctrl+J | Transfer queue |
 | Ctrl+F9, Ctrl+X | Plugins and scripts |
 | Ctrl+F11, Ctrl+Shift+G | Git actions |
