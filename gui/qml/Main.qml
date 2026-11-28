@@ -129,8 +129,10 @@ ApplicationWindow {
     onClosing: if (visibility === ApplicationWindow.Windowed) commander.remember_window(width, height)
 
     Component.onCompleted: {
-        if (onWindows && dark && palette.windowText.hslLightness < 0.5)
-            palette.windowText = palette.text
+        if (onWindows && dark) {
+            if (palette.windowText.hslLightness < 0.5) palette.windowText = palette.text
+            if (palette.buttonText.hslLightness < 0.5) palette.buttonText = palette.text
+        }
         commander.start(Qt.fontFamilies().join("\n"))
     }
 
