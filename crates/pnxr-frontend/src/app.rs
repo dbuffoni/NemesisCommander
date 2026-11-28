@@ -2373,9 +2373,9 @@ impl App {
         let active = self.workspace.active_side();
         let summary = format!(
             "{} only here, {} only there, {} different",
-            only_a.len() + different.0.len(),
-            only_b.len() + different.1.len(),
-            different.0.len() + different.1.len()
+            only_a.len(),
+            only_b.len(),
+            different.0.len()
         );
         for (side, only, different) in
             [(active, only_a, different.0), (active.other(), only_b, different.1)]

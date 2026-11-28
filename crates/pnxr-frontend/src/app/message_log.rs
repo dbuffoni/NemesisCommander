@@ -58,7 +58,7 @@ impl App {
             lines.clone(),
             ChoosePurpose::MessageLog(lines),
         );
-        dialog.footer = crate::hints::list("copy", &["c: copy this one", "a: copy all"], "close");
+        dialog.footer = crate::hints::list("copy this one", &["a: copy all"], "close");
         self.overlay = Some(Overlay::Choose(dialog));
     }
 

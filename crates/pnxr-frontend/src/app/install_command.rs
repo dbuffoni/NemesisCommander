@@ -128,7 +128,21 @@ impl App {
             }
             InstallRow::Uninstall(dir) => {
                 match cmd::uninstall(&dir) {
-                    Ok(file) => self.set_status(format!("Removed {}", file.display())),
+                    Ok(file) => {
+                        let mut text = format!("Removed {}", file.display());
+                        // The shell-init line calls `pnxr`: without one left
+                        // on the PATH every new shell would complain.
+                        let shell = cmd::user_shell().filter(|_| cmd::found_on_path().is_none());
+                        if let Some((shell, home)) = shell
+                            && cmd::remove_profile_line(shell, &home) == Ok(true)
+                        {
+                            text.push_str(&format!(
+                                " and the shell-init line from {}",
+                                shell.file(&home).display()
+                            ));
+                        }
+                        self.set_status(text);
+                    }
                     Err(e) => self.set_error(e),
                 }
                 self.open_install_command();

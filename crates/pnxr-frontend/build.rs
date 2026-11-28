@@ -8,8 +8,10 @@ fn main() {
         .ok()
         .filter(|c| !c.is_empty())
         .or_else(|| {
-            let out =
-                Command::new("git").args(["describe", "--always", "--dirty"]).output().ok()?;
+            let out = Command::new("git")
+                .args(["describe", "--tags", "--always", "--dirty"])
+                .output()
+                .ok()?;
             out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
         })
         .unwrap_or_else(|| "unknown".into());
