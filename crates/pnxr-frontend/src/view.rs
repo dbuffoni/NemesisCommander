@@ -1354,7 +1354,8 @@ fn job_place(app: &App, path: &pnxr_vfs::VfsPath) -> String {
     let system = crate::drives::drive_label(&app.context().config, path);
     let inside =
         if path.scheme() == "file" { display_location(path) } else { path.path().to_owned() };
-    format!("{system}: {inside}")
+    // A Windows drive is already its own label (`C:`): no second colon.
+    if system.ends_with(':') { inside } else { format!("{system}: {inside}") }
 }
 
 /// Where a job takes its items from and puts them: `from Local: ~/docs  to
