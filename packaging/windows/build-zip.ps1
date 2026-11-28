@@ -33,6 +33,19 @@ if (-not (Test-Path (Join-Path $fusion "qmldir"))) {
 }
 if (-not (Test-Path (Join-Path $fusion "qmldir"))) { throw "the Fusion style is not in the package" }
 
+# The Visual C++ runtime, next to the programs: they then start on a PC
+# without the redistributable, and installing needs no administrator.
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if (-not $vs) { throw "Visual Studio with the C++ tools was not found" }
+$crt = Get-ChildItem (Join-Path $vs "VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT") -Directory |
+    Sort-Object { [version]$_.Parent.Parent.Name } | Select-Object -Last 1
+if (-not $crt) { throw "the Visual C++ runtime was not found in $vs" }
+Copy-Item (Join-Path $crt.FullName "*.dll") $app
+# windeployqt copies the redistributable's installer when it finds it: not needed.
+Remove-Item (Join-Path $app "vc_redist*.exe") -ErrorAction SilentlyContinue
+if (-not (Test-Path (Join-Path $app "vcruntime140.dll"))) { throw "the Visual C++ runtime is not in the package" }
+
 # Licence and third-party notices (Qt, libarchive, crates).
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $app "LICENSE.txt")
 python (Join-Path $root "scripts/third_party.py") -o (Join-Path $app "THIRD-PARTY-NOTICES.md")

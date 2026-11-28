@@ -19,7 +19,7 @@ $app = Join-Path $work "Pairnox"
 
 $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
 if (-not $iscc) {
-    foreach ($candidate in "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") {
+    foreach ($candidate in "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe", (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")) {
         if (Test-Path $candidate) { $iscc = $candidate; break }
     }
 }
@@ -29,7 +29,8 @@ $signed = [bool]($env:WINDOWS_CERT_PFX -and $env:WINDOWS_CERT_PASSWORD)
 $suffix = if ($signed) { "" } else { "-unsigned" }
 $name = "Pairnox-$Version-windows-x86_64-setup$suffix"
 $out = (Get-Location).Path
-$numeric = ($Version -replace '^v', '') -replace '[^0-9.].*$', ''
+# A tag is v0.7.2; a push to main passes `main`: the setup then says 0.0.0.
+$numeric = if ($Version -match '^v?(\d+(\.\d+)*)') { $Matches[1] } else { "0.0.0" }
 & $iscc "/DAppVersion=$numeric" "/DSourceDir=$app" "/DOutDir=$out" "/DOutName=$name" (Join-Path $PSScriptRoot "pairnox.iss")
 if ($LASTEXITCODE -ne 0) { throw "iscc failed" }
 $exe = Join-Path $out "$name.exe"

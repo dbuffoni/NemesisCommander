@@ -43,9 +43,9 @@ Name: "addtopath"; Description: "Add Pairnox to the &PATH (to run `pnxr` in a te
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\Pairnox"; Filename: "{app}\pnxr-gui.exe"
+Name: "{group}\Pairnox"; Filename: "{app}\pnxr-gui.exe"; WorkingDir: "{%USERPROFILE}"
 Name: "{group}\Uninstall Pairnox"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Pairnox"; Filename: "{app}\pnxr-gui.exe"; Tasks: desktopicon
+Name: "{autodesktop}\Pairnox"; Filename: "{app}\pnxr-gui.exe"; WorkingDir: "{%USERPROFILE}"; Tasks: desktopicon
 
 [Registry]
 ; The user's PATH: the folder is added once and taken out when uninstalling.
@@ -74,7 +74,7 @@ begin
   if not RegQueryStringValue(HKCU, 'Environment', 'Path', Existing) then
     Exit;
   Folder := ExpandConstant('{app}');
-  P := Pos(';' + Lowercase(Folder), Lowercase(Existing));
+  P := Pos(';' + Lowercase(Folder) + ';', ';' + Lowercase(Existing) + ';');
   if P > 0 then
   begin
     Delete(Existing, P, Length(Folder) + 1);
