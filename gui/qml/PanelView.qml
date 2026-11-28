@@ -338,7 +338,8 @@ Rectangle {
                                 horizontalAlignment: Text.AlignHCenter
                                 text: entry.git
                                 font: panel.theme.fixedFont
-                                color: entry.git === "M" ? panel.theme.accent
+                                color: strong ? palette.highlightedText
+                                     : entry.git === "M" ? panel.theme.accent
                                      : entry.git === "?" ? panel.theme.codeColor
                                      : panel.theme.dim
                             }

@@ -30,5 +30,10 @@ extern "C" void pnxr_use_consistent_style()
 #ifdef Q_OS_WIN
     if (!qEnvironmentVariableIsSet("QT_QUICK_CONTROLS_STYLE"))
         qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
+    // Qt's Direct3D vblank thread can fail to deliver update requests: only
+    // the first frame is drawn and the layout is not updated (a panel shows
+    // one row) until the window is resized. Timer-based updates avoid it.
+    if (!qEnvironmentVariableIsSet("QT_D3D_NO_VBLANK_THREAD"))
+        qputenv("QT_D3D_NO_VBLANK_THREAD", "1");
 #endif
 }
