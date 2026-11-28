@@ -79,8 +79,11 @@ ApplicationWindow {
     readonly property color missingText: dark ? "#ff9a9a" : "#a31515"
     readonly property color lineColor: Qt.rgba(palette.windowText.r, palette.windowText.g,
                                                palette.windowText.b, 0.18)
+    // Windows draws secondary text on its dark theme a little too faint:
+    // a higher alpha there, the other systems keep 0.6.
+    readonly property bool onWindows: Qt.platform.os === "windows"
     readonly property color dim: Qt.rgba(palette.windowText.r, palette.windowText.g,
-                                         palette.windowText.b, 0.6)
+                                         palette.windowText.b, onWindows ? 0.78 : 0.6)
 
     FontMetrics {
         id: fixedMetrics

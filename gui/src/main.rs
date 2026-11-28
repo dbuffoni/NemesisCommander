@@ -1,3 +1,8 @@
+// On Windows the window program must not open a console beside the window.
+// (Output of --help and --self-test is then not shown there; use the
+// Linux or macOS build for the self test.)
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 //! The `pnxr-gui` program: reads the command line and opens the window (see
 //! the library for how the window works).
 

@@ -503,6 +503,10 @@ pub struct ServeInstallArgs {
     /// Issue a new certificate even if the server has one.
     #[arg(long)]
     pub renew: bool,
+    /// Also send these settings (bookmarks, connections, shortcuts) to the
+    /// server, as `pnxr config push scs://HOST` does.
+    #[arg(long)]
+    pub with_settings: bool,
 }
 
 #[derive(Debug, Args)]

@@ -578,7 +578,7 @@ plugin **image-duplicates**, not a built-in command (it keeps the program
 light). Install it from the plugin list (Ctrl+X, "Browse and install plugins…",
 or `pnxr plugin install image-duplicates`). It adds, under Tools:
 
-- **Find similar pictures** groups the pictures of the folder and below it (or of
+- **Find similar pictures** (and *Find similar pictures: nearly identical only* / *looser match*, with a stricter or looser threshold) groups the pictures of the folder and below it (or of
   the selection) by a perceptual hash, so different formats and sizes match, and
   shows the groups as a list with the columns Group, Match (the likeness to the
   best copy in percent), Pixels, Size, Date and File. **s** sorts by the next
@@ -772,7 +772,7 @@ checksums and copies between folders of that server run on the server.
   certificate authority once; `pnxr tls server NAME --out DIR` issues a bundle
   for each server, which runs `pnxr serve --tls DIR`. Connections use mutual
   TLS; `--root` limits what is served and `--read-only` refuses changes.
-- **Installed for you**: `pnxr serve install me@host` does all of that over
+- **Installed for you**: `pnxr serve install me@host` (add `--with-settings` to send your settings too) does all of that over
   SSH: it creates the authority if needed, copies `pnxr` to `~/.local/bin`,
   issues and copies the server certificate, starts a systemd user service
   (it keeps running after you log out) and checks the connection. Options:

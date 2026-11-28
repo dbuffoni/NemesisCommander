@@ -489,6 +489,18 @@ fn the_image_duplicates_plugin_groups_pictures_shows_columns_and_moves_the_extra
                 .and(contains(work.to_str().unwrap()).not()),
         );
 
+    // The looser threshold finds at least the same group.
+    pnxr(&dir)
+        .args(["plugin", "run", "image-duplicates", "find-loose", "--panel", "work"])
+        .assert()
+        .success()
+        .stdout(contains("1 group of similar pictures among 3").and(contains("thumb.png")));
+    // The strict one runs too (the number of groups depends on the pictures).
+    pnxr(&dir)
+        .args(["plugin", "run", "image-duplicates", "find-strict", "--panel", "work"])
+        .assert()
+        .success();
+
     // The columns: one line per file, in order.
     let column = |name: &str| {
         let out = pnxr(&dir)

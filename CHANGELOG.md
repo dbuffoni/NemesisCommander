@@ -9,6 +9,16 @@ Rough edges found while using 0.7.0.
   0.6 build) is listed with "requires newer Pairnox" and cannot be installed,
   instead of putting a raw error with a path in the list. Long descriptions
   wrap onto the next line in the terminal and the window.
+- **Windows window:** secondary text (headers, footers, dates) is drawn with
+  more contrast on Windows only; the window no longer opens a console beside
+  it. (The Windows build prints nothing for `--help` or `--self-test`.)
+- **`pnxr serve install HOST --with-settings`** also sends your settings to the
+  server, the same as `pnxr config push scs://HOST`.
+- **Similar pictures:** two more commands, *nearly identical only* and
+  *looser match*, for fewer or more matches than the default threshold. RAW
+  and HEIC pictures are still not read (they need native libraries).
+- **AppImage:** the Wayland platform plugins are bundled, and the release
+  build checks that the portal theme plugin and Wayland are inside it.
 - **Message log** (Pairnox menu, F9): every message of the status line since
   start, errors included, newest first. `c` copies one, `a` copies all.
 - **Compare** is now *Compare two files* (Ctrl+F3) and only compares two

@@ -54,6 +54,12 @@ export PATH="$plugins:$PATH"
 # The QML files tell the plugin which QML modules to bundle.
 export QML_SOURCES_PATHS="$here/../../gui/qml"
 
+# Native Wayland: the platform plugins, and the window decorations,
+# graphics and shell integrations they load (the Qt plugin bundles only the
+# X11 platform otherwise). XDG desktop portal theme plugin: dark mode on GNOME.
+export EXTRA_PLATFORM_PLUGINS="${EXTRA_PLATFORM_PLUGINS:-libqwayland-egl.so;libqwayland-generic.so}"
+export EXTRA_QT_PLUGINS="${EXTRA_QT_PLUGINS:-waylandcompositor;wayland-decoration-client;wayland-graphics-integration-client;wayland-shell-integration;platformthemes;xcbglintegrations}"
+
 # CI machines have no FUSE: let AppImages run by extracting themselves.
 export APPIMAGE_EXTRACT_AND_RUN=1
 export LINUXDEPLOY_OUTPUT_VERSION="$version"

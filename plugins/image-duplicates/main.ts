@@ -9,6 +9,9 @@
 //                                  copies with `a` (all but the best), then move
 //                                  them to the trash (Delete, after a question
 //                                  that lists them) or aside (`m`).
+//   Find similar pictures (strict / loose)   the same with a stricter threshold
+//                                  (nearly identical pictures only, 2 of 64 bits)
+//                                  or a looser one (10 of 64 bits).
 //   Move the extra copies aside    moves all but the best copy of each group to
 //                                  the folder `_similar-extras` (nothing is
 //                                  deleted; move them back to undo).
@@ -24,7 +27,11 @@
 
 const EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "ico"];
 /** Hashes that differ in at most this many of 64 bits count as similar (about 90%). */
-const MAX_DISTANCE = 6;
+const DEFAULT_DISTANCE = 6;
+/** The threshold of the command: "find" and "move-extras" use the default; the
+ * "-strict" and "-loose" variants (about 97% and 84%) are for fewer or more matches. */
+const THRESHOLDS: Record<string, number> = { strict: 2, loose: 10 };
+let maxDistance = DEFAULT_DISTANCE;
 const EXTRAS_FOLDER = "_similar-extras";
 
 interface Picture {
@@ -121,7 +128,7 @@ function group(pictures: Picture[]): Picture[][] {
   };
   for (let i = 0; i < pictures.length; i++) {
     for (let j = i + 1; j < pictures.length; j++) {
-      if (distance(pictures[i].hash, pictures[j].hash) <= MAX_DISTANCE) {
+      if (distance(pictures[i].hash, pictures[j].hash) <= maxDistance) {
         parent[root(i)] = root(j);
       }
     }
@@ -210,7 +217,14 @@ function showList(groups: Picture[][], total: number): void {
   });
 }
 
-const command = context.command;
+let command = context.command;
+for (const [name, bits] of Object.entries(THRESHOLDS)) {
+  // "find-strict" is "find" with the strict threshold, and so on.
+  if (command.endsWith(`-${name}`)) {
+    command = command.slice(0, -name.length - 1);
+    maxDistance = bits;
+  }
+}
 if (command === "column:similar") {
   // One line per file of the folder, in order: the group of the file and how
   // alike it is to the best copy of its group.
