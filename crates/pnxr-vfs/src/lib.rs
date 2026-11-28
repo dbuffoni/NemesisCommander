@@ -21,6 +21,7 @@ mod capabilities;
 mod entry;
 mod error;
 pub mod names;
+pub mod proc;
 mod path;
 mod provider;
 mod registry;

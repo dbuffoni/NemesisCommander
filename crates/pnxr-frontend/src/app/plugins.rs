@@ -668,6 +668,7 @@ async fn run_pnxr(
 ) -> Result<(), String> {
     let program = pnxr_program();
     let mut command = std::process::Command::new(&program);
+    pnxr_vfs::proc::hide_console(&mut command);
     command
         .args(args)
         .env("PNXR_CONFIG_DIR", &paths.config_dir)

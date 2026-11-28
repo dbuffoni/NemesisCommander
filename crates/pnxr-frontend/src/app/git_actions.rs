@@ -28,6 +28,7 @@ pub const ROWS: [(&str, &str); 9] = [
 /// Runs `git` in `dir`; the text it printed, or why it failed.
 fn run(exe: &str, dir: &Path, args: &[&str], files: &[String]) -> Result<String, String> {
     let mut command = Command::new(exe);
+    pnxr_vfs::proc::hide_console(&mut command);
     command.arg("-C").arg(dir).args(args);
     if !files.is_empty() {
         command.arg("--").args(files);

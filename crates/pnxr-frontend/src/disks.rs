@@ -206,7 +206,8 @@ pub fn list() -> Result<Vec<DiskRow>, String> {
 }
 
 fn run(program: &str, args: &[&str]) -> Result<String, String> {
-    let output = std::process::Command::new(program)
+    let mut command = std::process::Command::new(program);
+    let output = pnxr_vfs::proc::hide_console(&mut command)
         .args(args)
         .output()
         .map_err(|e| format!("cannot run {program}: {e}"))?;

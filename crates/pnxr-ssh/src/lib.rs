@@ -222,7 +222,9 @@ pub fn spawn_env(
     args: &[String],
     env: &[(String, String)],
 ) -> std::io::Result<Child> {
-    Command::new(program)
+    let mut command = Command::new(program);
+    pnxr_vfs::proc::hide_console(command.as_std_mut());
+    command
         .args(args)
         .envs(env.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::piped())

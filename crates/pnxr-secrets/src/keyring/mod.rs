@@ -79,7 +79,13 @@ pub(crate) fn run_command(
     args: &[&str],
     input: Option<&str>,
 ) -> std::io::Result<std::process::Output> {
-    let mut child = Command::new(tool)
+    let mut command = Command::new(tool);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let mut child = command
         .args(args)
         .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())

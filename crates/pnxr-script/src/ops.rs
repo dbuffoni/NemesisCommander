@@ -463,7 +463,9 @@ async fn op_pnxr_run(
         }
         None => base,
     };
-    let output = tokio::process::Command::new(&program)
+    let mut command = tokio::process::Command::new(&program);
+    pnxr_vfs::proc::hide_console(command.as_std_mut());
+    let output = command
         .args(&args)
         .current_dir(dir)
         .stdin(std::process::Stdio::null())
