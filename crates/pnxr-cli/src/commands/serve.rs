@@ -55,12 +55,24 @@ async fn install_serve(context: &AppContext, args: ServeInstallArgs) -> CmdResul
     options.roots = args.roots;
     options.read_only = args.read_only;
     options.renew = args.renew;
+    let with_settings = args.with_settings;
     let location = pnxr_agent::provision::install_serve(&options, |step| {
         eprintln!("pnxr: {step}…");
     })
     .await?;
     crate::out!("pnxr serve is running; open {location}");
     crate::out!("add it with F4 in the drive list, or copy to it: pnxr cp FILE {location}DIR");
+    if with_settings {
+        let target = crate::location::parse(&location).map_err(|e| e.to_string())?;
+        let file = pnxr_app::sync::push(
+            &context.registry,
+            &context.config,
+            &target,
+            pnxr_app::sync::SyncMode::Replace,
+        )
+        .await?;
+        crate::out!("settings sent to {file}");
+    }
     Ok(ExitCode::SUCCESS)
 }
 

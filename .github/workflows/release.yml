@@ -56,7 +56,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends file desktop-file-utils lld \
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
-            libxkbcommon-x11-0 libegl1 libgl1
+            libxkbcommon-x11-0 libegl1 libgl1 \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0
       - name: Build pnxr and pnxr-gui
         run: |
           echo "QMAKE=$QT_ROOT_DIR/bin/qmake" >> "$GITHUB_ENV"
@@ -96,6 +97,18 @@ jobs:
           ./Pairnox-*.AppImage --version
           # The window, with the bundled Qt and QML modules.
           ./Pairnox-*.AppImage --self-test --keys="F1" | grep -q '"help"'
+      # The dark theme on GNOME comes from the portal theme plugin (0.7.0
+      # relies on it) and Wayland from its platform plugin: look inside.
+      - name: Check the AppImage bundles the portal theme and Wayland plugins
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          ./Pairnox-*.AppImage --appimage-extract > /dev/null
+          find squashfs-root -name 'libqxdgdesktopportal*' | grep -q . \
+            || { echo "::error::libqxdgdesktopportal is not in the AppImage"; exit 1; }
+          find squashfs-root -name 'libqwayland*' | grep -q . \
+            || { echo "::error::no Wayland platform plugin in the AppImage"; exit 1; }
+          rm -rf squashfs-root
       - uses: actions/upload-artifact@v4
         with:
           name: appimage-x86_64
