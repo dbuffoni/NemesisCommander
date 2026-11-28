@@ -191,6 +191,8 @@ Item {
                 cache: false
                 smooth: true
                 mipmap: true
+                // A phone's JPEG is stored sideways with a note to turn it.
+                autoTransform: true
                 readonly property real fit: sourceSize.width > 0
                     ? Math.min(content.width / sourceSize.width,
                                content.height / sourceSize.height) : 1

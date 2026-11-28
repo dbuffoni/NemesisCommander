@@ -20,6 +20,11 @@ Rough edges found while using 0.7.0.
   ORF, RW2, RAF and more) are read through the JPEG preview inside them, so a
   RAW and its JPEG are found as copies. Two more commands, *nearly identical
   only* and *looser match*, give fewer or more matches than the default.
+- **Pictures stored sideways** (a phone's JPEG with an EXIF orientation) are
+  shown and compared upright, so such a JPEG matches the HEIC of the same
+  photo. The window now shows HEIC and RAW pictures (it converts them) and
+  turns JPEGs by their orientation. The hash cache restarts as
+  `image-hashes-2.tsv`.
 - **AppImage:** the Wayland platform plugins are bundled, and the release
   build checks that the portal theme plugin and Wayland are inside it.
 - **Message log** (Pairnox menu, F9): every message of the status line since

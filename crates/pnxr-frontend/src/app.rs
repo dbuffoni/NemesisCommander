@@ -2105,8 +2105,11 @@ impl App {
     /// the file itself).
     fn render_picture(&mut self, path: VfsPath, quick: bool, source: crate::preview::Source) {
         let Some(generation) = self.viewer_for(&path, quick).map(|v| v.generation) else { return };
-        let local_picture =
-            matches!(source, crate::preview::Source::Picture(_)) && path.to_local_path().is_some();
+        // The window reads a plain picture of this disk itself, except HEIC
+        // and RAW, which its loader does not know.
+        let local_picture = matches!(source, crate::preview::Source::Picture(_))
+            && path.to_local_path().is_some()
+            && !pnxr_picture::needs_conversion(path.file_name().unwrap_or(""));
         let png = self.graphical && !local_picture;
         if matches!(source, crate::preview::Source::Picture(_)) && !png {
             return;

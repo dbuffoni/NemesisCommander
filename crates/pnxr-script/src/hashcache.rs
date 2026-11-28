@@ -2,7 +2,9 @@
 //! second look at a big folder only decodes the pictures that are new or
 //! changed. A picture is known by its location, size and modification time.
 //!
-//! The cache is the text file `image-hashes.tsv` in the data folder: one line
+//! The cache is the text file `image-hashes-2.tsv` (the 2 is the hash of
+//! pictures turned upright by their EXIF orientation; the first version, with
+//! sideways pictures, is left alone) in the data folder: one line
 //! per picture, appended as they are hashed. A line that cannot be read is
 //! ignored; deleting the file is always safe.
 
@@ -16,7 +18,7 @@ use crate::imagehash::ImageInfo;
 
 /// Where the cache lives: `PNXR_DATA_DIR`, or the default data folder.
 fn file() -> Option<PathBuf> {
-    Some(pnxr_config::AppPaths::detect().data_dir.join("image-hashes.tsv"))
+    Some(pnxr_config::AppPaths::detect().data_dir.join("image-hashes-2.tsv"))
 }
 
 struct Cache {

@@ -90,7 +90,31 @@ pub fn decode_named(data: &[u8], name: &str) -> Option<DynamicImage> {
     if is_raw_name(name) {
         return decode_raw_preview(data);
     }
-    image::load_from_memory(data).ok()
+    load_upright(data, None)
+}
+
+/// Decodes a picture of the `image` crate and turns it upright by its EXIF
+/// orientation (a phone's JPEG is stored sideways with a note to turn it).
+fn load_upright(data: &[u8], format: Option<image::ImageFormat>) -> Option<DynamicImage> {
+    use image::ImageDecoder;
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(data));
+    match format {
+        Some(format) => reader.set_format(format),
+        None => reader = reader.with_guessed_format().ok()?,
+    }
+    let mut decoder = reader.into_decoder().ok()?;
+    let orientation = decoder.orientation().ok();
+    let mut picture = DynamicImage::from_decoder(decoder).ok()?;
+    if let Some(orientation) = orientation {
+        picture.apply_orientation(orientation);
+    }
+    Some(picture)
+}
+
+/// `true` for pictures the window's own image loader cannot show (HEIC and
+/// RAW): they are converted to PNG for it.
+pub fn needs_conversion(name: &str) -> bool {
+    is_heic_name(name) || is_raw_name(name)
 }
 
 /// Decodes `data` without a name.
@@ -164,6 +188,17 @@ mod tests {
             broken[i] ^= 0xA5;
         }
         let _ = decode(&broken);
+    }
+
+    #[test]
+    fn a_jpeg_stored_sideways_is_turned_upright() {
+        // A 40x20 JPEG with EXIF orientation 6 (turn 90 degrees clockwise to
+        // see it): upright it is 20x40.
+        let mut data = jpeg(&scene(40, 20));
+        let exif: &[u8] = b"\xFF\xE1\x00\x24Exif\0\0MM\0*\0\0\0\x08\0\x01\x01\x12\0\x03\0\0\0\x01\0\x06\0\0\0\0\0\0\0\0";
+        data.splice(2..2, exif.iter().copied());
+        let picture = decode(&data).expect("decodes");
+        assert_eq!((picture.width(), picture.height()), (20, 40));
     }
 
     #[test]

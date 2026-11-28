@@ -587,7 +587,7 @@ or `pnxr plugin install image-duplicates`). It adds, under Tools:
   them. **Delete** moves the marked pictures to the trash after a question that
   lists them; **m** moves them to `_similar-extras` instead; **Enter** shows the
   picture in the panel. Pictures are hashed once: a second look at a big folder
-  only decodes new or changed ones (`image-hashes.tsv` in the data folder holds
+  only decodes new or changed ones (`image-hashes-2.tsv` in the data folder holds
   what is remembered; deleting it is safe).
   Its default keys are Shift+F9 (function key, button "Similar") and
   Ctrl+Shift+I; the plugin declares them in `plugin.json` and your own settings
