@@ -49,13 +49,14 @@ pub fn is_image_name(name: &str) -> bool {
     matches!(
         extension.as_deref(),
         Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff")
-    )
+    ) || pnxr_picture::is_heic_name(name)
+        || pnxr_picture::is_raw_name(name)
 }
 
-/// Decodes `data` if it is an image in a supported format.
-pub fn decode_image(data: &[u8]) -> Option<RgbaImage> {
-    let format = image::guess_format(data).ok()?;
-    let picture = image::load_from_memory_with_format(data, format).ok()?;
+/// Decodes `data` if it is an image in a supported format (`name` tells a RAW
+/// file, whose embedded preview is shown).
+pub fn decode_image(data: &[u8], name: &str) -> Option<RgbaImage> {
+    let picture = pnxr_picture::decode_named(data, name)?;
     let picture = if picture.width() > IMAGE_SIDE || picture.height() > IMAGE_SIDE {
         picture.thumbnail(IMAGE_SIDE, IMAGE_SIDE)
     } else {
@@ -530,7 +531,8 @@ impl Viewer {
     /// hex mode.
     pub fn set_data(&mut self, data: impl Into<Arc<Vec<u8>>>, truncated: bool, tab_width: usize) {
         let data = data.into();
-        self.image = if truncated { None } else { decode_image(&data).map(Arc::new) };
+        self.image =
+            if truncated { None } else { decode_image(&data, path_name(&self.path)).map(Arc::new) };
         self.hex = self.image.is_none() && !looks_like_text(&data);
         let plain_text = self.image.is_none() && !self.hex && self.kind.is_none();
         self.lines = if plain_text { text_lines(&data, tab_width) } else { Vec::new() };
@@ -724,7 +726,7 @@ mod tests {
 
     #[test]
     fn images_become_half_block_cells() {
-        let picture = decode_image(&png()).unwrap();
+        let picture = decode_image(&png(), "").unwrap();
         let cells = image_cells(&picture, 80, 24);
         assert_eq!((cells.len(), cells[0].len()), (2, 4), "no upscaling; two pixels per cell");
         assert_eq!(cells[0][0], ([255, 0, 0], [255, 0, 0]));
@@ -734,7 +736,7 @@ mod tests {
         let small = image_cells(&picture, 2, 24);
         assert_eq!((small.len(), small[0].len()), (1, 2), "shrunk to fit, same proportions");
         assert!(image_cells(&picture, 0, 10).is_empty());
-        assert!(decode_image(b"not an image").is_none());
+        assert!(decode_image(b"not an image", "").is_none());
         assert!(is_image_name("Photo.JPG") && !is_image_name("notes.txt"));
     }
 

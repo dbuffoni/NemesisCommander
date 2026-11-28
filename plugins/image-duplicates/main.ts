@@ -25,7 +25,13 @@
 //
 // Install:  pnxr plugin install image-duplicates
 
-const EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "ico"];
+// HEIC/HEIF are decoded, RAW files through the JPEG preview they contain (a RAW
+// and its JPEG then match).
+const EXTENSIONS = [
+  "jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "ico", "heic", "heif", "hif",
+  "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "orf", "rw2", "raf", "pef",
+  "srw", "3fr", "erf", "kdc", "mrw", "x3f",
+];
 /** Hashes that differ in at most this many of 64 bits count as similar (about 90%). */
 const DEFAULT_DISTANCE = 6;
 /** The threshold of the command: "find" and "move-extras" use the default; the

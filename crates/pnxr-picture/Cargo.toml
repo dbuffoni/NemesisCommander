@@ -1,0 +1,19 @@
+[package]
+name = "pnxr-picture"
+description = "Decodes pictures for the viewer and the picture hash: common formats, HEIC and the preview inside RAW files."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+image.workspace = true
+heifer = { version = "0.9.0", default-features = false }
+
+[dev-dependencies]
+heifer = { version = "0.9.0" }
+
+[lints]
+workspace = true

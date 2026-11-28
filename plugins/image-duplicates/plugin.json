@@ -17,13 +17,13 @@
     {
       "id": "similar",
       "title": "Similar",
-      "match": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.bmp", "*.tif", "*.tiff", "*.ico"],
+      "match": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.bmp", "*.tif", "*.tiff", "*.ico", "*.heic", "*.heif", "*.hif", "*.cr2", "*.cr3", "*.nef", "*.arw", "*.dng", "*.orf", "*.rw2", "*.raf", "*.pef"],
       "width": 12
     },
     {
       "id": "picture",
       "title": "Picture",
-      "match": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.bmp", "*.tif", "*.tiff", "*.ico"],
+      "match": ["*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.bmp", "*.tif", "*.tiff", "*.ico", "*.heic", "*.heif", "*.hif", "*.cr2", "*.cr3", "*.nef", "*.arw", "*.dng", "*.orf", "*.rw2", "*.raf", "*.pef"],
       "width": 11
     }
   ],

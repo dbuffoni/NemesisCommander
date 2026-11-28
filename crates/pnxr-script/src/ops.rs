@@ -302,7 +302,8 @@ async fn op_pnxr_image_hash(
         return Ok(None);
     }
     // Decoding takes a while: not on the thread of the script.
-    let info = tokio::task::spawn_blocking(move || crate::imagehash::describe(&data))
+    let name = display(&path).rsplit(['/', '\\']).next().unwrap_or_default().to_owned();
+    let info = tokio::task::spawn_blocking(move || crate::imagehash::describe(&data, &name))
         .await
         .map_err(|e| JsErrorBox::generic(e.to_string()))?;
     if let (Some(key), Some(info)) = (key, &info) {
