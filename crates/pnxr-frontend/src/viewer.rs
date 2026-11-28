@@ -581,7 +581,10 @@ impl Viewer {
 
     /// Scrolls by `delta` rows, keeping a page of `page` rows visible.
     pub fn scroll_by(&mut self, delta: isize, page: usize) {
-        let max = self.row_count().saturating_sub(page.max(1));
+        // A wrapped line takes more than one row, so the end of the text is
+        // reached with its last line on top.
+        let page = if self.wrap && !self.hex { 1 } else { page.max(1) };
+        let max = self.row_count().saturating_sub(page);
         self.scroll = self.scroll.saturating_add_signed(delta).min(max);
     }
 

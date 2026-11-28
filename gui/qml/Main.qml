@@ -53,7 +53,11 @@ ApplicationWindow {
         Math.max(8, Math.min(height / 28, width / 48))
     font.pointSize: Math.min(wantedPointSize, fittingPointSize)
     readonly property font fixedFont: Qt.font({
-        family: fonts && fonts.fixed_family ? fonts.fixed_family : "monospace",
+        // "monospace" is no font on Windows, where the style hint finds one;
+        // Consolas is on every Windows since Vista.
+        family: fonts && fonts.fixed_family ? fonts.fixed_family
+              : onWindows ? "Consolas" : "monospace",
+        styleHint: Font.Monospace,
         pointSize: font.pointSize,
         preferShaping: false
     })

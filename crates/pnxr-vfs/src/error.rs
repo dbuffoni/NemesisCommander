@@ -13,22 +13,22 @@ pub type Result<T, E = VfsError> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum VfsError {
     /// The path does not exist.
-    #[error("not found: {0}")]
+    #[error("not found: {}", .0.shown())]
     NotFound(VfsPath),
     /// The path already exists and the operation would not replace it.
-    #[error("already exists: {0}")]
+    #[error("already exists: {}", .0.shown())]
     AlreadyExists(VfsPath),
     /// The provider refused access.
-    #[error("permission denied: {0}")]
+    #[error("permission denied: {}", .0.shown())]
     PermissionDenied(VfsPath),
     /// A directory was expected.
-    #[error("not a directory: {0}")]
+    #[error("not a directory: {}", .0.shown())]
     NotADirectory(VfsPath),
     /// A file was expected.
-    #[error("is a directory: {0}")]
+    #[error("is a directory: {}", .0.shown())]
     IsADirectory(VfsPath),
     /// A directory could not be removed because it is not empty.
-    #[error("directory not empty: {0}")]
+    #[error("directory not empty: {}", .0.shown())]
     DirectoryNotEmpty(VfsPath),
     /// The provider does not implement this operation.
     #[error("{operation} is not supported by {scheme}://")]
@@ -53,7 +53,7 @@ pub enum VfsError {
     #[error("cancelled")]
     Cancelled,
     /// A low-level I/O error on a specific path.
-    #[error("{path}: {source}")]
+    #[error("{}: {source}", path.shown())]
     Io {
         /// The path that was being accessed.
         path: VfsPath,

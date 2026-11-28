@@ -393,6 +393,8 @@ pub struct ViewerView {
     pub center: [f64; 2],
     /// A new picture is being drawn.
     pub rendering: bool,
+    /// Long text lines wrap onto the next row (F2) instead of being cut.
+    pub wrap: bool,
 }
 
 /// A piece of formatted text.
@@ -835,6 +837,7 @@ fn quick_view_panel(app: &App, rows: usize) -> PanelView {
                 zoom: 1.0,
                 center: [0.5, 0.5],
                 rendering: false,
+                wrap: false,
             }
         }
     };
@@ -1043,6 +1046,7 @@ pub fn viewer_view(viewer: &Viewer, rows: usize) -> ViewerView {
         zoom: f64::from(viewer.zoom.factor),
         center: [f64::from(viewer.zoom.center.0), f64::from(viewer.zoom.center.1)],
         rendering: viewer.rendering,
+        wrap: viewer.wrap,
     }
 }
 
@@ -1350,7 +1354,8 @@ fn job_place(app: &App, path: &pnxr_vfs::VfsPath) -> String {
     let system = crate::drives::drive_label(&app.context().config, path);
     let inside =
         if path.scheme() == "file" { display_location(path) } else { path.path().to_owned() };
-    format!("{system}: {inside}")
+    // A Windows drive is already its own label (`C:`): no second colon.
+    if system.ends_with(':') { inside } else { format!("{system}: {inside}") }
 }
 
 /// Where a job takes its items from and puts them: `from Local: ~/docs  to

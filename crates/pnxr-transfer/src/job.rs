@@ -110,8 +110,8 @@ impl JobSpec {
             many => format!("{} items", many.len()),
         };
         match (self.kind, &self.destination) {
-            (JobKind::Copy, Some(d)) => format!("Copy {what} to {d}"),
-            (JobKind::Move, Some(d)) => format!("Move {what} to {d}"),
+            (JobKind::Copy, Some(d)) => format!("Copy {what} to {}", d.shown()),
+            (JobKind::Move, Some(d)) => format!("Move {what} to {}", d.shown()),
             (JobKind::Delete, _) | (_, None) => format!("Delete {what}"),
         }
     }

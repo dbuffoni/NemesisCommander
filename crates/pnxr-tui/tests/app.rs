@@ -173,7 +173,10 @@ async fn copy_asks_for_the_destination_and_queues_a_job() {
     h.focus("a.txt");
     h.key("F5");
     let Some(Overlay::Input(dialog)) = h.app.overlay() else { panic!("copy dialog") };
-    assert_eq!(dialog.field.text(), h.path("right").display().to_string());
+    assert_eq!(
+        dialog.field.text(),
+        pnxr_frontend::display_location(&VfsPath::from_local(h.path("right")).unwrap())
+    );
     h.key("Enter");
     h.settle().await;
     assert_eq!(fs::read_to_string(h.path("right/a.txt")).unwrap(), "alpha\n");

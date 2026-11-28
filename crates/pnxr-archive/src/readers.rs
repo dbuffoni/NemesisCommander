@@ -56,8 +56,10 @@ pub(crate) fn extract(
 
 // ---------------------------------------------------------------- zip
 
+/// A zip stores the wall clock of the computer that made it (DOS time, no
+/// zone), so it is read as local time.
 fn zip_time(t: zip::DateTime) -> Option<SystemTime> {
-    time::from_civil(
+    time::from_local_civil(
         i64::from(t.year()),
         u32::from(t.month()),
         u32::from(t.day()),

@@ -112,7 +112,7 @@ Item {
                 var widest = 0 * lineMetrics.height, lines = viewer.view.lines
                 for (var i = 0; i < lines.length; i++)
                     widest = Math.max(widest, lineMetrics.advanceWidth(lines[i]))
-                return widest <= width ? 1 : Math.max(0.6, width / widest)
+                return viewer.view.wrap || widest <= width ? 1 : Math.max(0.6, width / widest)
             }
             Column {
                 visible: !viewer.isPicture && !viewer.isDocument
@@ -129,9 +129,13 @@ Item {
                         font.preferShaping: false
                         font.pointSize: viewer.theme.fixedFont.pointSize * content.shrink
                         color: palette.text
-                        height: viewer.theme.rowHeight
+                        // F2: a long line goes on to the next row(s).
+                        readonly property bool wraps: viewer.view.wrap && viewer.view.mode === "text"
+                        wrapMode: wraps ? Text.Wrap : Text.NoWrap
+                        height: wraps ? Math.max(viewer.theme.rowHeight, implicitHeight)
+                                      : viewer.theme.rowHeight
                         width: content.width
-                        elide: Text.ElideRight
+                        elide: wraps ? Text.ElideNone : Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                         textFormat: tinted ? Text.StyledText : Text.PlainText
                     }

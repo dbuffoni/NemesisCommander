@@ -13,6 +13,13 @@ Windows fixes, checked on a Windows PC.
   could stop after the first frame, leaving a panel with one row until the
   window was resized.
 - The git marks are readable on the highlighted row.
+- **Found by the full Windows test round:** fixed-width text in the viewer
+  uses a real monospace font on Windows (tables and hex line up); F2 wraps
+  long lines in the window's viewer; zip times are read and written as the
+  wall clock of the computer (they were an hour off); "Copy full path" gives
+  the real path, not `~\...`; error messages show `C:\...` instead of
+  `file:///C:/...`; a refused symbolic link on Windows says why and what to
+  do; `pnxr serve install localhost` on Windows says it needs `sh`.
 
 ## 0.7.1
 

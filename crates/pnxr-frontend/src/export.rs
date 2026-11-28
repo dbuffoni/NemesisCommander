@@ -40,16 +40,25 @@ impl PathVariant {
             PathVariant::Name => {
                 paths.iter().map(|p| p.file_name().unwrap_or("/").to_owned()).collect()
             }
-            PathVariant::FullPath => paths.iter().map(display_location).collect(),
+            PathVariant::FullPath => paths.iter().map(full_location).collect(),
             PathVariant::Uri => paths.iter().map(ToString::to_string).collect(),
             PathVariant::Folder => paths
                 .iter()
                 .take(1)
                 .filter_map(VfsPath::parent)
-                .map(|p| display_location(&p))
+                .map(|p| full_location(&p))
                 .collect(),
         };
         lines.join("\n")
+    }
+}
+
+/// A location written out in full, for pasting elsewhere: the local path
+/// (never abbreviated to `~`, which only this program reads), or the URI.
+fn full_location(path: &VfsPath) -> String {
+    match path.to_local_path() {
+        Some(local) if path.scheme() == "file" => local.display().to_string(),
+        _ => path.to_string(),
     }
 }
 
@@ -246,7 +255,7 @@ mod tests {
         let paths = vec![folder().join("a.txt"), folder().join("b.txt")];
         assert_eq!(PathVariant::Name.text(&paths), "a.txt\nb.txt");
         assert_eq!(PathVariant::Uri.text(&paths), "file:///data/a.txt\nfile:///data/b.txt");
-        assert_eq!(PathVariant::FullPath.text(&paths[..1]), display_location(&paths[0]));
-        assert_eq!(PathVariant::Folder.text(&paths), display_location(&folder()));
+        assert_eq!(PathVariant::FullPath.text(&paths[..1]), full_location(&paths[0]));
+        assert_eq!(PathVariant::Folder.text(&paths), full_location(&folder()));
     }
 }
