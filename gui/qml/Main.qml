@@ -77,15 +77,19 @@ ApplicationWindow {
     // Files the other panel lacks, after a folder comparison.
     readonly property color missingTint: Qt.rgba(1.0, 0.35, 0.35, dark ? 0.30 : 0.22)
     readonly property color missingText: dark ? "#ff9a9a" : "#a31515"
-    readonly property color lineColor: Qt.rgba(palette.windowText.r, palette.windowText.g,
-                                               palette.windowText.b, 0.18)
+    // The colour of ordinary text and of the labels of buttons. On Windows'
+    // dark theme the palette keeps black `windowText` and `buttonText` on a
+    // dark `window` (and setting them from QML has no effect), while `text`
+    // is right: read `ink` and `buttonInk` instead of those two roles.
+    readonly property color ink: onWindows && dark ? palette.text : palette.windowText
+    readonly property color buttonInk: onWindows && dark ? palette.text : palette.buttonText
+    readonly property color lineColor: Qt.rgba(ink.r, ink.g, ink.b, 0.18)
     // Windows draws secondary text on its dark theme a little too faint:
     // a higher alpha there, the other systems keep 0.6.
     readonly property bool onWindows: Qt.platform.os === "windows"
     // On Windows the window's palette can keep black `windowText` on a dark
     // `window` (the file names, drawn with `text`, are white): follow `text`.
-    readonly property color dim: Qt.rgba(palette.windowText.r, palette.windowText.g,
-                                         palette.windowText.b, onWindows ? 0.78 : 0.6)
+    readonly property color dim: Qt.rgba(ink.r, ink.g, ink.b, onWindows ? 0.78 : 0.6)
 
     FontMetrics {
         id: fixedMetrics
@@ -129,10 +133,6 @@ ApplicationWindow {
     onClosing: if (visibility === ApplicationWindow.Windowed) commander.remember_window(width, height)
 
     Component.onCompleted: {
-        if (onWindows && dark) {
-            if (palette.windowText.hslLightness < 0.5) palette.windowText = palette.text
-            if (palette.buttonText.hslLightness < 0.5) palette.buttonText = palette.text
-        }
         commander.start(Qt.fontFamilies().join("\n"))
     }
 
@@ -249,7 +249,7 @@ ApplicationWindow {
                     elide: Text.ElideRight
                     text: window.screen ? window.screen.status.text : ""
                     color: window.screen && window.screen.status.error ? window.errorColor
-                                                                       : palette.windowText
+                                                                       : window.ink
                     font.bold: window.screen ? window.screen.status.message : false
                 }
                 Label {
@@ -371,7 +371,7 @@ ApplicationWindow {
                             Label {
                                 visible: withLabel
                                 text: modelData.label
-                                color: palette.buttonText
+                                color: window.buttonInk
                                 font.pointSize: window.font.pointSize * body.keyScale
                             }
                         }

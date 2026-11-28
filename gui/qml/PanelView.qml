@@ -125,7 +125,7 @@ Rectangle {
                         id: tabLabel
                         anchors.centerIn: parent
                         text: modelData.label
-                        color: modelData.active ? palette.highlightedText : palette.buttonText
+                        color: modelData.active ? palette.highlightedText : panel.theme.buttonInk
                     }
                 }
             }
@@ -147,7 +147,7 @@ Rectangle {
                     id: driveLabel
                     anchors.centerIn: parent
                     text: (panel.view ? panel.view.drive : "") + " \u25be"
-                    color: palette.buttonText
+                    color: panel.theme.buttonInk
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -183,7 +183,7 @@ Rectangle {
             text: panel.hasFolderText ? panel.folderMarkup(panel.view.folder_text) : ""
             textFormat: Text.StyledText
             font: panel.theme.font
-            color: palette.windowText
+            color: panel.theme.ink
             wrapMode: Text.Wrap
             elide: Text.ElideRight
             clip: true
