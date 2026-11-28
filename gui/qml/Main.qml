@@ -82,6 +82,8 @@ ApplicationWindow {
     // Windows draws secondary text on its dark theme a little too faint:
     // a higher alpha there, the other systems keep 0.6.
     readonly property bool onWindows: Qt.platform.os === "windows"
+    // On Windows the window's palette can keep black `windowText` on a dark
+    // `window` (the file names, drawn with `text`, are white): follow `text`.
     readonly property color dim: Qt.rgba(palette.windowText.r, palette.windowText.g,
                                          palette.windowText.b, onWindows ? 0.78 : 0.6)
 
@@ -126,7 +128,11 @@ ApplicationWindow {
     // The size of a normal window is kept for the next start.
     onClosing: if (visibility === ApplicationWindow.Windowed) commander.remember_window(width, height)
 
-    Component.onCompleted: commander.start(Qt.fontFamilies().join("\n"))
+    Component.onCompleted: {
+        if (onWindows && dark && palette.windowText.hslLightness < 0.5)
+            palette.windowText = palette.text
+        commander.start(Qt.fontFamilies().join("\n"))
+    }
 
     // Rows that fit: tell the application, which scrolls and pages with it.
     // The settings list shrinks its text (down to 60%) in a small window so
