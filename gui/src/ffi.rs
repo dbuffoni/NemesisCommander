@@ -92,6 +92,15 @@ pub mod qobject {
 
 unsafe extern "C" {
     fn pnxr_set_window_icon(data: *const u8, length: u64);
+    fn pnxr_use_consistent_style();
+}
+
+/// Picks the Quick Controls style that has one palette (on Windows only);
+/// call before the first window is loaded.
+pub fn use_consistent_style() {
+    // SAFETY: the C++ function takes no arguments and only sets an
+    // environment variable of the process, before any other thread uses it.
+    unsafe { pnxr_use_consistent_style() }
 }
 
 /// Adds a size (a PNG) to the icon of every window of the application.

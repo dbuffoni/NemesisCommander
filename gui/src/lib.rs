@@ -36,6 +36,7 @@ pub fn run(startup: Startup) -> bool {
     for png in pnxr_frontend::about::ICON_PNGS {
         ffi::add_window_icon(png);
     }
+    ffi::use_consistent_style();
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/Pairnox/qml/Main.qml"));
