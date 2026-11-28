@@ -262,6 +262,15 @@ impl VfsPath {
         root.to_string()
     }
 
+    /// The path as a person reads it: a native path for a local file, the
+    /// URI for everything else (error messages use this).
+    pub fn shown(&self) -> String {
+        match self.to_local_path() {
+            Some(local) => local.display().to_string(),
+            None => self.to_string(),
+        }
+    }
+
     /// Converts a `file://` path to a native path. `None` for other schemes.
     pub fn to_local_path(&self) -> Option<PathBuf> {
         if !self.is_local() {

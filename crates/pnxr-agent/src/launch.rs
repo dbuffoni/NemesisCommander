@@ -139,7 +139,8 @@ pub(crate) async fn ssh_run(
 ) -> std::result::Result<String, String> {
     // On this computer itself the script runs directly: installing on
     // `localhost` must not need an SSH server.
-    let mut command = if target.is_this_computer() {
+    let on_this_computer = target.is_this_computer();
+    let mut command = if on_this_computer {
         let mut command = Command::new("sh");
         command.args(["-c", script]);
         command
@@ -154,7 +155,15 @@ pub(crate) async fn ssh_run(
         Some(file) => Stdio::from(std::fs::File::open(file).map_err(|e| e.to_string())?),
         None => Stdio::null(),
     });
-    let output = command.output().await.map_err(|e| format!("cannot start ssh: {e}"))?;
+    let output = command.output().await.map_err(|e| {
+        if on_this_computer {
+            format!(
+                "cannot run the install script on this computer: {e}. It needs a POSIX shell (`sh`), which Windows does not have: install on a Linux or macOS machine, or from WSL"
+            )
+        } else {
+            format!("cannot start ssh: {e}")
+        }
+    })?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
     }

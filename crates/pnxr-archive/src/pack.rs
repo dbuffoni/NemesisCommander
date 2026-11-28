@@ -278,10 +278,12 @@ fn write_zip(
     let with_meta = |modified: Option<SystemTime>, mode: Option<u32>, secret: bool| {
         let mut options = if secret { encrypted } else { base };
         if let Some(t) = modified {
-            let (y, mo, d, h, mi, s) = time::to_civil(t);
-            if let Ok(dt) = zip::DateTime::from_date_and_time(
-                y as u16, mo as u8, d as u8, h as u8, mi as u8, s as u8,
-            ) {
+            // DOS time is the wall clock, not UTC.
+            if let Some((y, mo, d, h, mi, s)) = time::to_local_civil(t)
+                && let Ok(dt) = zip::DateTime::from_date_and_time(
+                    y as u16, mo as u8, d as u8, h as u8, mi as u8, s as u8,
+                )
+            {
                 options = options.last_modified_time(dt);
             }
         }

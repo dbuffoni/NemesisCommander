@@ -189,7 +189,7 @@ impl App {
                         "Created {}, failed {}: {}",
                         report.created,
                         report.failed.len(),
-                        report.failed.join("; ")
+                        link_failures(&report.failed)
                     ),
                     error: true,
                     reload: true,
@@ -929,4 +929,21 @@ impl App {
 
 fn plural(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
+}
+
+/// Why Windows refuses a symbolic link: creating one needs a privilege.
+fn link_hint(error: &str) -> String {
+    if error.contains("os error 1314") {
+        format!(
+            "{error}. Windows lets only administrators create symbolic links, unless Developer Mode is on (Settings, System, For developers); a hard link needs no privilege"
+        )
+    } else {
+        error.to_owned()
+    }
+}
+
+/// The failures of a link batch, with the hint when it applies.
+fn link_failures(failed: &[String]) -> String {
+    let text = failed.join("; ");
+    if text.contains("os error 1314") { link_hint(&text) } else { text }
 }

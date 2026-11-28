@@ -4422,6 +4422,7 @@ dependencies = [
  "bzip2",
  "flate2",
  "futures",
+ "jiff",
  "liblzma",
  "pnxr-libarchive",
  "pnxr-ops",

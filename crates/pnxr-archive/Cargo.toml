@@ -13,6 +13,7 @@ pnxr-vfs.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 futures.workspace = true
+jiff.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "io-util", "fs"] }
