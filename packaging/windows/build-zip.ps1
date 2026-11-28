@@ -1,8 +1,8 @@
-# Packages Pairnox for Windows as a zip (extract anywhere and run):
+# Packages Pairnox for Windows as a portable zip (extract anywhere and run):
 #
 #   packaging/windows/build-zip.ps1 <directory with pnxr.exe and pnxr-gui.exe> <version>
 #
-# Produces Pairnox-<version>-windows-x86_64[-unsigned].zip in the
+# Produces Pairnox-<version>-windows-x86_64-portable[-unsigned].zip in the
 # current directory. Qt is bundled by windeployqt (on the PATH, from the Qt the
 # window was built with). The programs are signed with signtool when
 # WINDOWS_CERT_PFX (base64 of a .pfx) and WINDOWS_CERT_PASSWORD are set;
@@ -33,6 +33,19 @@ if (-not (Test-Path (Join-Path $fusion "qmldir"))) {
 }
 if (-not (Test-Path (Join-Path $fusion "qmldir"))) { throw "the Fusion style is not in the package" }
 
+# The Visual C++ runtime, next to the programs: they then start on a PC
+# without the redistributable, and installing needs no administrator.
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if (-not $vs) { throw "Visual Studio with the C++ tools was not found" }
+$crt = Get-ChildItem (Join-Path $vs "VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT") -Directory |
+    Sort-Object { [version]$_.Parent.Parent.Name } | Select-Object -Last 1
+if (-not $crt) { throw "the Visual C++ runtime was not found in $vs" }
+Copy-Item (Join-Path $crt.FullName "*.dll") $app
+# windeployqt copies the redistributable's installer when it finds it: not needed.
+Remove-Item (Join-Path $app "vc_redist*.exe") -ErrorAction SilentlyContinue
+if (-not (Test-Path (Join-Path $app "vcruntime140.dll"))) { throw "the Visual C++ runtime is not in the package" }
+
 # Licence and third-party notices (Qt, libarchive, crates).
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $app "LICENSE.txt")
 python (Join-Path $root "scripts/third_party.py") -o (Join-Path $app "THIRD-PARTY-NOTICES.md")
@@ -50,7 +63,7 @@ if ($env:WINDOWS_CERT_PFX -and $env:WINDOWS_CERT_PASSWORD) {
     $signed = $true
 }
 $suffix = if ($signed) { "" } else { "-unsigned" }
-$zip = "Pairnox-$Version-windows-x86_64$suffix.zip"
+$zip = "Pairnox-$Version-windows-x86_64-portable$suffix.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $app -DestinationPath $zip
 Write-Host "wrote $zip"

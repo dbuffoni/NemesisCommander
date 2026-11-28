@@ -13,6 +13,12 @@ Windows fixes, checked on a Windows PC.
   could stop after the first frame, leaving a panel with one row until the
   window was resized.
 - The git marks are readable on the highlighted row.
+- **A Windows installer.** `Pairnox-<version>-windows-x86_64-setup.exe` installs
+  for the current user without administrator rights (Start menu entry, an
+  optional desktop shortcut and PATH entry, removal from Apps). The zip is now
+  named `...-portable.zip`. Both carry the Visual C++ runtime, so they start on
+  a PC that does not have it. Until a signing certificate is set up the files
+  are `-unsigned` and Windows may warn.
 - **Found by the full Windows test round:** fixed-width text in the viewer
   uses a real monospace font on Windows (tables and hex line up); F2 wraps
   long lines in the window's viewer; zip times are read and written as the
