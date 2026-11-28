@@ -79,8 +79,12 @@ their own job (SC-168).
 
 ## Installers (Windows and macOS)
 
-`.github/workflows/installers.yml` builds the Windows zip
-(`packaging/windows/build-zip.ps1`, Qt bundled by `windeployqt`) and the macOS
+`.github/workflows/installers.yml` builds the Windows portable zip
+(`packaging/windows/build-zip.ps1`, Qt bundled by `windeployqt`), the Windows
+installer made from it (`packaging/windows/build-setup.ps1`, Inno Setup, per
+user without administrator rights, Start menu entry, optional PATH, an entry to
+remove it; the smoke test installs silently, runs `pnxr --version` and
+uninstalls) and the macOS
 disk image (`packaging/macos/build-dmg.sh`, an app bundle with Qt bundled by
 `macdeployqt`), each with `LICENSE` and `THIRD-PARTY-NOTICES.md`, and tests
 them: unpack or mount into a temporary place and run `pnxr --version` and

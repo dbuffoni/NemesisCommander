@@ -1,5 +1,5 @@
-# Installers for Windows (zip) and macOS (dmg), built and smoke tested:
-# install into a temporary folder, run `--version`, remove again.
+# Windows (an installer and a portable zip) and macOS (dmg), built and smoke
+# tested: install into a temporary folder, run `--version`, remove again.
 #
 # Called by the release workflow (which publishes them on a `v*` tag) and by
 # the full CI tier (nightly). Without signing secrets the files are named
@@ -71,11 +71,35 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: packaging/windows/build-zip.ps1 target/release $env:VERSION
+      - name: Installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup did not install" }
+          $zip = Get-ChildItem Pairnox-*-windows-*-portable*.zip | Select-Object -First 1
+          packaging/windows/build-setup.ps1 $zip.FullName $env:VERSION
+      - name: Smoke test of the installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Install for the current user into a temporary folder, run the
+          # programs, remove again (the uninstaller runs from the folder).
+          $setup = Get-ChildItem Pairnox-*-windows-*-setup*.exe | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP "pnxr-setup-test"
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/DIR=$dir" -Wait
+          & (Join-Path $dir "pnxr.exe") --version
+          if ($LASTEXITCODE -ne 0) { throw "installed pnxr.exe --version failed" }
+          if (-not (Test-Path (Join-Path $dir "pnxr-gui.exe"))) { throw "no pnxr-gui.exe after install" }
+          $uninstall = Get-ChildItem (Join-Path $dir "unins*.exe") | Select-Object -First 1
+          Start-Process $uninstall.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          Start-Sleep -Seconds 3
+          if (Test-Path (Join-Path $dir "pnxr.exe")) { throw "the uninstaller left pnxr.exe" }
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $zip = Get-ChildItem Pairnox-*-windows-*.zip | Select-Object -First 1
+          $zip = Get-ChildItem Pairnox-*-windows-*-portable*.zip | Select-Object -First 1
           $dir = Join-Path $env:RUNNER_TEMP "pnxr-install"
           Expand-Archive $zip.FullName $dir
           $app = Join-Path $dir "Pairnox"
@@ -95,7 +119,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: installer-windows
-          path: Pairnox-*-windows-*.zip
+          path: |
+            Pairnox-*-windows-*-portable*.zip
+            Pairnox-*-windows-*-setup*.exe
           if-no-files-found: error
 
       # ---- macOS ----

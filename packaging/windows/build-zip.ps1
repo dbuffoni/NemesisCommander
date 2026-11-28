@@ -1,8 +1,8 @@
-# Packages Pairnox for Windows as a zip (extract anywhere and run):
+# Packages Pairnox for Windows as a portable zip (extract anywhere and run):
 #
 #   packaging/windows/build-zip.ps1 <directory with pnxr.exe and pnxr-gui.exe> <version>
 #
-# Produces Pairnox-<version>-windows-x86_64[-unsigned].zip in the
+# Produces Pairnox-<version>-windows-x86_64-portable[-unsigned].zip in the
 # current directory. Qt is bundled by windeployqt (on the PATH, from the Qt the
 # window was built with). The programs are signed with signtool when
 # WINDOWS_CERT_PFX (base64 of a .pfx) and WINDOWS_CERT_PASSWORD are set;
@@ -50,7 +50,7 @@ if ($env:WINDOWS_CERT_PFX -and $env:WINDOWS_CERT_PASSWORD) {
     $signed = $true
 }
 $suffix = if ($signed) { "" } else { "-unsigned" }
-$zip = "Pairnox-$Version-windows-x86_64$suffix.zip"
+$zip = "Pairnox-$Version-windows-x86_64-portable$suffix.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $app -DestinationPath $zip
 Write-Host "wrote $zip"
