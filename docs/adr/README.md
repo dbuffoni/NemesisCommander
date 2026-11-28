@@ -57,6 +57,7 @@ that still names it.
 | 0061 | [Ports and adapters for the interfaces](0061-ports-and-adapters.md) | Accepted |
 | 0062 | [Plugin defaults for keys, and a list of results](0062-plugin-key-defaults-and-results.md) | Accepted |
 | 0063 | [AI providers, the pnxr command and pictures in the terminal](0063-ai-providers-and-terminal-pictures.md) | Accepted |
+| 0064 | [HEIC and RAW pictures](0064-heic-and-raw-pictures.md) | Accepted |
 
 Template:
 

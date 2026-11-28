@@ -38,6 +38,7 @@ debug = false
 pnxr-vfs = { path = "crates/pnxr-vfs" }
 pnxr-secrets = { path = "crates/pnxr-secrets" }
 pnxr-hash = { path = "crates/pnxr-hash" }
+pnxr-picture = { path = "crates/pnxr-picture" }
 pnxr-providers = { path = "crates/pnxr-providers", default-features = false }
 pnxr-ops = { path = "crates/pnxr-ops" }
 pnxr-transfer = { path = "crates/pnxr-transfer" }

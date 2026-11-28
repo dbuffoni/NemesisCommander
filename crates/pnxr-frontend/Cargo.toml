@@ -29,6 +29,7 @@ futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 image.workspace = true
+pnxr-picture.workspace = true
 directories.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "sync", "time", "io-util"] }
 tokio-util.workspace = true

@@ -14,9 +14,12 @@ Rough edges found while using 0.7.0.
   it. (The Windows build prints nothing for `--help` or `--self-test`.)
 - **`pnxr serve install HOST --with-settings`** also sends your settings to the
   server, the same as `pnxr config push scs://HOST`.
-- **Similar pictures:** two more commands, *nearly identical only* and
-  *looser match*, for fewer or more matches than the default threshold. RAW
-  and HEIC pictures are still not read (they need native libraries).
+- **Similar pictures and the viewer read HEIC and RAW.** HEIC/HEIF photos
+  (iPhone and others) are decoded with a decoder written in Rust, with no
+  library to install (ADR 0064); RAW camera files (CR2, CR3, NEF, ARW, DNG,
+  ORF, RW2, RAF and more) are read through the JPEG preview inside them, so a
+  RAW and its JPEG are found as copies. Two more commands, *nearly identical
+  only* and *looser match*, give fewer or more matches than the default.
 - **AppImage:** the Wayland platform plugins are bundled, and the release
   build checks that the portal theme plugin and Wayland are inside it.
 - **Message log** (Pairnox menu, F9): every message of the status line since

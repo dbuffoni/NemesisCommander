@@ -20,6 +20,7 @@ deno_core = { version = "0.413.0", optional = true }
 deno_error = { version = "0.7.1", optional = true }
 deno_ast = { version = "0.53.3", features = ["transpiling"], optional = true }
 image = { workspace = true, optional = true }
+pnxr-picture = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
@@ -30,7 +31,7 @@ tokio = { workspace = true, features = ["io-util", "rt", "sync", "time", "net", 
 default = ["engine"]
 # V8 and the `pnxr` API: running scripts. Without it, only plugin manifests,
 # grants and permissions (pnxr-gui runs scripts through the `pnxr` program).
-engine = ["dep:deno_core", "dep:deno_error", "dep:deno_ast", "dep:image"]
+engine = ["dep:deno_core", "dep:deno_error", "dep:deno_ast", "dep:image", "dep:pnxr-picture"]
 
 [dev-dependencies]
 pnxr-providers.workspace = true

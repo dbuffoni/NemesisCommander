@@ -7,7 +7,7 @@ use image::DynamicImage;
 use image::imageops::FilterType;
 
 /// Pictures bigger than this are not decoded.
-pub const PICTURE_LIMIT: u64 = 48 << 20;
+pub const PICTURE_LIMIT: u64 = pnxr_picture::PICTURE_LIMIT;
 
 /// What `pnxr.imageHash` returns.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -40,8 +40,8 @@ pub fn dhash(image: &DynamicImage) -> u64 {
 
 /// Hashes `data`; `None` when it is not a picture, or a flat one (all flat
 /// pictures would look alike).
-pub fn describe(data: &[u8]) -> Option<ImageInfo> {
-    let image = image::load_from_memory(data).ok()?;
+pub fn describe(data: &[u8], name: &str) -> Option<ImageInfo> {
+    let image = pnxr_picture::decode_named(data, name)?;
     let hash = dhash(&image);
     (hash != 0).then(|| ImageInfo {
         hash: format!("{hash:016x}"),
@@ -83,10 +83,10 @@ mod tests {
         let big = scene(400, 300, 0.3, 0.3);
         let small = big.resize_exact(100, 75, FilterType::Lanczos3);
         let other = scene(400, 300, 0.8, 0.7);
-        let original = describe(&encode(&big, ImageFormat::Png)).unwrap();
-        let jpeg = describe(&encode(&big, ImageFormat::Jpeg)).unwrap();
-        let thumb = describe(&encode(&small, ImageFormat::Png)).unwrap();
-        let different = describe(&encode(&other, ImageFormat::Png)).unwrap();
+        let original = describe(&encode(&big, ImageFormat::Png), "").unwrap();
+        let jpeg = describe(&encode(&big, ImageFormat::Jpeg), "").unwrap();
+        let thumb = describe(&encode(&small, ImageFormat::Png), "").unwrap();
+        let different = describe(&encode(&other, ImageFormat::Png), "").unwrap();
         assert_eq!(original.hash.len(), 16);
         assert_eq!((thumb.width, thumb.height), (100, 75));
         assert!(distance(&original, &jpeg) <= 6, "{}", distance(&original, &jpeg));
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn flat_pictures_and_other_files_have_no_hash() {
         let flat = DynamicImage::ImageRgb8(ImageBuffer::from_pixel(20, 20, Rgb([9, 9, 9])));
-        assert!(describe(&encode(&flat, ImageFormat::Png)).is_none());
-        assert!(describe(b"not a picture").is_none());
+        assert!(describe(&encode(&flat, ImageFormat::Png), "").is_none());
+        assert!(describe(b"not a picture", "").is_none());
     }
 }

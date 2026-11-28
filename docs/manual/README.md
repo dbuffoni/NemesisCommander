@@ -578,7 +578,7 @@ plugin **image-duplicates**, not a built-in command (it keeps the program
 light). Install it from the plugin list (Ctrl+X, "Browse and install plugins…",
 or `pnxr plugin install image-duplicates`). It adds, under Tools:
 
-- **Find similar pictures** (and *Find similar pictures: nearly identical only* / *looser match*, with a stricter or looser threshold) groups the pictures of the folder and below it (or of
+- **Find similar pictures** (HEIC photos and RAW files count too: RAW through the JPEG preview they contain; and *Find similar pictures: nearly identical only* / *looser match*, with a stricter or looser threshold) groups the pictures of the folder and below it (or of
   the selection) by a perceptual hash, so different formats and sizes match, and
   shows the groups as a list with the columns Group, Match (the likeness to the
   best copy in percent), Pixels, Size, Date and File. **s** sorts by the next
