@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.2
+
+Windows fixes, checked on a Windows PC.
+
+- **No console windows flash** when the window starts `git`, a plugin, `ssh`
+  or the key store (Windows only).
+- **Readable on Windows in the dark and the light theme.** The window uses
+  the Fusion style on Windows, which has one palette; headers, the function
+  key bar, dialogs and the viewer were black on a dark window before.
+- **Panels fill the window on Windows at start.** A Direct3D update thread
+  could stop after the first frame, leaving a panel with one row until the
+  window was resized.
+- The git marks are readable on the highlighted row.
+
 ## 0.7.1
 
 Rough edges found while using 0.7.0.

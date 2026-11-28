@@ -181,11 +181,13 @@ pub fn refresh() {
 
 /// Asks the desktop to read the launchers again (best effort).
 fn refresh_caches(data: &Path) {
-    let _ = std::process::Command::new("update-desktop-database")
+    let mut command = std::process::Command::new("update-desktop-database");
+    pnxr_vfs::proc::hide_console(&mut command)
         .arg(data.join("applications"))
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .status();
+        .status()
+        .ok();
 }
 
 #[cfg(test)]

@@ -44,7 +44,8 @@ pub fn read(dir: &Path) -> Option<GitStatus> {
 /// repository or without git.
 pub fn read_with(exe: &str, dir: &Path) -> Option<GitStatus> {
     let git = |args: &[&str]| -> Option<Vec<u8>> {
-        let output = Command::new(exe)
+        let mut command = Command::new(exe);
+        let output = pnxr_vfs::proc::hide_console(&mut command)
             .arg("-C")
             .arg(dir)
             .args(args)

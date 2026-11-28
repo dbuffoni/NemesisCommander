@@ -148,6 +148,7 @@ pub(crate) async fn ssh_run(
         command.envs(pnxr_ssh::target_env(target)).args(ssh_args(target, Remote::Script(script))?);
         command
     };
+    pnxr_vfs::proc::hide_console(command.as_std_mut());
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     command.stdin(match &input {
         Some(file) => Stdio::from(std::fs::File::open(file).map_err(|e| e.to_string())?),

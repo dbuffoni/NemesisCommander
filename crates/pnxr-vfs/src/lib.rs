@@ -22,6 +22,7 @@ mod entry;
 mod error;
 pub mod names;
 mod path;
+pub mod proc;
 mod provider;
 mod registry;
 mod upload;

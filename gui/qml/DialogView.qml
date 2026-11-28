@@ -105,7 +105,7 @@ Item {
                     text: typeof modelData === "string" ? modelData : modelData.text
                     color: index === list.cursor ? palette.highlightedText
                          : list.stateOf(modelData) === "failed" ? dialogs.theme.errorColor
-                         : palette.windowText
+                         : dialogs.theme.ink
                 }
             }
         }
@@ -343,7 +343,7 @@ Item {
                             anchors.centerIn: parent
                             text: modelData
                             font.pointSize: dialogs.theme.font.pointSize * sc
-                            color: chosen ? palette.highlightedText : palette.windowText
+                            color: chosen ? palette.highlightedText : dialogs.theme.ink
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -405,7 +405,7 @@ Item {
                             elide: Text.ElideRight
                             text: modelData.name
                             font.pointSize: dialogs.theme.font.pointSize * sc
-                            color: current ? palette.highlightedText : palette.windowText
+                            color: current ? palette.highlightedText : dialogs.theme.ink
                         }
                         Label {
                             Layout.preferredWidth: commandsBox.keysWidth
@@ -691,7 +691,7 @@ Item {
                     color: modelData.indexOf("Failed") >= 0 || modelData.indexOf("! ") >= 0
                            || modelData.indexOf("✗") === 0 ? dialogs.theme.errorColor
                            : modelData.indexOf("✓") === 0 ? dialogs.theme.codeColor
-                           : palette.windowText
+                           : dialogs.theme.ink
                 }
             }
         }
@@ -738,7 +738,7 @@ Item {
                     readonly property bool current: index === dialogs.view.cursor
                     readonly property color ink: current ? palette.highlightedText
                         : modelData.state === "failed" ? dialogs.theme.errorColor
-                        : palette.windowText
+                        : dialogs.theme.ink
                     width: ListView.view.width
                     height: jobText.implicitHeight + jobDetail.implicitHeight + 8
                     color: current ? palette.highlight : "transparent"
@@ -799,7 +799,7 @@ Item {
                             color: current ? palette.highlightedText
                                  : header ? dialogs.theme.headingColor
                                  : modelData.kind === "command" ? dialogs.theme.linkColor
-                                 : palette.windowText
+                                 : dialogs.theme.ink
                         }
                         Label {
                             visible: !header && modelData.kind !== "command"
@@ -812,7 +812,7 @@ Item {
                             color: current ? palette.highlightedText
                                  : modelData.changed ? dialogs.theme.selectedText
                                  : modelData.value === "none" ? dialogs.theme.dim
-                                 : palette.windowText
+                                 : dialogs.theme.ink
                         }
                     }
                 }

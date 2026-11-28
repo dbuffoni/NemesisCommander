@@ -23,6 +23,16 @@ Copy-Item (Join-Path $root "assets/branding/pairnox.ico") $app
 windeployqt --release --qmldir (Join-Path $root "gui/qml") --compiler-runtime (Join-Path $app "pnxr-gui.exe")
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
 
+# The window runs with the Fusion style on Windows (gui/src/icon.cpp). The
+# style is chosen at run time, so windeployqt does not see it in the QML
+# files: copy it when it is missing.
+$fusion = Join-Path $app "qml/QtQuick/Controls/Fusion"
+if (-not (Test-Path (Join-Path $fusion "qmldir"))) {
+    $qtQml = (qmake -query QT_INSTALL_QML).Trim()
+    Copy-Item (Join-Path $qtQml "QtQuick/Controls/Fusion") $fusion -Recurse -Force
+}
+if (-not (Test-Path (Join-Path $fusion "qmldir"))) { throw "the Fusion style is not in the package" }
+
 # Licence and third-party notices (Qt, libarchive, crates).
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $app "LICENSE.txt")
 python (Join-Path $root "scripts/third_party.py") -o (Join-Path $app "THIRD-PARTY-NOTICES.md")

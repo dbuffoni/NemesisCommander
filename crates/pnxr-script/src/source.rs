@@ -105,6 +105,7 @@ impl Checkout {
 
 fn git(args: &[&str], dir: Option<&Path>) -> Result<String, PluginError> {
     let mut command = Command::new("git");
+    pnxr_vfs::proc::hide_console(&mut command);
     command.args(args).env("GIT_TERMINAL_PROMPT", "0");
     if let Some(dir) = dir {
         command.current_dir(dir);
